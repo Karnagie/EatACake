@@ -1,0 +1,28 @@
+# Upstream queue — candidates for RobloxTemplate
+
+> Append-only capture (rule U1): one row per candidate, added as part of the
+> Post-Task Checklist. Judging happens at harvest
+> (`docs/recipes/harvest-to-template.md`), not at capture — when unsure,
+> capture anyway. Statuses: `pending` → `harvested <date>` /
+> `rejected: <reason>` (rejected rows stay — they prevent re-proposing).
+>
+> Types: `fix` (bug also present in template) | `feature` (game-agnostic
+> feature/util) | `contract` (API/GUI/logging contract improvement) |
+> `recipe` (pattern used 2+ times) | `research` (evidence from
+> research-scout) | `docs` (rule/gotcha worth a doc)
+
+| Date | Type | What | Evidence (files, why it's generic) | Status |
+|---|---|---|---|---|
+| 2026-07-12 | research | Automate U1 capture via a Claude Code Stop hook (session-end script nudges/append queue check) | Practice from compounding-engineering community (Stop hook → knowledge capture). Risk: bash hooks fragile on Windows — needs a proven low-noise setup before adoption | pending (watch) |
+| 2026-07-12 | research | copier/cruft-style template update tooling instead of git cherry-pick for pull-down | cruft.github.io, copier docs — PR-based template propagation. Python-ecosystem tools; git-remote approach adopted instead for now. Revisit if game count grows past ~5 | pending (watch) |
+| 2026-07-16 | contract | Shared per-player rate limiter for resync-answering remotes (Claim*/Request* reply with full payloads on invalid input — amplification) | Review finding #11 of feature-library batch; codes/group have cooldowns, daily/time/shop don't | pending |
+| 2026-07-16 | contract | jsdotlua useEffect deps must never contain nil — add to roblox-ui-kit skill pitfalls | Feature-library review CRITICAL #3: `{ nil }` has length 0, positional deps compare never re-runs the effect; cost a dead countdown ticker | pending |
+| 2026-07-16 | fix | **AppRoot.Set cannot clear fields**: `Set({ openPanel = nil })` is a silent no-op (`pairs` skips nils) — every panel close/toggle in the template is broken. Fix: `AppRoot.Open(panel?)` assigns directly + new `AppRoot.Clear(key)`; onClose/toggle call them; CodesSubsClient `Set({codesStatus=nil})` too | EatACake: found in Studio verification (panels would not close); fixed in `modules/AppRoot.lua`, `subscriptions/CodesSubsClient.lua` | pending |
+| 2026-07-16 | docs | Kit pitfall: `(1,0)+UIAspectRatioConstraint` list cells collapse to ZERO height in a plain Frame list (FitWithinMaxSize, max height 0) — pattern works only inside AutomaticCanvasSize ScrollPane. Fix: cell takes explicit `size`; panel passes `RowHeight / ContentHeightInCell` | EatACake: UpgradesPanel/QuestsPanel rendered empty; fixed in UpgradeRow/QuestRow/panels. Add to skill `references/patterns.md` pitfalls | pending |
+| 2026-07-16 | docs | rbxasset placeholder sounds: `swoosh.wav` is NOT approved (silent error); validate ids via play-mode `ContentProvider:PreloadAsync` + `TimeLength > 0` (`action_falling.mp3`, `splat.mp3`, `victory.wav`, `action_jump.mp3` are good) | EatACake JuiceConfig placeholders | pending |
+| 2026-07-16 | docs | studio-verifier: `get_console_output` truncates — read the tail via `LogService:GetLogHistory()` in execute_luau; AND execute_luau has a SEPARATE require cache (module state invisible — verify via attributes/instances/remotes, not requires) | EatACake Studio verification session | pending |
+| 2026-07-16 | recipe | Player-attribute replication channel for cheap all-clients per-player state (StomachFill morph lerp, EquippedPets followers, AutoEat/AutoGym perk flags) — zero remotes, smooth local interpolation | EatACake `BodySubs`/`PetSubs`/`ShopSubs` + client controllers | pending |
+| 2026-07-16 | contract | ADR-0002 extension: `rawAmount` escape on currency reward kinds so PAID packs bypass earn multipliers (gems packs vs GemsMult) | EatACake RewardGrantSubs "gems" handler | pending |
+| 2026-07-17 | recipe | "Keycap grid" destructible-surface look from plain Parts: column = cell minus gap (dark groove), deterministic `math.noise` shade jitter, per-layer Reflectance, columns CanCollide/CanQuery so collision+raycasts match visuals 1:1 | EatACake CakeRenderer parts path (user-approved reference look) | pending |
+| 2026-07-17 | docs | Native `SurfaceType.Studs` on all faces = free LEGO/candy wall look (no textures); code-built prop kit (gumball/lollipop/mint/cookie/bar/cupcake) from primitives ≤6 parts each | EatACake MapService | pending |
+| 2026-07-17 | docs | EditableMesh production notes (probe-verified; (b) CORRECTED same day): (a) height-banded looks need a PALETTE TEXTURE (EditableImage 1×256 + per-vertex UVs) — vertex colors smear across tall quads; (b) runtime-edited meshes need RenderFidelity=**Precise** (no LODs, live edits render at any distance) — **Automatic** swaps in LODs generated from CREATION-time content (stale geometry by distance/quality); create at final max extent, never flatten post-create (culling bounds come from creation geometry); (c) `CreateMeshPartAsync` parts render vertices at RAW mesh coords relative to part.CFrame (NO bbox recentering) — mesh y=0 lands at part.Position.Y; (d) recompute-normals rebuilds need two passes; (e) grid hulls: an analytic "+1 ring" of a rounded rect diverges from the discrete footprint at corner staircases — derive skirt/hull faces from 3×3-neighborhood tests, never a second analytic shape; (f) camera-inside-mesh + backface culling masquerades as "mesh not rendering", and HIGH cameras hide a floating-mesh gap — verify grounding from a LOW outside Scriptable camera | EatACake CakeRenderer (the "white/black/invisible/floating cake" saga; grounding fixes flow doc) | pending |

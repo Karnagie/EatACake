@@ -1,0 +1,32 @@
+# Juice / ASMR layer (client)
+
+## What it does
+GDD §7 — priority #1. All client-side, all pooled (ZERO Instance.new in hot
+paths, GDD §16.10). Tuning ONLY in `Shared/config/JuiceConfig`.
+
+## Pieces
+| Module | Owns |
+|---|---|
+| `SoundPool` | 16 pooled 2D Sounds, pitch ±10%, combo pitch ramp; granular slump LOOP whose volume follows avalanche energy (§7.4 — the signature sound) |
+| `ParticlePool` | 12 pooled emitter-parts, `:Emit()` bursts, ≤200 active budget window |
+| `CameraShake` | trauma-based impulse shake, applied post-Camera render step |
+| `ComboMeter` | x1→x10, +1/2s continuous, reset >1.5s pause. FX-ONLY (never calories) |
+| `FloatingNumbers` | 24 pooled BillboardGuis, size scales with combo |
+| `BodyMorphController` | attribute-driven scale lerp for all characters + local squash&stretch impulse |
+
+## Event → FX map
+bite (predicted): layer SFX + crumbs (palette color) + shake + squash;
+chocolate adds shard burst + crack. Landing on a fresh cake: crust crack
+ring + big snap (§7.1, once per cake, client-local). Server deltas ≠ own
+prediction → slump loop volume + (renderer) smooth lerp avalanches. Gym
+payout: whoosh + coin burst + green floating number. Stomach gain: floating
+"+N" above head (hot color in glutton). Underfoot squish lives in
+`CakeRenderer` (§7.2, display-only).
+
+## Gotcha
+Sound ids are rbxasset built-ins (guaranteed placeholders) — replace with
+uploaded ASMR samples in `JuiceConfig.sounds` before release; keys stay.
+
+## Files
+`src/client/modules/` (six modules above), consumed by `CakeSubsClient` /
+`BodySubsClient`; config `src/shared/config/JuiceConfig.lua`.

@@ -1,0 +1,16 @@
+# Roblox build artifacts
+*.rbxl
+*.rbxlx
+*.rbxl.lock
+*.rbxlx.lock
+
+# Rojo
+sourcemap.json
+
+# Stray npm output — React is VENDORED as ReactLua-Packages.rbxmx; npm not used
+node_modules/
+package-lock.json
+
+# OS
+Thumbs.db
+.DS_Store
