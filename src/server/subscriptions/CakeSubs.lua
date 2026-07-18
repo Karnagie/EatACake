@@ -199,6 +199,15 @@ function CakeSubs.Start(data, services)
 			return
 		end
 
+		-- Belly full = can't eat (GDD §8). Drop the bite BEFORE carving the
+		-- cake so a full player leaves no phantom crater; the gym empties the
+		-- belly. Not a failure path — the client gates itself too, so a legit
+		-- client never reaches here (no log spam).
+		local capacity = services.StatsService.Capacity(userId)
+		if services.StomachService.IsFull(userId, capacity) then
+			return
+		end
+
 		local surface = services.CakeFieldService.SurfaceHeightAt(pos.X, pos.Z)
 		if surface == nil then
 			return -- outside the cake footprint
@@ -224,10 +233,10 @@ function CakeSubs.Start(data, services)
 		local result = services.StomachService.Ingest(
 			userId, removed, baseCalories,
 			services.StatsService.CaloriesMult(userId),
-			services.StatsService.Capacity(userId)
+			capacity
 		)
 		if result then
-			result.capacity = services.StatsService.Capacity(userId)
+			result.capacity = capacity
 			result.layerId = layer.id
 			uStomach:FireClient(player, result)
 			BodySubs.RefreshBody(player)

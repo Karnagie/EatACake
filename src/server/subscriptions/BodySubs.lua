@@ -145,8 +145,77 @@ function BodySubs.Start(data, services)
 		return { kind = "burn" }
 	end)
 
-	-- Session payouts (4 Hz) + auto-gym + 1 Hz surface/caramel check.
-	local payoutAcc, surfaceAcc = 0, 0
+	-- Session payouts (4 Hz) + auto-gym + 1 Hz surface/caramel check + body
+	-- morph lerp (MUST be server-side: runtime part-size changes are reverted by
+	-- replication when written client-side).
+	local morphCfg = bodyCfg.morph
+	local morphTick = 1 / math.max(1, morphCfg.rateHz)
+	local payoutAcc, surfaceAcc, morphAcc = 0, 0, 0
+	-- Natural (unscaled) size of each torso part, captured once on first sight —
+	-- so we always scale from the TRUE original, never compound the scaled value.
+	-- Pruned (below) when the part is destroyed, so it can't leak.
+	local naturalTorso: { [BasePart]: Vector3 } = {}
+
+	-- Only the TORSO parts grow (arms/legs/head keep their natural size). We can't
+	-- use Humanoid BodyScale (it scales the WHOLE body); instead we grow the
+	-- torso part's `OriginalSize` — the Humanoid auto-scaler enforces
+	-- `Size = OriginalSize × BodyScale`, so scaling only the torso's OriginalSize
+	-- (BodyScale left alone) grows only the torso and HOLDS. R15: UpperTorso +
+	-- LowerTorso; R6: Torso.
+	local function torsoParts(character: Model): { BasePart }
+		local upper = character:FindFirstChild("UpperTorso") :: BasePart?
+		if upper then
+			local parts = { upper }
+			local lower = character:FindFirstChild("LowerTorso") :: BasePart?
+			if lower then
+				table.insert(parts, lower)
+			end
+			return parts
+		end
+		local torso = character:FindFirstChild("Torso") :: BasePart?
+		return if torso then { torso } else {}
+	end
+
+	local function stepMorph(player: Player, mdt: number)
+		local character = player.Character
+		if not character then
+			return
+		end
+		local parts = torsoParts(character)
+		if #parts == 0 then
+			Log.GraceOnce(SCOPE, `notorso-{player.UserId}`, 2, function()
+				local c = player.Character
+				return c == nil or #torsoParts(c) == 0
+			end, `{player.Name}: no torso part — body morph skipped`)
+			return
+		end
+		local capacity = services_.StatsService.Capacity(player.UserId)
+		local fill01 = services_.StomachService.Fullness(player.UserId, capacity)
+		local alpha = math.min(1, morphCfg.lerpSpeed * mdt)
+		local sx = 1 + (morphCfg.widthScale[2] - 1) * fill01
+		local sy = 1 + (morphCfg.heightScale[2] - 1) * fill01
+		local sz = 1 + (morphCfg.depthScale[2] - 1) * fill01
+		for _, part in ipairs(parts) do
+			local orig = part:FindFirstChild("OriginalSize") :: Vector3Value?
+			if orig == nil then
+				continue -- rig without OriginalSize (R6?) — can't torso-scale it
+			end
+			local nat = naturalTorso[part]
+			if nat == nil then
+				nat = orig.Value -- first sight = the natural (unscaled) torso size
+				naturalTorso[part] = nat
+			end
+			local target = Vector3.new(nat.X * sx, nat.Y * sy, nat.Z * sz)
+			local cur = part.Size
+			-- Snap within minStep (reach full / fully return to natural), else lerp.
+			local next_ = if (target - cur).Magnitude <= morphCfg.minStep then target else cur:Lerp(target, alpha)
+			if next_ ~= cur then
+				orig.Value = next_ -- keep OriginalSize in sync so the auto-scaler won't revert
+				part.Size = next_
+			end
+		end
+	end
+
 	RunService.Heartbeat:Connect(function(dt)
 		payoutAcc += dt
 		if payoutAcc >= 0.25 then
@@ -193,6 +262,22 @@ function BodySubs.Start(data, services)
 				if caramelMult[player] ~= mult then
 					caramelMult[player] = mult
 					BodySubs.RefreshBody(player)
+				end
+			end
+		end
+
+		morphAcc += dt
+		if morphAcc >= morphTick then
+			local mdt = morphAcc
+			morphAcc = 0
+			for part in pairs(naturalTorso) do
+				if part.Parent == nil then -- torso part destroyed (respawn) — drop it
+					naturalTorso[part] = nil
+				end
+			end
+			for _, player in ipairs(Players:GetPlayers()) do
+				if services.PersistenceService.IsLoaded(player.UserId) then
+					stepMorph(player, mdt)
 				end
 			end
 		end

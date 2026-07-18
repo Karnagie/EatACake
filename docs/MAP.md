@@ -9,10 +9,10 @@
 |---|---|---|
 | persistence | `features/persistence.md` | PersistenceService, ProfileSchema/, PlayerLifecycleSubs / — |
 | economy (calories+gems) | `features/economy.md` | EconomyService, EconomySubs / EconomySubsClient |
-| cake-sim (heightfield) | `features/cake-sim.md` + ADR-0003 | CakeFieldService, CakeCollisionService, CakeSubs / LocalCakeField, CakeRenderer, CakeSubsClient |
+| cake-sim (heightfield) | `features/cake-sim.md` + ADR-0003 | CakeFieldService, CakeCollisionService, CakeSubs / LocalCakeField, CakeRenderer, CakeWaxShell, EatGestureController, CakeSubsClient, CakeFeelSubsClient |
 | cake-cycle (boss, rare, biomes) | `features/cake-cycle.md` | CakeCycleService, CakeSubs / BossView, CakeSubsClient |
 | treasures (finds) | `features/treasures.md` | TreasureService, CakeSubs / CakeSubsClient |
-| body-gym (stomach, morph) | `features/body-gym.md` | StomachService, GymService, BodySubs / BodyMorphController, BodySubsClient, GymOverlay |
+| body-gym (stomach, morph, roll) | `features/body-gym.md` | StomachService, GymService, BodySubs (server morph) / BallRollController, BodySubsClient, GymOverlay |
 | upgrades + stats | `features/upgrades.md` | UpgradeService, StatsService, UpgradeSubs / LocalStatsService, UpgradesSubsClient |
 | pets | `features/pets.md` | PetService, PetSubs / PetsSubsClient, PetFollowers, LocalPetsService |
 | rebirth + biomes | `features/rebirth.md` | ProgressService, RebirthSubs / RebirthSubsClient |

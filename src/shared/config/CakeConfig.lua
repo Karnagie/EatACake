@@ -5,7 +5,8 @@
 	Pure data, shared by both sides:
 	  server — simulation (repose/flowRate/hardness), composition rolls,
 	           cycle timings, calories
-	  client — rendering (colors), SFX keys, wobble/FX flags
+	  client — rendering (colors/materials/crust), SFX keys, wobble/FX
+	           flags, per-layer feel (jumpMult/bounce, CakeFeelSubsClient)
 
 	NO logic here. All numbers are starting values for tuning, never law.
 	Heights are stored as u16 fixed-point: 1 unit = 0.01 studs (see GridUtil).
@@ -61,38 +62,78 @@ CakeConfig.net = {
 
 -- ── Client rendering (GDD §4.5) ─────────────────────────────────────────
 CakeConfig.render = {
-	-- EditableMesh is THE renderer: ONE MeshPart PER LAYER BAND (clamped
+	-- EditableMesh is THE renderer: ONE MeshPart PER SIM LAYER (clamped
 	-- heightfield slabs) so every layer carries its own material,
-	-- transparency and reflectance, plus a thin textured CRUST band on top
-	-- of each layer that cracks under players' feet. The part grid stays as
-	-- the no-EditableMesh fallback. Invisible collision columns always exist.
+	-- transparency and reflectance. The CRUST skin at the top of each layer
+	-- is painted INTO the layer's XZ-planar EditableImage texture (lighter,
+	-- mottled) and footstep/landing cracks are drawn into the same texture.
+	-- Memory-budget ladder (weak devices): per-layer meshes -> ONE mesh with
+	-- the height palette texture -> visible part grid. Invisible collision
+	-- columns always exist.
 	forceFallback = false,
 	lerpSpeed = 3.5, -- 1/s display approach fallback (layers override via oozeSpeed)
 	-- Bite feel: a target DROP bigger than this snaps instantly (the chunk
 	-- is ripped out); smaller moves and refills ooze at the layer's oozeSpeed.
 	snapDropStuds = 0.4,
-	-- Crunchy crust between layers (reference: the butter-stick skin): a
-	-- thin visual-only band at the TOP of every edible layer, lighter and
-	-- glossier than the layer, textured so footstep cracks can be drawn in.
+	-- Crust = a thin HARD PALE SKIN at the TOP of every edible layer (reference:
+	-- the wax/butter slab crust), lighter than the layer body, painted into the
+	-- layer's texture. A cell shows crust while its surface is within `depth` of
+	-- the layer's top; eating below repaints it as layer body. The crust is the
+	-- brittle shell that BUCKLES and breaks under the foot (render.fracture).
 	crust = {
-		depth = 0.7, -- studs of skin at the top of each edible layer
-		lighten = 0.4, -- toward white from the layer's top color
-		gloss = 0.3,
-		imageSize = 256, -- crust texture (XZ-planar over the whole grid)
-		noise = 0.06, -- subtle per-pixel mottling of the crust base fill
+		depth = 0.7, -- studs of film at the top of each edible layer
+		lighten = 0.35, -- toward white from the layer's top color (a PALE waxy
+		-- coat, but still clearly the layer's hue — not washed to snow)
+		gloss = 0.3, -- fallback-column reflectance inside the film band
+		imageSize = 384, -- layer texture (XZ-planar over the whole grid, 4 px/stud)
+		noise = 0.05, -- subtle per-pixel mottling of the film
 	},
-	-- Footstep / landing cracks drawn INTO the crust texture (persist until
-	-- the next cake). Lengths in studs, converted to texture pixels.
-	cracks = {
-		darken = 0.55, -- crack line color = crust color toward black
-		landLines = { 4, 6 }, -- radial polylines on a landing crack
-		landLength = { 3.5, 6 },
-		stepLines = { 2, 3 }, -- smaller cracks while walking
-		stepLength = { 1.2, 2.6 },
-		stepChance = 0.6, -- chance per crunchy footstep to leave a crack
-		segmentStuds = 0.9, -- polyline segment length
-		jitter = 0.55, -- radians of direction wander per segment
+	-- Soft SQUISH of the mesh under the foot (a gentle round dent that springs
+	-- back; deeper on a landing). The always-visible wax crust that CRACKS is
+	-- render.wax below (CakeWaxShell) — it reads riseRate/healRate/sinkDepth here
+	-- for its own dent so the wax dents WITH the surface.
+	fracture = {
+		radius = 3.6, -- studs of the squish zone
+		sinkDepth = 0.9, -- studs the surface dents in (a gentle butter squish)
+		riseRate = 12, -- 1/s squish press-in (springy)
+		healRate = 8, -- 1/s squish spring-back
+		landDepthMult = 1.6, -- deeper dent on a hard landing
+		landRadius = 4.6, -- studs of the landing dent
 	},
+	-- Always-visible WAX SHELL over the WHOLE cake (CakeRenderer wax section):
+	-- one mesh of Voronoi wax plates that COATS the entire top and rides the
+	-- deforming surface. Light wax (the surface layer's color toward white);
+	-- the slabs beneath render the layer BODY, so where the player's feet CRACK
+	-- the local plates (they pull apart + lift) the darker cake shows in the
+	-- gaps, then SLOWLY heals shut. The wax is always there — the cracks are
+	-- local and reverting, never spawned parts.
+	wax = {
+		step = 2, -- grid cells per wax quad (2 = ~3-stud tiles riding the surface)
+		plateStuds = 4.5, -- avg wax plate size (Voronoi feature-point spacing)
+		lift = 0.3, -- studs the intact wax sits above the slab surface (a clear coat)
+		dome = 0.1, -- studs each piece bulges up at its centre — small, so the
+		-- layer looks SMOOTH at rest; the pieces only read when they crack open
+		-- Coating colour = the current outermost layer, made BRIGHTER/more vivid
+		-- than the original (a glossy tasty glaze, not a dull pale wax):
+		satBoost = 1.4, -- ×saturation of the layer colour (more vivid)
+		valBoost = 1.12, -- ×brightness of the layer colour (brighter than original)
+		hideDepth = 1.5, -- studs below the layer top before the wax hides (eaten away)
+		edgeInset = 1.5, -- studs the wax stops short of the loaf edge (clean rim, no overhang)
+		gloss = 0.18, -- wax Reflectance
+		-- Cracking under the foot — driven by the DENT (per piece, reverting; the
+		-- dent ramp/spring-back speed comes from render.fracture riseRate/healRate,
+		-- so the wax dents WITH the surface). Smooth at rest; a step makes each
+		-- piece dent, tilt and spread, so cracks open only underfoot.
+		crackRadius = 3.8, -- studs around the foot whose pieces dent + crack
+		gap = 0.5, -- FRACTION each dented piece spreads toward its centroid (gap)
+		tilt = 18, -- degrees each pressed piece tips (one edge up — "наклоняются")
+	},
+	-- Eaten-through slabs are TUCKED this far under the local surface (a
+	-- FixedSize mesh can't delete faces; alpha does not render): deeper
+	-- than the biggest downward fracture dip (sinkDepth × landDepthMult) +
+	-- wobble so nothing ever peeks out; under a TRANSLUCENT surface layer they
+	-- tuck below that layer's bottom instead (see-through-marmalade stays clean).
+	hideSink = { base = 3.6, perBand = 0.05 },
 	boundaryBlend = 2, -- studs of color blend across band boundaries
 	paletteStep = 0.25, -- studs per palette entry
 	-- Jelly wobble (§5): pure renderer sine, zero sim cost.
@@ -199,7 +240,12 @@ CakeConfig.layers = {
 		hardness = 1.5,
 		calories = 1.4,
 		colors = { top = Color3.fromRGB(238, 58, 88), bottom = Color3.fromRGB(196, 30, 62) },
-		material = Enum.Material.SmoothPlastic,
+		-- Glass: wet refraction on high quality, plastic-smooth on low.
+		-- KNOWN engine tradeoff: semi-transparent Glass hides TRANSPARENT
+		-- things behind it (particles, translucent FX) on high quality —
+		-- opaque layers below render fine (the actual goal). Switch to
+		-- SmoothPlastic if FX-through-jelly ever matters more.
+		material = Enum.Material.Glass,
 		transparency = 0.45, -- see the layer below THROUGH the marmalade
 		gloss = 0.15,
 		oozeSpeed = 6,
@@ -289,24 +335,25 @@ CakeConfig.layers = {
 -- ── Feel (client, CakeFeelSubsClient) ───────────────────────────────────
 CakeConfig.feel = {
 	surfacePollSeconds = 0.12, -- layer-under-feet refresh for jump/speed feel
+	onCakeYTolerance = 7, -- studs above/below the surface still "on the cake"
 	bounceMinImpact = 25, -- studs/s of fall speed before a layer bounces you
 	bounceMaxUp = 85, -- studs/s cap on the bounce-back velocity
 	crackMinImpact = 12, -- studs/s of fall speed for a landing crust crack
 }
 
 -- ── Composition rolls (GDD §5 "Cake composition") ───────────────────────
--- Every cake: frosting on top, core at the bottom, 3-5 middle layers drawn
+-- Every cake: frosting on top, core at the bottom, 3-4 middle layers drawn
 -- from the pool without immediate repeats. Thicknesses are rolled within
 -- the ranges, then normalized to the rolled total height. FEWER, THICKER
 -- layers: each layer is a floor you live on for a while, not a stripe.
 CakeConfig.composition = {
 	middlePool = { "sponge", "chocolate", "jelly", "cotton", "caramel", "crumb" },
 	middleCountMin = 3,
-	middleCountMax = 5,
-	frostingThickness = { 5, 7 }, -- studs
+	middleCountMax = 4,
+	frostingThickness = { 6, 8 }, -- studs
 	coreThickness = 3, -- exposed cavity floor, not edible
-	middleThickness = { 9, 15 },
-	totalHeight = { 46, 62 }, -- clamped to grid.maxHeight
+	middleThickness = { 10, 16 },
+	totalHeight = { 52, 68 }, -- clamped to grid.maxHeight
 	-- Footprint: a rounded-rectangle LOAF (Drain-the-Lake scale, fixed for
 	-- any population — the cake is a landmark, not a per-player snack).
 	-- 28x19 cells at 1.5 studs = 84x57 studs of cake.

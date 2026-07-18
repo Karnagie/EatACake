@@ -2,15 +2,18 @@
 	CakeSubsClient — the cake domain on the client (R4):
 	  * CakeSnapshot/CakeDelta -> LocalCakeField mirror, renderer refresh
 	  * CakeCycleUpdate -> boss view, HUD cycle state, announcements
-	  * input: tap/hold ANYWHERE near the cake = eat (§7.6 zero precision);
-	    auto-repeat at the eat-rate stat; local bite prediction + full bite
-	    juice (§7.3) fire instantly, the server delta reconciles after
-	  * render step: renderer lerp, slump loop volume, camera shake
-	  * landing crust crack (§7.1), treasure FX
+	  * input: tap/HOLD to eat the cake DIRECTLY IN FRONT of you (aim by
+	    turning/walking — no pointer/pixel aiming); auto-repeat at the eat-rate
+	    stat; local bite prediction + full bite juice (§7.3) + the eat gesture
+	    (EatGestureController) fire instantly, the server delta reconciles after
+	  * full belly: stop eating (mirror the server block) + a slow self-probe
+	    so a capacity increase unsticks it
+	  * render step: renderer lerp, slump loop volume, camera shake, eat gesture
+	  * walk-crunch + step cracks, treasure FX (landing cracks + the
+	    fresh-cake ceremony live in CakeFeelSubsClient)
 
-	Mobile-first: touch position is tracked from Began/Moved; desktop uses
-	the mouse location. No pixel-hunting: a miss falls back to the surface
-	point in front of the character.
+	Hold ownership: on touch, the ORIGINATING finger owns the hold, so a second
+	finger (jump button, camera drag) neither starts a rival hold nor cancels it.
 ]]
 
 local Players = game:GetService("Players")
@@ -30,11 +33,12 @@ local CakeSubsClient = {}
 function CakeSubsClient.Start(data, modules)
 	local LocalCakeField = modules.LocalCakeField
 	local CakeRenderer = modules.CakeRenderer
+	local CakeWaxShell = modules.CakeWaxShell
 	local SoundPool = modules.SoundPool
 	local ParticlePool = modules.ParticlePool
 	local CameraShake = modules.CameraShake
 	local ComboMeter = modules.ComboMeter
-	local BodyMorphController = modules.BodyMorphController
+	local EatGestureController = modules.EatGestureController
 	local BossView = modules.BossView
 	local LocalStatsService = modules.LocalStatsService
 	local ChunkDebris = modules.ChunkDebris
@@ -44,14 +48,15 @@ function CakeSubsClient.Start(data, modules)
 	local rEatAt = Net.Remote("EatAt")
 
 	CakeRenderer.Setup(LocalCakeField)
+	CakeWaxShell.Setup(LocalCakeField)
 
 	local eating = false
 	local lastBiteAt = 0
-	local crustCracked = true -- until the first snapshot says "fresh cake"
 	local cyclePhase = "spawning"
-	local touchPos: Vector2? = nil
-	local trackedTouch: InputObject? = nil -- the finger that owns eat-hold/aim
+	local trackedTouch: InputObject? = nil -- the finger that owns the eat-hold
 	local profileLive = false -- first StomachUpdate = server accepts our bites
+	local isFull = false -- belly at capacity: eating is blocked (server + here)
+	local lastFullCueAt = 0
 	local lastComboSent = 1
 	local announceSeq = 0
 
@@ -77,8 +82,15 @@ function CakeSubsClient.Start(data, modules)
 		end
 		LocalCakeField.ApplySnapshot(buf, meta)
 		CakeRenderer.OnSnapshot()
+		-- OnSnapshot can YIELD (lazy mesh-pool build). If a newer snapshot
+		-- was applied while we yielded, ITS handler owns phase/HUD state —
+		-- never overwrite it with this stale meta.
+		local current = LocalCakeField.Meta()
+		if current ~= nil and current.cakeIndex ~= meta.cakeIndex then
+			Log.Info(SCOPE, `snapshot #{meta.cakeIndex} superseded by #{current.cakeIndex} during rebuild — state writes skipped`)
+			return
+		end
 		cyclePhase = meta.phase or "eating"
-		crustCracked = (meta.progress or 0) > 0.02 -- landed on a fresh crust?
 		AppRoot.Set({ cake = {
 			phase = cyclePhase,
 			progress = meta.progress or 0,
@@ -137,8 +149,18 @@ function CakeSubsClient.Start(data, modules)
 	end)
 
 	-- First stomach push = profile loaded server-side; prediction may start.
-	Net.Update("StomachUpdate").OnClientEvent:Connect(function()
+	-- It also carries fill/capacity — mirror the "full = can't eat" state so
+	-- the client stops firing (and predicting phantom craters) the instant the
+	-- belly tops out, matching the server's authoritative block.
+	Net.Update("StomachUpdate").OnClientEvent:Connect(function(payload)
 		profileLive = true
+		if type(payload) == "table" then
+			local fill = tonumber(payload.fill)
+			local capacity = tonumber(payload.capacity)
+			if fill and capacity and capacity > 0 then
+				isFull = fill >= capacity
+			end
+		end
 	end)
 
 	-- ── Treasure FX ─────────────────────────────────────────────────────
@@ -159,60 +181,27 @@ function CakeSubsClient.Start(data, modules)
 	end)
 
 	-- ── The bite ────────────────────────────────────────────────────────
-	local raycastParams = RaycastParams.new()
-	raycastParams.FilterType = Enum.RaycastFilterType.Include
-
-	local function refreshRaycastFilter()
-		local list = {}
-		-- Prefer the renderer's own columns (exact visual tops); the coarse
-		-- server slabs stay as a fallback for the EditableMesh path.
-		local cakeColumns = workspace:FindFirstChild("CakeColumns")
-		if cakeColumns then
-			table.insert(list, cakeColumns)
-		end
-		local collision = workspace:FindFirstChild("CakeCollision")
-		if collision then
-			table.insert(list, collision)
-		else
-			-- Legitimately late (server builds it in CakeSubs.Start) — warn
-			-- only if it STILL isn't there after the grace period (R8).
-			Log.GraceOnce(SCOPE, "cake-collision-folder", 10, function()
-				return workspace:FindFirstChild("CakeCollision") == nil
-			end, "workspace.CakeCollision never appeared — pointer aim degraded to char-forward bites")
-		end
-		raycastParams.FilterDescendantsInstances = list
-	end
-
-	-- The bite target: pointer ray vs the cake, else the surface right in
-	-- front of the character. Clamped into server reach.
-	-- ⚠ Coordinate spaces differ per input: InputObject.Position (touch) is
-	-- GUI-inset space → ScreenPointToRay; GetMouseLocation is inset-free →
-	-- ViewportPointToRay. Mixing them skews mobile aim up by the topbar.
+	-- You eat the cake DIRECTLY IN FRONT of you (not where you tap): the
+	-- surface a few studs ahead along the character's facing, snapped to the
+	-- field. nil when you're facing off the loaf (nothing in front to eat) —
+	-- turn/walk to aim. The forward reach grows a little with bite radius and
+	-- stays well inside the server's reach cap (antiCheat.maxBiteReachStuds).
 	local function computeBitePoint(root: BasePart): Vector3?
-		local camera = workspace.CurrentCamera
-		local ray
-		if touchPos then
-			ray = camera:ScreenPointToRay(touchPos.X, touchPos.Y)
-		else
-			local m = UserInputService:GetMouseLocation()
-			ray = camera:ViewportPointToRay(m.X, m.Y)
+		local look = root.CFrame.LookVector
+		local flat = Vector3.new(look.X, 0, look.Z)
+		if flat.Magnitude < 1e-3 then
+			-- Degenerate facing (looking straight up/down): use any horizontal.
+			local right = root.CFrame.RightVector
+			flat = Vector3.new(right.X, 0, right.Z)
+			if flat.Magnitude < 1e-3 then
+				return nil
+			end
 		end
-		refreshRaycastFilter()
-		local hit = workspace:Raycast(ray.Origin, ray.Direction * 400, raycastParams)
-		local candidate = hit and hit.Position or nil
-		if candidate == nil then
-			candidate = root.Position + root.CFrame.LookVector * 5
-		end
-		-- Clamp horizontally into reach so legit taps never get dropped.
-		local dx = candidate.X - root.Position.X
-		local dz = candidate.Z - root.Position.Z
-		local dist = math.sqrt(dx * dx + dz * dz)
-		local maxDist = 14 + LocalStatsService.BiteRadius() * 0.5
-		if dist > maxDist then
-			local scale = maxDist / dist
-			candidate = Vector3.new(root.Position.X + dx * scale, candidate.Y, root.Position.Z + dz * scale)
-		end
-		return LocalCakeField.SurfacePoint(candidate.X, candidate.Z)
+		-- Close in front of you (~half the old distance — the cake was tearing
+		-- off too far ahead); still grows a touch with bite radius.
+		local reach = 3 + LocalStatsService.BiteRadius() * 0.25
+		local ahead = root.Position + flat.Unit * reach
+		return LocalCakeField.SurfacePoint(ahead.X, ahead.Z)
 	end
 
 	local function doBite()
@@ -235,6 +224,25 @@ function CakeSubsClient.Start(data, modules)
 			return
 		end
 		if cyclePhase ~= "eating" then
+			return
+		end
+
+		-- Belly full = can't eat (the server drops these too): skip the phantom
+		-- prediction/gesture and cue softly. But do NOT hard-block forever —
+		-- PROBE at a slow cadence: still fire the occasional EatAt so the block
+		-- self-clears the instant we're eligible again (a capacity upgrade /
+		-- gamepass raises the cap → the server accepts → its StomachUpdate
+		-- resets isFull). A genuinely-full belly just no-ops server-side.
+		if isFull then
+			local now = os.clock()
+			if now - lastFullCueAt > 0.6 then
+				lastFullCueAt = now
+				SoundPool.Play("uiClick", { pitchMult = 0.65 })
+				local probe = computeBitePoint(root)
+				if probe then
+					rEatAt:FireServer(probe)
+				end
+			end
 			return
 		end
 
@@ -280,13 +288,18 @@ function CakeSubsClient.Start(data, modules)
 				SoundPool.Play("crack")
 			end
 			CameraShake.Impulse(JuiceConfig.camera.biteShakeAmp * (0.6 + intensity))
-			BodyMorphController.SquashImpulse()
+			-- Eat gesture: rip this layer's piece out of the cake in front and
+			-- fly it hand -> mouth. Speed tracks the eat-rate stat. LOCAL only,
+			-- like the rest of this bite's juice.
+			EatGestureController.Play(point, layer, LocalStatsService.EatRate())
 		end
 	end
 
 	-- ── Input: hold to eat ──────────────────────────────────────────────
-	-- Touch tracks the ORIGINATING InputObject: a second finger (jump
-	-- button, camera drag) must neither hijack the aim nor cancel the hold.
+	-- Hold anywhere to keep eating the cake IN FRONT of you (aim by turning /
+	-- walking, not by tapping a spot). Touch tracks the ORIGINATING finger so
+	-- a second finger (jump button, camera drag) neither starts a rival hold
+	-- nor cancels this one.
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if gameProcessed then
 			return
@@ -295,13 +308,7 @@ function CakeSubsClient.Start(data, modules)
 			eating = true
 		elseif input.UserInputType == Enum.UserInputType.Touch and trackedTouch == nil then
 			trackedTouch = input
-			touchPos = Vector2.new(input.Position.X, input.Position.Y)
 			eating = true
-		end
-	end)
-	UserInputService.InputChanged:Connect(function(input)
-		if input == trackedTouch then
-			touchPos = Vector2.new(input.Position.X, input.Position.Y)
 		end
 	end)
 	UserInputService.InputEnded:Connect(function(input)
@@ -309,7 +316,6 @@ function CakeSubsClient.Start(data, modules)
 			eating = false
 		elseif input == trackedTouch then
 			trackedTouch = nil
-			touchPos = nil
 			eating = false
 		end
 	end)
@@ -343,13 +349,17 @@ function CakeSubsClient.Start(data, modules)
 			end
 		end
 		CakeRenderer.Step(dt, footPos)
+		CakeWaxShell.Step(dt, footPos) -- always-visible wax coating that cracks underfoot
+		EatGestureController.Step(dt) -- advance the local flying eat pieces
 		SoundPool.PushSlumpEnergy(LocalCakeField.DrainAvalanche())
 		SoundPool.Step(dt)
 		ParticlePool.Step(dt)
 		BossView.Step(dt)
 
-		-- Walk crunch (§7.2): footstep-cadence crust sound + crumb puffs
-		-- while moving on the cake — the crust must FEEL crunchy.
+		-- Walk crunch (§7.2): footstep-cadence crust sound + crumb puffs while
+		-- moving on the cake — the crust must FEEL crunchy. The wax-film cracks
+		-- themselves follow the foot continuously in CakeRenderer.Step (the
+		-- underfoot reveal), so there is no per-step crack draw here.
 		if footPos and root then
 			local crunch = JuiceConfig.walkCrunch
 			local velocity = root.AssemblyLinearVelocity
@@ -374,43 +384,8 @@ function CakeSubsClient.Start(data, modules)
 		end
 	end)
 
-	-- ── Crust crack on landing (§7.1) ───────────────────────────────────
-	local function hookCharacter(character: Model)
-		local humanoid = character:FindFirstChildOfClass("Humanoid")
-			or character:WaitForChild("Humanoid", 10) :: Humanoid?
-		if not humanoid then
-			Log.Warn(SCOPE, "character without Humanoid — crust-crack hook skipped")
-			return
-		end
-		humanoid.StateChanged:Connect(function(_, new)
-			if new ~= Enum.HumanoidStateType.Landed or crustCracked then
-				return
-			end
-			local root = character:FindFirstChild("HumanoidRootPart") :: BasePart?
-			if not root then
-				return
-			end
-			local surfacePoint = LocalCakeField.SurfacePoint(root.Position.X, root.Position.Z)
-			if surfacePoint and math.abs(root.Position.Y - surfacePoint.Y) < 8 then
-				crustCracked = true
-				SoundPool.Play("crustCrack")
-				CameraShake.Impulse(JuiceConfig.camera.crustCrackAmp)
-				local color = CakeRenderer.PaletteColor(surfacePoint.Y - CakeConfig.grid.origin.y)
-				for k = 1, 6 do -- radial shard ring
-					local angle = k / 6 * math.pi * 2
-					ParticlePool.Burst(
-						surfacePoint + Vector3.new(math.cos(angle) * 4, 1, math.sin(angle) * 4),
-						color,
-						JuiceConfig.particles.shardsPerCrack / 2
-					)
-				end
-			end
-		end)
-	end
-	player.CharacterAdded:Connect(hookCharacter)
-	if player.Character then
-		task.spawn(hookCharacter, player.Character)
-	end
+	-- Landing crust cracks + the fresh-cake first-crack ceremony (§7.1)
+	-- live in CakeFeelSubsClient — ONE Landed handler owns landings.
 end
 
 return CakeSubsClient

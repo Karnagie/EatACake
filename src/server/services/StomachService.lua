@@ -32,7 +32,10 @@ function StomachService.Ingest(userId: number, volume: number, baseCalories: num
 	if not section then
 		return nil
 	end
-	local glutton = section.fill >= capacity
+	-- Glutton = the mouthful that TOPS YOU OFF earns x2 (the last-bite reward).
+	-- CakeSubs blocks bites once already full, so this only ever fires on the
+	-- single bite that reaches capacity — never on sustained overeating.
+	local glutton = (section.fill + volume) >= capacity
 	local gained = baseCalories * caloriesMult * (if glutton then bodyCfg.stomach.gluttonCaloriesMult else 1)
 	section.stored += gained
 	section.fill = math.min(capacity, section.fill + volume)
@@ -64,6 +67,18 @@ function StomachService.Fullness(userId: number, capacity: number): number
 		return 0
 	end
 	return math.clamp(section.fill / capacity, 0, 1)
+end
+
+--API
+-- Belly at (or over) capacity — the caller (CakeSubs) refuses further bites
+-- while true (GDD §8: full = can't eat, gym is the release valve). A missing
+-- profile reads as NOT full so a joining player is never wrongly frozen out.
+function StomachService.IsFull(userId: number, capacity: number): boolean
+	local section = stomach(userId)
+	if not section or capacity <= 0 then
+		return false
+	end
+	return section.fill >= capacity
 end
 
 --API

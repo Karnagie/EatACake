@@ -2,7 +2,7 @@
 	BodySubsClient — stomach/gym/body domain on the client (R4, GDD §8):
 	  * StomachUpdate -> HUD state + floating calorie numbers (§7.3)
 	  * GymUpdate -> gym minigame state + deflate celebration (coins, whoosh)
-	  * drives BodyMorphController + PetFollowers per frame
+	  * drives BallRollController (full-belly tumble) + PetFollowers per frame
 	  * gym taps: AppRoot's onGymTap callback -> GymTap remote
 ]]
 
@@ -21,7 +21,7 @@ function BodySubsClient.Start(data, modules)
 	local ComboMeter = modules.ComboMeter
 	local SoundPool = modules.SoundPool
 	local ParticlePool = modules.ParticlePool
-	local BodyMorphController = modules.BodyMorphController
+	local BallRollController = modules.BallRollController
 	local PetFollowers = modules.PetFollowers
 
 	local player = Players.LocalPlayer
@@ -79,7 +79,7 @@ function BodySubsClient.Start(data, modules)
 	})
 
 	RunService.RenderStepped:Connect(function(dt)
-		BodyMorphController.Step(dt)
+		BallRollController.Step(dt) -- full-belly -> tumble roll (every character)
 		PetFollowers.Step(dt)
 	end)
 end

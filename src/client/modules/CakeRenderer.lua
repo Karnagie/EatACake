@@ -1,12 +1,34 @@
 --[[
 	CakeRenderer — the cake's client visual (GDD §4.5).
 
-	Primary path: ONE MeshPart PER VISUAL BAND. Every sim layer becomes a
-	dedicated EditableMesh slab (65×65 vertex grid) so each layer carries its
-	OWN Material / Transparency / Reflectance / Color — translucent marmalade,
-	grainy sponge, glossy caramel. On top of every edible layer sits a thin
-	CRUST band (butter-skin reference) with an XZ-planar EditableImage
-	texture; footstep/landing cracks are DRAWN into that texture (CrackAt).
+	Primary path: ONE MeshPart PER SIM LAYER. Every composition band becomes
+	a dedicated EditableMesh slab (heightfield clamped to the band) so each
+	layer carries its OWN Material / Transparency / Reflectance — translucent
+	marmalade, grainy sponge, glossy caramel. The CRUST is a thin PALE WAX
+	FILM painted INTO each layer's XZ-planar EditableImage texture: cells
+	whose surface sits within crust.depth of the layer top show the lighter
+	waxy skin; eating below repaints them as layer body.
+
+	CRUNCHY BUTTER (reference: the "Crunchy Butter" ASMR games — a thin hard wax
+	crust over soft butter). This file owns the SOFT SQUISH: the mesh dents
+	softly under the foot (fractureOffsetAt: `-sinkDepth·falloff`, §7.2 squish
+	loop), springs back; deeper on a landing (CrackAt). The slabs render the
+	layer BODY color — the pale crust look is the always-visible CakeWaxShell
+	module (a Voronoi wax web that cracks underfoot), so the darker body shows
+	through the wax gaps. Purely visual and local.
+
+	MEMORY BUDGET (the reason for the pool shape): a DYNAMIC EditableMesh
+	reserves the worst-case budget (60k verts) regardless of content — ~8
+	fit a desktop client, fewer on laptops. So the pool is built by cloning
+	ONE temporary dynamic scratch mesh via CreateEditableMeshAsync
+	{FixedSize=true} (fixed clones cost their ACTUAL complexity, still allow
+	SetPosition/SetNormal; probe-verified: source vertex/normal/uv ids stay
+	valid on the clone), then the scratch is destroyed. Slabs are created
+	LAZILY per composition (typically 5-6) with only footprint-hosted
+	vertices. Degradation ladder when creation still fails:
+	  per-layer slabs -> ONE slab + height-palette texture -> part grid.
+	CreateEditableMesh/Image return NIL (no throw) on budget exhaustion —
+	every creation is nil-checked and warned (R8).
 
 	Band projection rule (per vertex, raw = shared display height):
 	  raw > band.bottom + EPS  ->  y = min(raw, band.top)   (slab surface)
@@ -24,7 +46,7 @@
 
 	Collision: an INVISIBLE 32×32 column grid always exists (CanCollide +
 	CanQuery, snapped to server truth) — walking and bite raycasts match the
-	cake exactly in both modes. With render.forceFallback (or no
+	cake exactly in every mode. With render.forceFallback (or no
 	EditableMesh) the same columns become the VISIBLE "keycap" fallback.
 
 	The mirror (LocalCakeField) is injected via Setup from CakeSubsClient.
@@ -44,17 +66,17 @@ local gridCfg = CakeConfig.grid
 local renderCfg = CakeConfig.render
 local layersCfg = CakeConfig.layers
 local crustCfg = renderCfg.crust
-local cracksCfg = renderCfg.cracks
+local fractureCfg = renderCfg.fracture
 
 local SIZE = gridCfg.size
 local VSIZE = SIZE + 1
 local CELL = gridCfg.cell
 local EPS = 0.02 -- studs: "the band still exists here" threshold
 -- The loaf footprint is FIXED per game (config), so mesh faces, ring layout
--- and the band pool can be built once. +1-cell ring hosts the skirt walls.
+-- and the vertex host set can be built once.
 local FOOTPRINT = CakeConfig.composition.footprint
--- core + 5 middles + frosting = 7 layer bands + up to 6 crusts.
-local MAX_BANDS = 13
+-- core + middles + frosting; the pool grows lazily and never past this.
+local MAX_LAYER_MESHES = 8
 
 -- A cell hosts mesh faces iff its 3x3 neighborhood touches the footprint —
 -- the SAME rule as vertexTarget, so every raised boundary vertex is
@@ -74,6 +96,9 @@ end
 local fieldModule -- LocalCakeField, injected
 local impl -- "editable" | "parts" | nil (setup failed)
 local updateCollisionColumns -- forward decl (defined with the column grid)
+-- Declared HERE (before editableRebuild closes over it) — a later `local`
+-- would silently make the rebuild write a global (the upvalue trap).
+local visualColumns = false -- keycap fallback look vs invisible colliders
 
 -- ── Shared display state ────────────────────────────────────────────────
 local palette: { Color3 } = {}
@@ -107,7 +132,7 @@ local function buildPalette()
 				color = layer.colors.bottom:Lerp(layer.colors.top, t)
 				gloss = layer.gloss or 0
 				-- Crust skin at the top of every edible band (matches the
-				-- crust meshes, so fallback columns/particles agree).
+				-- layer textures, so fallback columns/particles agree).
 				if band.id ~= "core" and band.top - h <= crustCfg.depth then
 					color = color:Lerp(WHITE, crustCfg.lighten)
 					gloss = math.max(gloss, crustCfg.gloss)
@@ -133,11 +158,14 @@ local function buildPalette()
 	end
 end
 
+local function paletteIndex(hStuds: number): number
+	return math.clamp(math.floor(hStuds / renderCfg.paletteStep) + 1, 1, math.max(1, #palette))
+end
+
 --API
 -- Surface color at a height (bite particles match the layer).
 function CakeRenderer.PaletteColor(hStuds: number): Color3
-	local idx = math.clamp(math.floor(hStuds / renderCfg.paletteStep) + 1, 1, math.max(1, #palette))
-	return palette[idx] or Color3.fromRGB(240, 220, 220)
+	return palette[paletteIndex(hStuds)] or Color3.fromRGB(240, 220, 220)
 end
 
 local function paletteGloss(hStuds: number): number
@@ -145,7 +173,7 @@ local function paletteGloss(hStuds: number): number
 	return glossPalette[idx] or 0
 end
 
--- Rare tint applied to band colors AND crust texture fills.
+-- Rare tint applied to band colors AND texture fills.
 local function tinted(color: Color3, rareKind: string?, hMid: number, topStuds: number): Color3
 	if rareKind == "golden" then
 		return color:Lerp(renderCfg.goldenTint.color, renderCfg.goldenTint.alpha)
@@ -156,30 +184,34 @@ local function tinted(color: Color3, rareKind: string?, hMid: number, topStuds: 
 	return color
 end
 
--- ── EditableMesh implementation: one slab mesh per visual band ──────────
--- Pool entries are built ONCE (footprint-static geometry); every snapshot
--- assigns them a band range + appearance. y[] persists across cakes so
--- unchanged vertices skip their SetPosition.
+-- ── EditableMesh implementation: one slab mesh per layer ────────────────
+-- Pool entries are FixedSize clones of one scratch mesh (footprint-static
+-- geometry); every snapshot assigns them a band range + appearance. y[]
+-- persists across cakes so unchanged vertices skip their SetPosition.
 type PoolEntry = {
-	em: EditableMesh,
+	em: EditableMesh, -- FixedSize clone: attribute edits OK, topology frozen
 	part: MeshPart,
-	image: EditableImage?, -- crust crack texture, created lazily
-	vertIds: { number },
+	image: EditableImage?, -- layer texture (crust + cracks), created lazily
+	imageFailed: boolean?, -- budget said no — solid color, warned once
+	vertIds: { number }, -- vi -> id (sparse: hosted verts only)
 	uvIds: { number },
 	normalIds: { number },
 	y: { number }, -- last written vertex heights
 }
 type Band = {
-	kind: "layer" | "crust",
 	layerId: string,
 	bottom: number,
 	top: number,
 	poolIdx: number,
-	crackColor: Color3?,
+	sink: number, -- eaten-through tuck depth under the local surface
+	single: boolean?, -- palette mode: this one band renders the whole cake
+	bodyColor: Color3?,
+	crustFill: Color3?, -- pale wax crust base color
 }
 
 local pool: { PoolEntry } = {}
 local bands: { Band } = {}
+local singleMode = false
 
 local worldX: { number } = {} -- local-space x per vertex (mesh space)
 local worldZ: { number } = {}
@@ -194,6 +226,35 @@ local squishOff: { [number]: number } = {} -- vi -> current dent offset (<= 0)
 local squishBandIdx: { [number]: number } = {} -- which band the dent was written to
 local wobbleCursor = 0
 local wobbleBandIndices: { number } = {} -- band indices with layer.wobble
+
+-- Footprint-hosted geometry (built once): cells with faces + their corners.
+local hostedVertList: { number } = {} -- vi in AddVertex order (id map order)
+local vertHosted: { [number]: boolean } = {}
+local hostedCellList: { number } = {} -- 0-based cell indices with faces
+local creationY: { number } = {} -- vi -> creation height (bounds trick)
+
+-- Per-band texture caches: repaint a cell's pixel block only on transitions.
+local crustState: { { [number]: boolean } } = {} -- bandIdx -> ci -> is crust
+local palCache: { [number]: number } = {} -- single mode: ci -> palette index
+local scratchImgBuf: buffer? = nil -- reused full-repaint pixel buffer
+
+-- Surface-cover lookup for the eaten-through tuck (see bandYOf): sim band
+-- tops + an override bottom when that layer is TRANSLUCENT (jelly) — tucked
+-- sheets must sit below the see-through volume, not inside it.
+local coverTops: { number } = {}
+local coverBottoms: { [number]: number } = {}
+
+local function surfaceCoverY(raw: number): number
+	for k, top in ipairs(coverTops) do
+		if raw <= top then
+			return coverBottoms[k] or raw
+		end
+	end
+	return raw
+end
+
+local rebuilding = false
+local snapshotPending = false
 
 local function vidx(vx: number, vz: number): number
 	return vz * VSIZE + vx + 1 -- 1-based for Lua tables
@@ -234,17 +295,20 @@ local function oozeSpeedAt(hStuds: number): number
 	return (def and def.oozeSpeed) or renderCfg.lerpSpeed
 end
 
--- Visual band that owns the surface at this height (crusts included).
+-- Visual band that owns the surface at this height.
 local function surfaceBandIndexAt(hStuds: number): number
 	for bi, band in ipairs(bands) do
 		if hStuds <= band.top then
 			return bi
 		end
 	end
-	return #bands -- spawn noise sits above the top crust
+	return #bands -- spawn noise sits above the top band
 end
 
--- The band projection rule (see file header).
+-- The band projection rule (see file header). Eaten-through columns TUCK
+-- the band's sheet `band.sink` studs under the local surface cover — a
+-- FixedSize mesh can't delete faces and dropping to 0 hung tall curtain
+-- quads through lower layers on side cuts.
 local function bandYOf(band: Band, vi: number): number
 	if isRing[vi] then
 		local cells = ringCells[vi]
@@ -258,29 +322,52 @@ local function bandYOf(band: Band, vi: number): number
 				maxH = h
 			end
 		end
-		return if maxH > band.bottom + EPS then band.bottom else 0
+		if maxH > band.bottom + EPS then
+			return band.bottom -- skirt seal: outer wall shows stacked bands
+		end
+		return math.max(0, surfaceCoverY(maxH) - band.sink)
 	end
 	local raw = displayH[vi]
 	if raw > band.bottom + EPS then
 		return math.min(raw, band.top)
 	end
-	return 0
+	return math.max(0, surfaceCoverY(raw) - band.sink)
 end
 
--- Position + normal write for one vertex of one band. Normals come from the
--- BAND's own neighbor heights, so clamped slab walls shade correctly.
-local function bandWrite(band: Band, vi: number)
+-- Normal-only refresh for one vertex of one band, from the BAND's own
+-- neighbor heights (clamped slab walls shade correctly). Split from
+-- bandWrite so stale-neighbor refreshes never touch squish/wobble offsets.
+local function bandNormalOnly(band: Band, vi: number)
 	local pe = pool[band.poolIdx]
+	local nid = pe.normalIds[vi]
+	if nid == nil then
+		return
+	end
 	local y = pe.y
-	pe.em:SetPosition(pe.vertIds[vi], Vector3.new(worldX[vi], y[vi], worldZ[vi]))
 	local vx = (vi - 1) % VSIZE
 	local vz = (vi - 1) // VSIZE
 	local hl = y[vidx(math.max(0, vx - 1), vz)]
 	local hr = y[vidx(math.min(VSIZE - 1, vx + 1), vz)]
 	local ht = y[vidx(vx, math.max(0, vz - 1))]
 	local hb = y[vidx(vx, math.min(VSIZE - 1, vz + 1))]
-	pe.em:SetNormal(pe.normalIds[vi], Vector3.new(hl - hr, 2 * CELL, ht - hb).Unit)
+	pe.em:SetNormal(nid, Vector3.new(hl - hr, 2 * CELL, ht - hb).Unit)
 end
+
+-- Position + normal write for one vertex of one band.
+local function bandWrite(band: Band, vi: number)
+	local pe = pool[band.poolIdx]
+	local vid = pe.vertIds[vi]
+	if vid == nil then
+		return -- not a hosted vertex (belt & suspenders)
+	end
+	pe.em:SetPosition(vid, Vector3.new(worldX[vi], pe.y[vi], worldZ[vi]))
+	bandNormalOnly(band, vi)
+end
+
+-- Vertices projectVertex wrote this frame — their UNMOVED neighbors need a
+-- normal-only refresh (their shading still assumes the pre-bite slope).
+local movedVerts: { [number]: boolean } = {}
+local refreshedNeighbors: { [number]: boolean } = {} -- per-frame dedup
 
 -- Project one vertex into every band; write only real moves.
 local function projectVertex(vi: number)
@@ -290,219 +377,477 @@ local function projectVertex(vi: number)
 		if math.abs(ny - pe.y[vi]) > 0.004 then
 			pe.y[vi] = ny
 			bandWrite(band, vi)
+			movedVerts[vi] = true
 		end
 	end
 end
 
-local function setupEditable(): boolean
-	local startedAt = os.clock()
-	local ok, err = pcall(function()
-		local half = SIZE / 2
-		-- Shared static vertex layout + ring classification.
-		for vz = 0, VSIZE - 1 do
-			for vx = 0, VSIZE - 1 do
-				local vi = vidx(vx, vz)
-				worldX[vi] = (vx - half) * CELL
-				worldZ[vi] = (vz - half) * CELL
-				targetH[vi] = 0
-				displayH[vi] = 0
-				oozeRate[vi] = renderCfg.lerpSpeed
-				local inFootprint = false
-				for dz = -1, 0 do
-					for dx = -1, 0 do
+-- Static vertex layout, ring classification and the hosted set. No meshes
+-- are created here — the pool grows lazily per composition (ensurePool).
+local function buildStaticLayout()
+	local half = SIZE / 2
+	for vz = 0, VSIZE - 1 do
+		for vx = 0, VSIZE - 1 do
+			local vi = vidx(vx, vz)
+			worldX[vi] = (vx - half) * CELL
+			worldZ[vi] = (vz - half) * CELL
+			targetH[vi] = 0
+			displayH[vi] = 0
+			oozeRate[vi] = renderCfg.lerpSpeed
+			creationY[vi] = 0
+			local inFootprint = false
+			for dz = -1, 0 do
+				for dx = -1, 0 do
+					local cx, cz = vx + dx, vz + dz
+					if GridUtil.InBounds(SIZE, cx, cz) and GridUtil.InCake(SIZE, FOOTPRINT, cx, cz) then
+						inFootprint = true
+					end
+				end
+			end
+			isRing[vi] = not inFootprint
+			if not inFootprint then
+				-- Nearby in-footprint cells (4x4 window) — the skirt seal
+				-- reads their heights to decide bottom vs dropped.
+				local cells = {}
+				for dz = -2, 1 do
+					for dx = -2, 1 do
 						local cx, cz = vx + dx, vz + dz
 						if GridUtil.InBounds(SIZE, cx, cz) and GridUtil.InCake(SIZE, FOOTPRINT, cx, cz) then
-							inFootprint = true
+							table.insert(cells, GridUtil.Index(SIZE, cx, cz))
 						end
 					end
 				end
-				isRing[vi] = not inFootprint
-				if not inFootprint then
-					-- Nearby in-footprint cells (4x4 window) — the skirt seal
-					-- reads their heights to decide bottom vs dropped.
-					local cells = {}
-					for dz = -2, 1 do
-						for dx = -2, 1 do
-							local cx, cz = vx + dx, vz + dz
-							if GridUtil.InBounds(SIZE, cx, cz) and GridUtil.InCake(SIZE, FOOTPRINT, cx, cz) then
-								table.insert(cells, GridUtil.Index(SIZE, cx, cz))
-							end
-						end
-					end
-					ringCells[vi] = if #cells > 0 then cells else nil
-				end
+				ringCells[vi] = if #cells > 0 then cells else nil
 			end
 		end
-		-- The band part pool: identical geometry, appearance set per cake.
-		for pi = 1, MAX_BANDS do
-			local em = AssetService:CreateEditableMesh()
-			local vertIds = table.create(VSIZE * VSIZE)
-			local uvIds = table.create(VSIZE * VSIZE)
-			local normalIds = table.create(VSIZE * VSIZE)
-			local y = table.create(VSIZE * VSIZE, 0)
-			for vz = 0, VSIZE - 1 do
-				for vx = 0, VSIZE - 1 do
-					local vi = vidx(vx, vz)
-					-- Bounds trick: create at max height so the render bounds
-					-- cover every future height (culling uses CREATION geometry).
-					local creationY = if isRing[vi] and ringCells[vi] == nil then 0 else gridCfg.maxHeight
-					y[vi] = creationY
-					vertIds[vi] = em:AddVertex(Vector3.new(worldX[vi], creationY, worldZ[vi]))
-					-- STATIC planar UVs: crust textures map XZ over the grid.
-					uvIds[vi] = em:AddUV(Vector2.new(vx / SIZE, vz / SIZE))
-					normalIds[vi] = em:AddNormal(Vector3.yAxis)
-				end
-			end
-			for cz = 0, SIZE - 1 do
-				for cx = 0, SIZE - 1 do
-					if cellHostsFaces(cx, cz) then
-						local i00, i01, i10, i11 = vidx(cx, cz), vidx(cx, cz + 1), vidx(cx + 1, cz), vidx(cx + 1, cz + 1)
-						local f1 = em:AddTriangle(vertIds[i00], vertIds[i01], vertIds[i10])
-						local f2 = em:AddTriangle(vertIds[i10], vertIds[i01], vertIds[i11])
-						em:SetFaceUVs(f1, { uvIds[i00], uvIds[i01], uvIds[i10] })
-						em:SetFaceUVs(f2, { uvIds[i10], uvIds[i01], uvIds[i11] })
-						em:SetFaceNormals(f1, { normalIds[i00], normalIds[i01], normalIds[i10] })
-						em:SetFaceNormals(f2, { normalIds[i10], normalIds[i01], normalIds[i11] })
-					end
-				end
-			end
-			-- RenderFidelity = Precise: Automatic swaps in LODs generated from
-			-- stale creation-time content; Precise renders live edits always.
-			local part = AssetService:CreateMeshPartAsync(
-				Content.fromObject(em),
-				{ RenderFidelity = Enum.RenderFidelity.Precise }
-			)
-			part.Name = `CakeBand{pi}`
-			part.Anchored = true
-			part.CanCollide = false
-			part.CanQuery = false
-			part.CanTouch = false
-			part.CastShadow = false -- GDD §4.5
-			part.Material = Enum.Material.SmoothPlastic
-			part.Color = WHITE
-			-- Both sides render: steep skirt/crater quads flip facing depending
-			-- on which neighbor dropped; single-sided walls vanished at angles.
-			part.DoubleSided = true
-			-- Verified live: vertices render at RAW mesh coordinates relative
-			-- to part.CFrame (no bbox recentering) — mesh y=0 = part Y.
-			part.CFrame = CFrame.new(gridCfg.origin.x, gridCfg.origin.y, gridCfg.origin.z)
-			part.Transparency = 1 -- hidden until the first snapshot assigns bands
-			part.Parent = workspace
-			pool[pi] = {
-				em = em,
-				part = part,
-				image = nil,
-				vertIds = vertIds,
-				uvIds = uvIds,
-				normalIds = normalIds,
-				y = y,
-			}
-		end
-	end)
-	if not ok then
-		Log.Warn("CakeRenderer", `EditableMesh band pool failed ({err}) — falling back to part grid`)
-		for _, pe in ipairs(pool) do
-			pe.part:Destroy()
-		end
-		table.clear(pool)
-		return false
 	end
-	Log.Info("CakeRenderer", `band pool ready — {MAX_BANDS} slab meshes in {math.floor((os.clock() - startedAt) * 1000)} ms`)
-	return true
+	-- Hosted cells + their corner vertices (everything else never gets a
+	-- mesh vertex — unreferenced verts only burn budget).
+	local hostedCellSet: { [number]: boolean } = {}
+	for cz = 0, SIZE - 1 do
+		for cx = 0, SIZE - 1 do
+			if cellHostsFaces(cx, cz) then
+				local ci = GridUtil.Index(SIZE, cx, cz)
+				hostedCellSet[ci] = true
+				table.insert(hostedCellList, ci)
+				for dz = 0, 1 do
+					for dx = 0, 1 do
+						local vi = vidx(cx + dx, cz + dz)
+						if not vertHosted[vi] then
+							vertHosted[vi] = true
+							table.insert(hostedVertList, vi)
+							-- Bounds trick: create at max height so render
+							-- bounds cover every future height (culling uses
+							-- CREATION-time geometry).
+							creationY[vi] = gridCfg.maxHeight
+						end
+					end
+				end
+			end
+		end
+	end
+	-- Smooth loaf outline: the discrete footprint STAIRCASE pleats the
+	-- skirt at the rounded corners (accordion look). Ring verts and partial
+	-- boundary verts are projected horizontally onto the ANALYTIC rounded
+	-- rect expanded by half a cell — straight edges land exactly on the
+	-- collision-cell boundary, corner arcs become smooth, and the outer
+	-- ring collapses onto the outline (degenerate outside quads vanish).
+	-- Render-only: heights/collision keep the cell staircase (<1 cell off
+	-- at corner arcs).
+	local cornerR = (FOOTPRINT.corner + 0.5) * CELL
+	local rectX = (FOOTPRINT.hx + 0.5) * CELL - cornerR
+	local rectZ = (FOOTPRINT.hz + 0.5) * CELL - cornerR
+	for _, vi in ipairs(hostedVertList) do
+		local partial = isRing[vi]
+		if not partial then
+			local vx = (vi - 1) % VSIZE
+			local vz = (vi - 1) // VSIZE
+			for dz = -1, 0 do
+				for dx = -1, 0 do
+					local cx, cz = vx + dx, vz + dz
+					if not (GridUtil.InBounds(SIZE, cx, cz) and GridUtil.InCake(SIZE, FOOTPRINT, cx, cz)) then
+						partial = true
+					end
+				end
+			end
+		end
+		if partial then
+			local x, z = worldX[vi], worldZ[vi]
+			local qx = math.clamp(x, -rectX, rectX)
+			local qz = math.clamp(z, -rectZ, rectZ)
+			local dx, dz = x - qx, z - qz
+			local dist = math.sqrt(dx * dx + dz * dz)
+			if dist > 1e-3 then
+				worldX[vi] = qx + dx / dist * cornerR
+				worldZ[vi] = qz + dz / dist * cornerR
+			end
+		end
+	end
 end
 
--- Fills a crust texture with its base skin color + subtle mottling.
-local function fillCrustImage(pe: PoolEntry, fill: Color3)
-	local img = pe.image :: EditableImage
-	local size = crustCfg.imageSize
-	local buf = buffer.create(size * size * 4)
-	local noiseAmp = crustCfg.noise
-	local r0, g0, b0 = fill.R, fill.G, fill.B
-	for pz = 0, size - 1 do
-		for px = 0, size - 1 do
-			local n = math.noise(px * 0.15, pz * 0.15) * noiseAmp
-			local o = (pz * size + px) * 4
-			buffer.writeu8(buf, o, math.clamp(math.floor((r0 + n) * 255 + 0.5), 0, 255))
-			buffer.writeu8(buf, o + 1, math.clamp(math.floor((g0 + n) * 255 + 0.5), 0, 255))
-			buffer.writeu8(buf, o + 2, math.clamp(math.floor((b0 + n) * 255 + 0.5), 0, 255))
+-- Grows the pool to `want` slabs (≤ MAX_LAYER_MESHES) by cloning ONE
+-- temporary dynamic scratch mesh into FixedSize meshes. Returns the pool
+-- size actually reached — the caller degrades when it falls short.
+local function ensurePool(want: number): number
+	if want > MAX_LAYER_MESHES then
+		Log.Warn("CakeRenderer", `composition wants {want} slabs > MAX_LAYER_MESHES {MAX_LAYER_MESHES} — raise the cap`)
+		want = MAX_LAYER_MESHES
+	end
+	if #pool >= want then
+		return #pool
+	end
+	local startedAt = os.clock()
+
+	-- 1. The dynamic scratch: worst-case budget reservation, alive only for
+	-- the duration of this grow. Returns NIL (no throw) when over budget.
+	local scratch: EditableMesh? = nil
+	pcall(function()
+		scratch = AssetService:CreateEditableMesh()
+	end)
+	if scratch == nil then
+		Log.Once("CakeRenderer", "scratch-budget", `EditableMesh memory budget exhausted — cannot build slab meshes (pool at {#pool})`)
+		return #pool
+	end
+
+	local vertIds: { number } = {}
+	local uvIds: { number } = {}
+	local normalIds: { number } = {}
+	local okBuild, errBuild = pcall(function()
+		local em = scratch :: EditableMesh
+		for _, vi in ipairs(hostedVertList) do
+			vertIds[vi] = em:AddVertex(Vector3.new(worldX[vi], creationY[vi], worldZ[vi]))
+			-- STATIC planar UVs: layer textures map XZ over the grid.
+			local vx = (vi - 1) % VSIZE
+			local vz = (vi - 1) // VSIZE
+			uvIds[vi] = em:AddUV(Vector2.new(vx / SIZE, vz / SIZE))
+			normalIds[vi] = em:AddNormal(Vector3.yAxis)
+		end
+		for _, ci in ipairs(hostedCellList) do
+			local cx, cz = GridUtil.Coords(SIZE, ci)
+			local i00, i01, i10, i11 = vidx(cx, cz), vidx(cx, cz + 1), vidx(cx + 1, cz), vidx(cx + 1, cz + 1)
+			local f1 = em:AddTriangle(vertIds[i00], vertIds[i01], vertIds[i10])
+			local f2 = em:AddTriangle(vertIds[i10], vertIds[i01], vertIds[i11])
+			em:SetFaceUVs(f1, { uvIds[i00], uvIds[i01], uvIds[i10] })
+			em:SetFaceUVs(f2, { uvIds[i10], uvIds[i01], uvIds[i11] })
+			em:SetFaceNormals(f1, { normalIds[i00], normalIds[i01], normalIds[i10] })
+			em:SetFaceNormals(f2, { normalIds[i10], normalIds[i01], normalIds[i11] })
+		end
+	end)
+	if not okBuild then
+		Log.Warn("CakeRenderer", `scratch mesh build failed ({errBuild}) — pool stays at {#pool}`)
+		scratch:Destroy()
+		return #pool
+	end
+
+	-- 2. FixedSize clones (cost = actual complexity) + their MeshParts.
+	-- Probe-verified: the source's vertex/normal ids remain valid on every
+	-- clone, so the id tables above serve all slabs from this scratch.
+	while #pool < want do
+		local pi = #pool + 1
+		local fixed: EditableMesh? = nil
+		pcall(function()
+			fixed = AssetService:CreateEditableMeshAsync(Content.fromObject(scratch :: EditableMesh), { FixedSize = true })
+		end)
+		if fixed == nil then
+			Log.Once("CakeRenderer", "clone-budget", `EditableMesh budget hit at slab {pi}/{want} — degrading (see next warn)`)
+			break
+		end
+		local part: MeshPart? = nil
+		local okPart, errPart = pcall(function()
+			-- RenderFidelity = Precise: Automatic swaps in LODs generated
+			-- from stale creation-time content; Precise renders live edits.
+			part = AssetService:CreateMeshPartAsync(
+				Content.fromObject(fixed :: EditableMesh),
+				{ RenderFidelity = Enum.RenderFidelity.Precise }
+			)
+		end)
+		if not okPart or part == nil then
+			Log.Once("CakeRenderer", "part-budget", `CreateMeshPartAsync failed at slab {pi}/{want} ({errPart}) — degrading`);
+			(fixed :: EditableMesh):Destroy()
+			break
+		end
+		local p = part :: MeshPart
+		p.Name = `CakeLayer{pi}`
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.CastShadow = false -- GDD §4.5
+		p.Material = Enum.Material.SmoothPlastic
+		p.Color = WHITE
+		-- Both sides render: steep skirt/crater quads flip facing depending
+		-- on which neighbor dropped; single-sided walls vanished at angles.
+		p.DoubleSided = true
+		-- Verified live: vertices render at RAW mesh coordinates relative
+		-- to part.CFrame (no bbox recentering) — mesh y=0 = part Y.
+		p.CFrame = CFrame.new(gridCfg.origin.x, gridCfg.origin.y, gridCfg.origin.z)
+		p.Transparency = 1 -- hidden until a snapshot assigns bands
+		p.Parent = workspace
+		pool[pi] = {
+			em = fixed :: EditableMesh,
+			part = p,
+			image = nil,
+			imageFailed = nil,
+			vertIds = vertIds,
+			uvIds = uvIds,
+			normalIds = normalIds,
+			y = table.clone(creationY),
+		}
+	end
+
+	-- 3. The scratch's worst-case reservation is freed; clones stay alive.
+	scratch:Destroy()
+	Log.Info("CakeRenderer", `slab pool: {#pool}/{want} FixedSize meshes ({#hostedVertList} verts each) in {math.floor((os.clock() - startedAt) * 1000)} ms`)
+	return #pool
+end
+
+-- Lazily creates a pool entry's texture. CreateEditableImage returns NIL
+-- on budget exhaustion (no throw) — nil-check, never trust pcall alone.
+local function ensureImage(pe: PoolEntry): EditableImage?
+	if pe.image ~= nil then
+		return pe.image
+	end
+	if pe.imageFailed then
+		return nil
+	end
+	local img: EditableImage? = nil
+	pcall(function()
+		img = AssetService:CreateEditableImage({
+			Size = Vector2.new(crustCfg.imageSize, crustCfg.imageSize),
+		})
+	end)
+	if img == nil then
+		pe.imageFailed = true
+		Log.Once("CakeRenderer", "image-budget", "EditableImage budget exhausted — layer renders solid color, no crust texture / cracks")
+		return nil
+	end
+	pe.image = img
+	return img
+end
+
+-- Shared base-film mottle so every path that repaints a crust cell (the full
+-- band paint AND the fracture groove) uses the identical noise — a divergence
+-- would leave a silent seam where a groove heals.
+local function filmNoiseAt(px: number, pz: number): number
+	return math.noise(px * 0.15, pz * 0.15) * crustCfg.noise
+end
+
+-- Pixel block of one cell inside the XZ-planar texture.
+local function cellPixelRect(ci: number): (number, number, number, number)
+	local sizePx = crustCfg.imageSize
+	local cx, cz = GridUtil.Coords(SIZE, ci)
+	local px0 = cx * sizePx // SIZE
+	local pz0 = cz * sizePx // SIZE
+	local px1 = (cx + 1) * sizePx // SIZE
+	local pz1 = (cz + 1) * sizePx // SIZE
+	return px0, pz0, px1 - px0, pz1 - pz0
+end
+
+-- Full texture repaint for one band + reset of its transition cache.
+-- Multi mode: crust fill (mottled) where the cell surface is within
+-- crust.depth of the band top, flat body color below. Single mode: the
+-- whole height palette per cell (crust lightening is baked into it).
+local function paintBandImage(bandIdx: number)
+	local band = bands[bandIdx]
+	if band.layerId == "core" then
+		return -- inedible floor: solid color part, no texture wanted
+	end
+	local pe = pool[band.poolIdx]
+	local img = if pe.imageFailed then nil else pe.image -- assignBands already ensured it
+	if img == nil then
+		return
+	end
+	local sizePx = crustCfg.imageSize
+	if scratchImgBuf == nil then
+		scratchImgBuf = buffer.create(sizePx * sizePx * 4)
+	end
+	local buf = scratchImgBuf :: buffer
+
+	-- Per-cell colors first (0-based ci -> 1-based arrays).
+	local cellR: { number } = table.create(SIZE * SIZE, 0)
+	local cellG: { number } = table.create(SIZE * SIZE, 0)
+	local cellB: { number } = table.create(SIZE * SIZE, 0)
+	local cellNoise: { boolean } = table.create(SIZE * SIZE, false)
+	if band.single then
+		table.clear(palCache)
+	else
+		crustState[bandIdx] = {}
+	end
+	local state = crustState[bandIdx]
+	for ci = 0, SIZE * SIZE - 1 do
+		local h = fieldModule.ReadHeightStuds(ci)
+		local color
+		if band.single then
+			local idx = paletteIndex(h)
+			palCache[ci] = idx
+			color = palette[idx] or WHITE
+		else
+			-- The slabs render the layer BODY (darker) everywhere: the pale
+			-- CRUST look is now the always-visible CakeWaxShell riding on top, so
+			-- where its plates crack the darker body shows in the gaps.
+			state[ci] = h > band.top - crustCfg.depth
+			color = band.bodyColor
+			cellNoise[ci + 1] = false
+		end
+		cellR[ci + 1] = color.R
+		cellG[ci + 1] = color.G
+		cellB[ci + 1] = color.B
+	end
+
+	for pz = 0, sizePx - 1 do
+		local czBase = (pz * SIZE // sizePx) * SIZE
+		local rowBase = pz * sizePx
+		for px = 0, sizePx - 1 do
+			local c = czBase + (px * SIZE // sizePx) + 1
+			local n = if cellNoise[c] then filmNoiseAt(px, pz) else 0
+			local o = (rowBase + px) * 4
+			buffer.writeu8(buf, o, math.clamp(math.floor((cellR[c] + n) * 255 + 0.5), 0, 255))
+			buffer.writeu8(buf, o + 1, math.clamp(math.floor((cellG[c] + n) * 255 + 0.5), 0, 255))
+			buffer.writeu8(buf, o + 2, math.clamp(math.floor((cellB[c] + n) * 255 + 0.5), 0, 255))
 			buffer.writeu8(buf, o + 3, 255)
 		end
 	end
-	img:WritePixelsBuffer(Vector2.zero, Vector2.new(size, size), buf)
+	img:WritePixelsBuffer(Vector2.zero, Vector2.new(sizePx, sizePx), buf)
 end
 
--- Derives the visual band list (layers + crust skins) from the sim
--- composition and dresses the pool parts. Returns desired transparencies,
--- applied AFTER geometry is written (no flash of stale slabs).
-local function assignBands(meta): { number }
+-- Cell changed: repaint its pixel block in every band whose look flips
+-- (wax eaten through -> body; single mode: palette step crossed). The
+-- Overwrite also erases any open crack on the eaten cell — intended.
+local function updateCellPixels(ci: number)
+	for bi, band in ipairs(bands) do
+		local pe = pool[band.poolIdx]
+		local img = pe.image
+		if img == nil then
+			continue
+		end
+		local h = fieldModule.ReadHeightStuds(ci)
+		if band.single then
+			local idx = paletteIndex(h)
+			if palCache[ci] ~= idx then
+				palCache[ci] = idx
+				local px, pz, w, hh = cellPixelRect(ci)
+				img:DrawRectangle(Vector2.new(px, pz), Vector2.new(w, hh), palette[idx] or WHITE, 0, Enum.ImageCombineType.Overwrite)
+			end
+		else
+			local isCrust = h > band.top - crustCfg.depth
+			local state = crustState[bi]
+			if state ~= nil and state[ci] ~= isCrust then
+				state[ci] = isCrust
+				local px, pz, w, hh = cellPixelRect(ci)
+				local color = band.bodyColor -- slab is body; crust is the CakeWaxShell on top
+				img:DrawRectangle(Vector2.new(px, pz), Vector2.new(w, hh), color :: Color3, 0, Enum.ImageCombineType.Overwrite)
+			end
+		end
+	end
+end
+
+-- ── Soft butter squish (the mesh dents; the wax web is CakeWaxShell) ────
+-- Per-vertex downward offset of the soft squish under the foot: a round dent,
+-- deepest at the foot (`-sinkDepth·falloff`), zero at the rim. Returns nil
+-- outside the zone or on a rock layer (squishMult 0). `fx,fz` = foot in
+-- grid-vertex coords; `depthMult` deepens a landing dent.
+local function fractureOffsetAt(vi: number, fx: number, fz: number, radius: number, depthMult: number): number?
+	local vx = (vi - 1) % VSIZE
+	local vz = (vi - 1) // VSIZE
+	local dx, dz = (vx - fx) * CELL, (vz - fz) * CELL
+	local distSq = dx * dx + dz * dz
+	if distSq >= radius * radius then
+		return nil
+	end
+	local def = layerDefAt(displayH[vi])
+	if def == nil or (def.squishMult or 0) <= 0 then
+		return nil -- rock crust (chocolate): doesn't squish
+	end
+	local w = 1 - distSq / (radius * radius) -- 1 at the foot, 0 at the rim
+	return -fractureCfg.sinkDepth * depthMult * w * w -- round soft dent
+end
+
+-- Derives the band list from the sim composition, grows the pool (lazily,
+-- may YIELD, may fall short of the composition) and dresses the parts.
+-- Returns desired transparencies (applied AFTER geometry is written — no
+-- flash of stale slabs), or nil when not even one slab exists.
+local function assignBands(meta): { number }?
 	table.clear(bands)
 	table.clear(wobbleBandIndices)
+	table.clear(crustState)
+	-- Surface-cover lookup for the eaten-through tuck: translucent layers
+	-- (jelly) hide tucked sheets below their BOTTOM, opaque ones just under
+	-- the surface.
+	table.clear(coverTops)
+	table.clear(coverBottoms)
+	for k, simBand in ipairs(meta.composition) do
+		coverTops[k] = simBand.top
+		local layerDef = layersCfg[simBand.id]
+		if (layerDef.transparency or 0) > 0 then
+			coverBottoms[k] = simBand.bottom
+		end
+	end
 	local topStuds = meta.composition[#meta.composition].top
-	for _, simBand in ipairs(meta.composition) do
-		if simBand.id == "core" or simBand.top - simBand.bottom <= crustCfg.depth + 0.5 then
-			table.insert(bands, { kind = "layer", layerId = simBand.id, bottom = simBand.bottom, top = simBand.top, poolIdx = 0 })
-		else
-			local skinBottom = simBand.top - crustCfg.depth
-			table.insert(bands, { kind = "layer", layerId = simBand.id, bottom = simBand.bottom, top = skinBottom, poolIdx = 0 })
-			table.insert(bands, { kind = "crust", layerId = simBand.id, bottom = skinBottom, top = simBand.top, poolIdx = 0 })
-		end
+	local want = #meta.composition
+	local have = ensurePool(want)
+	if have == 0 then
+		return nil
 	end
-	if #bands > #pool then
-		-- Composition config outgrew the pool — visible bug, not silence (R8).
-		Log.Warn("CakeRenderer", `{#bands} visual bands > pool of {#pool} — extra bands not rendered; raise MAX_BANDS`)
-	end
+	singleMode = have < want
 	local transparencies = {}
-	for bi, band in ipairs(bands) do
-		if bi > #pool then
-			break
-		end
-		band.poolIdx = bi
-		local pe = pool[bi]
-		local layerDef = layersCfg[band.layerId]
-		local hMid = (band.bottom + band.top) * 0.5
+	if singleMode then
+		-- Budget ladder step 2: ONE slab renders the whole cake through the
+		-- height palette texture. Layers keep their colors/crust stripes and
+		-- per-layer ooze; per-layer material/transparency/wobble are off.
+		Log.Once("CakeRenderer", "single-mode", `budget allows {have}/{want} slabs — single palette mesh mode (no per-layer materials)`)
+		bands[1] = { layerId = "palette", bottom = 0, top = topStuds, poolIdx = 1, sink = renderCfg.hideSink.base, single = true }
+		local pe = pool[1]
 		local part = pe.part
-		if band.kind == "layer" then
-			local bodyColor = layerDef.colors.bottom:Lerp(layerDef.colors.top, 0.55)
-			part.Color = tinted(bodyColor, meta.rareKind, hMid, topStuds)
+		part.Name = "CakeLayer1_palette"
+		part.Material = Enum.Material.SmoothPlastic
+		part.Reflectance = 0.1
+		if ensureImage(pe) ~= nil then
+			part.Color = WHITE
+			part.TextureContent = Content.fromObject(pe.image :: EditableImage)
+		else
+			part.TextureContent = Content.none
+			part.Color = tinted(layersCfg.frosting.colors.top, meta.rareKind, topStuds, topStuds)
+		end
+		transparencies[1] = 0
+	else
+		for bi, simBand in ipairs(meta.composition) do
+			local layerDef = layersCfg[simBand.id]
+			local hMid = (simBand.bottom + simBand.top) * 0.5
+			local bodyColor = tinted(layerDef.colors.bottom:Lerp(layerDef.colors.top, 0.55), meta.rareKind, hMid, topStuds)
+			local crustFill = tinted(layerDef.colors.top:Lerp(WHITE, crustCfg.lighten), meta.rareKind, simBand.top, topStuds)
+			local band: Band = {
+				layerId = simBand.id,
+				bottom = simBand.bottom,
+				top = simBand.top,
+				poolIdx = bi,
+				sink = renderCfg.hideSink.base + renderCfg.hideSink.perBand * bi,
+				bodyColor = bodyColor,
+				crustFill = crustFill,
+			}
+			bands[bi] = band
+			local pe = pool[bi]
+			local part = pe.part
+			part.Name = `CakeLayer{bi}_{simBand.id}`
 			part.Material = layerDef.material or Enum.Material.SmoothPlastic
 			part.Reflectance = layerDef.gloss or 0
-			part.TextureContent = Content.none
-			part.Name = `CakeBand{bi}_{band.layerId}`
 			transparencies[bi] = layerDef.transparency or 0
+			-- Core is the inedible floor: solid color, no film, no reveal.
+			if simBand.id ~= "core" and ensureImage(pe) ~= nil then
+				part.Color = WHITE
+				part.TextureContent = Content.fromObject(pe.image :: EditableImage)
+			else
+				part.TextureContent = Content.none
+				part.Color = bodyColor
+			end
 			if layerDef.wobble then
 				table.insert(wobbleBandIndices, bi)
 			end
-		else
-			local crustColor = tinted(layerDef.colors.top:Lerp(WHITE, crustCfg.lighten), meta.rareKind, hMid, topStuds)
-			band.crackColor = crustColor:Lerp(BLACK, cracksCfg.darken)
-			part.Color = WHITE -- the texture carries the look
-			part.Material = Enum.Material.SmoothPlastic
-			part.Reflectance = crustCfg.gloss
-			part.Name = `CakeBand{bi}_{band.layerId}_crust`
-			if pe.image == nil then
-				local imgOk, imgErr = pcall(function()
-					pe.image = AssetService:CreateEditableImage({
-						Size = Vector2.new(crustCfg.imageSize, crustCfg.imageSize),
-					})
-				end)
-				if not imgOk then
-					Log.Once("CakeRenderer", "crust-image-fail", `crust EditableImage failed ({imgErr}) — crusts render untextured, no cracks`)
-				end
-			end
-			if pe.image ~= nil then
-				fillCrustImage(pe, crustColor)
-				part.TextureContent = Content.fromObject(pe.image)
-			else
-				part.TextureContent = Content.none
-				part.Color = crustColor
-			end
-			transparencies[bi] = 0
 		end
 	end
 	-- Park leftover pool parts.
 	for pi = #bands + 1, #pool do
 		pool[pi].part.Transparency = 1
-		pool[pi].part.Name = `CakeBand{pi}_idle`
+		pool[pi].part.Name = `CakeLayer{pi}_idle`
 	end
 	return transparencies
 end
@@ -514,57 +859,73 @@ local function editableRebuild()
 		return
 	end
 	local startedAt = os.clock()
-	local transparencies = assignBands(meta)
-	for vz = 0, VSIZE - 1 do
-		for vx = 0, VSIZE - 1 do
-			local vi = vidx(vx, vz)
-			targetH[vi] = vertexTarget(vx, vz)
-			displayH[vi] = targetH[vi]
-			oozeRate[vi] = oozeSpeedAt(targetH[vi])
-		end
+	local transparencies = assignBands(meta) -- may yield (mesh creation)
+	if transparencies == nil then
+		-- Budget ladder step 3: no EditableMesh at all — the collision
+		-- columns become the visible keycap grid.
+		impl = "parts"
+		visualColumns = true
+		Log.Warn("CakeRenderer", "no EditableMesh budget — falling back to visible part grid")
+		return
+	end
+	for _, vi in ipairs(hostedVertList) do
+		local vx = (vi - 1) % VSIZE
+		local vz = (vi - 1) // VSIZE
+		targetH[vi] = vertexTarget(vx, vz)
+		displayH[vi] = targetH[vi]
+		oozeRate[vi] = oozeSpeedAt(targetH[vi])
 	end
 	-- TWO passes per band: heights first, then writes — normals read
 	-- NEIGHBOR heights; a single interleaved pass bakes sideways normals.
 	for _, band in ipairs(bands) do
-		if band.poolIdx == 0 then
-			continue
-		end
 		local pe = pool[band.poolIdx]
-		local newY = table.create(VSIZE * VSIZE)
-		for vi = 1, VSIZE * VSIZE do
+		local newY = table.create(VSIZE * VSIZE, 0)
+		for _, vi in ipairs(hostedVertList) do
 			newY[vi] = bandYOf(band, vi)
 		end
 		local oldY = pe.y
 		pe.y = newY
-		for vi = 1, VSIZE * VSIZE do
+		for _, vi in ipairs(hostedVertList) do
 			if math.abs(newY[vi] - oldY[vi]) > 0.004 then
 				bandWrite(band, vi)
 			end
 		end
 	end
+	for bi in ipairs(bands) do
+		paintBandImage(bi)
+	end
 	for bi, band in ipairs(bands) do
-		if band.poolIdx ~= 0 then
-			pool[band.poolIdx].part.Transparency = transparencies[bi] or 0
+		pool[band.poolIdx].part.Transparency = transparencies[bi] or 0
+	end
+	-- Squish offsets were written straight into the meshes without touching
+	-- pe.y — the diff above skips any dented vertex whose band height didn't
+	-- change, so force-restore them before dropping the dent state.
+	for vi in pairs(squishOff) do
+		for _, band in ipairs(bands) do
+			bandWrite(band, vi)
 		end
 	end
 	table.clear(active)
 	table.clear(squishOff)
 	table.clear(squishBandIdx)
 	table.clear(ringDirty)
-	Log.Info("CakeRenderer", `bands rebuilt — {#bands} slabs ({#meta.composition} layers) in {math.floor((os.clock() - startedAt) * 1000)} ms`)
+	table.clear(movedVerts)
+	Log.Info("CakeRenderer", `bands rebuilt — {#bands} slabs ({#meta.composition} layers{if singleMode then ", palette mode" else ""}) in {math.floor((os.clock() - startedAt) * 1000)} ms`)
 end
 
 local function editableStep(dt: number, footPos: Vector3?)
 	if #bands == 0 then
 		return
 	end
-	-- 1. Changed cells -> corner vertices get fresh targets; the invisible
-	-- collision columns snap to server truth on the same drained list.
+	-- 1. Changed cells -> corner vertices get fresh targets + texture block
+	-- updates; the invisible collision columns snap to server truth on the
+	-- same drained list.
 	local drained = fieldModule.DrainChanged()
 	if #drained > 0 then
 		updateCollisionColumns(drained)
 	end
 	for _, i in ipairs(drained) do
+		updateCellPixels(i)
 		local cx, cz = GridUtil.Coords(SIZE, i)
 		for dz = -1, 2 do
 			for dx = -1, 2 do
@@ -606,57 +967,101 @@ local function editableStep(dt: number, footPos: Vector3?)
 		projectVertex(vi)
 	end
 
-	-- 3. Underfoot squish (§7.2): visual only, scaled by the surface
-	-- layer's squishMult (frosting pillow vs chocolate rock).
-	local sq = JuiceConfig.squish
-	local footVerts: { [number]: number } = {}
-	if footPos then
-		local fx = (footPos.X - gridCfg.origin.x) / CELL + SIZE / 2
-		local fz = (footPos.Z - gridCfg.origin.z) / CELL + SIZE / 2
-		local r = math.ceil(sq.radius / CELL)
-		for vz = math.floor(fz) - r, math.floor(fz) + r do
-			for vx = math.floor(fx) - r, math.floor(fx) + r do
-				if vx >= 0 and vz >= 0 and vx < VSIZE and vz < VSIZE then
-					local vi = vidx(vx, vz)
-					local dx, dz = (vx - fx) * CELL, (vz - fz) * CELL
-					local distSq = dx * dx + dz * dz
-					if distSq < sq.radius * sq.radius then
-						local def = layerDefAt(displayH[vi])
-						local mult = (def and def.squishMult) or 1
-						if mult > 0 then
-							footVerts[vi] = -sq.depth * mult * (1 - distSq / (sq.radius * sq.radius))
+	-- 2b. Crater-rim shading: neighbors of moved vertices didn't move, so
+	-- their normals still assume the old slope — refresh normals only.
+	if next(movedVerts) ~= nil then
+		for vi in pairs(movedVerts) do
+			local vx = (vi - 1) % VSIZE
+			local vz = (vi - 1) // VSIZE
+			for n = 1, 4 do
+				local nx, nz
+				if n == 1 then
+					nx, nz = vx - 1, vz
+				elseif n == 2 then
+					nx, nz = vx + 1, vz
+				elseif n == 3 then
+					nx, nz = vx, vz - 1
+				else
+					nx, nz = vx, vz + 1
+				end
+				if nx >= 0 and nz >= 0 and nx < VSIZE and nz < VSIZE then
+					local nvi = vidx(nx, nz)
+					if vertHosted[nvi] and not movedVerts[nvi] and not refreshedNeighbors[nvi] then
+						refreshedNeighbors[nvi] = true
+						for _, band in ipairs(bands) do
+							bandNormalOnly(band, nvi)
 						end
 					end
 				end
 			end
 		end
+		table.clear(movedVerts)
+		table.clear(refreshedNeighbors)
 	end
-	-- dt-based exponential so the spring-back honors sq.recover at any fps.
-	local recover = 1 - math.exp(-dt / sq.recover)
+
+	-- 3. Butter-slab FRACTURE buckle (§7.2): the crust caves + breaks under
+	-- the foot (signed per-vertex offsets — sink at the center, ridges along
+	-- the cracks; see fractureOffsetAt). Reverting, visual only; rock layers
+	-- (squishMult 0) don't buckle.
+	local frac = fractureCfg
+	local footVerts: { [number]: number } = {}
+	if footPos then
+		local fx = (footPos.X - gridCfg.origin.x) / CELL + SIZE / 2
+		local fz = (footPos.Z - gridCfg.origin.z) / CELL + SIZE / 2
+		local r = math.ceil(frac.radius / CELL)
+		for vz = math.floor(fz) - r, math.floor(fz) + r do
+			for vx = math.floor(fx) - r, math.floor(fx) + r do
+				if vx >= 0 and vz >= 0 and vx < VSIZE and vz < VSIZE then
+					local vi = vidx(vx, vz)
+					local off = fractureOffsetAt(vi, fx, fz, frac.radius, 1)
+					if off ~= nil then
+						footVerts[vi] = off
+					end
+				end
+			end
+		end
+	end
+	-- Springy butter: quick press-IN, satisfying spring-BACK (fps-independent).
+	local up = 1 - math.exp(-dt * frac.riseRate)
+	local down = 1 - math.exp(-dt * frac.healRate)
 	local function writeSquish(vi: number)
 		local bi = surfaceBandIndexAt(displayH[vi])
 		local prev = squishBandIdx[vi]
-		if prev and prev ~= bi and bands[prev] and bands[prev].poolIdx ~= 0 then
-			bandWrite(bands[prev], vi) -- restore the band the dent left
+		if prev and prev ~= bi and bands[prev] then
+			bandWrite(bands[prev], vi) -- restore the band the offset left
 		end
 		squishBandIdx[vi] = bi
 		local band = bands[bi]
-		if band == nil or band.poolIdx == 0 then
+		if band == nil then
 			return
 		end
 		local pe = pool[band.poolIdx]
+		local vid = pe.vertIds[vi]
+		if vid == nil then
+			return
+		end
+		-- displayH just above band.bottom (within EPS) means the band's own
+		-- sheet is DROPPED here (pe.y = 0) — offsetting it would teleport the
+		-- vertex up to band.bottom and spike a quad tens of studs tall.
+		if pe.y[vi] <= band.bottom + EPS then
+			return
+		end
+		-- Sink-only offset (≤ 0), clamped at the band floor.
 		local y = math.max(pe.y[vi] + (squishOff[vi] or 0), band.bottom + 0.05)
-		pe.em:SetPosition(pe.vertIds[vi], Vector3.new(worldX[vi], y, worldZ[vi]))
+		pe.em:SetPosition(vid, Vector3.new(worldX[vi], y, worldZ[vi]))
 	end
 	for vi, current in pairs(squishOff) do
 		local target = footVerts[vi] or 0
 		footVerts[vi] = nil
-		local new = current + (target - current) * recover
+		-- Approach the buckle at riseRate while under the foot, spring back at
+		-- healRate once it leaves (target 0).
+		local rate = if target ~= 0 then up else down
+		local new = current + (target - current) * rate
 		if math.abs(new) < 0.02 and target == 0 then
 			squishOff[vi] = nil
 			local bi = squishBandIdx[vi]
 			squishBandIdx[vi] = nil
-			if bi and bands[bi] and bands[bi].poolIdx ~= 0 then
+			if bi and bands[bi] then
 				bandWrite(bands[bi], vi) -- clean restore
 			end
 		else
@@ -665,13 +1070,14 @@ local function editableStep(dt: number, footPos: Vector3?)
 		end
 	end
 	for vi, target in pairs(footVerts) do
-		squishOff[vi] = target * 0.5
+		squishOff[vi] = target * up -- newly pressed vertex: start easing in
 		writeSquish(vi)
 	end
 
 	-- 4. Jelly wobble: NEGATIVE-only sine (dips, never pokes above the band
-	-- top into the crust above), rotating vertex slice per frame (§5).
-	if #wobbleBandIndices > 0 then
+	-- top into the crust), rotating vertex slice per frame (§5). Multi-band
+	-- mode only — the single palette slab has no jelly-owned vertices.
+	if not singleMode and #wobbleBandIndices > 0 then
 		local total = VSIZE * VSIZE
 		local sliceLen = total // renderCfg.wobbleSliceDiv
 		for _ = 1, sliceLen do
@@ -681,31 +1087,33 @@ local function editableStep(dt: number, footPos: Vector3?)
 				for _, bi in ipairs(wobbleBandIndices) do
 					local band = bands[bi]
 					local pe = pool[band.poolIdx]
+					local vid = pe.vertIds[vi]
 					local base = pe.y[vi]
-					if base > band.bottom + 0.1 then
+					if vid ~= nil and base > band.bottom + 0.1 then
 						local vx = (vi - 1) % VSIZE
 						local vz = (vi - 1) // VSIZE
 						local offset = (math.sin(clock * renderCfg.wobbleSpeed + (vx + vz) * 0.7) - 1)
 							* renderCfg.wobbleAmp
 						local y = math.max(base + offset, band.bottom + 0.05)
-						pe.em:SetPosition(pe.vertIds[vi], Vector3.new(worldX[vi], y, worldZ[vi]))
+						pe.em:SetPosition(vid, Vector3.new(worldX[vi], y, worldZ[vi]))
 					end
 				end
 			end
 		end
 	end
+
 end
 
--- ── Crust cracks ────────────────────────────────────────────────────────
-local rngCrack = Random.new(os.clock() * 1e4)
+-- ── Butter squish: landing stomp ────────────────────────────────────────
 
 --API
--- Draws a crack into the crust texture under a world position. kind =
--- "land" (radial star) | "step" (small walking crack). Returns true when
--- the position is actually on a crust skin and a crack was drawn.
+-- A hard landing STOMPS a deeper, wider squish dent around a world position
+-- (seeded into squishOff, eased back by the squish loop's spring). Returns true
+-- when the surface there really is crust — the caller gates the crunch
+-- SFX/particles/ceremony (the wax web that cracks is CakeWaxShell).
 function CakeRenderer.CrackAt(pos: Vector3, kind: string): boolean
-	if impl ~= "editable" or #bands == 0 then
-		return false
+	if impl ~= "editable" or #bands == 0 or singleMode then
+		return false -- the crust deform needs the slab meshes (multi-band)
 	end
 	local h = fieldModule.SurfaceHeightAt(pos.X, pos.Z)
 	if h == nil then
@@ -713,42 +1121,25 @@ function CakeRenderer.CrackAt(pos: Vector3, kind: string): boolean
 	end
 	local bi = surfaceBandIndexAt(h)
 	local band = bands[bi]
-	if band == nil or band.kind ~= "crust" or band.poolIdx == 0 then
-		return false
+	if band == nil or band.layerId == "core" or h <= band.top - crustCfg.depth then
+		return false -- surface is layer body, not crust
 	end
-	local pe = pool[band.poolIdx]
-	local img = pe.image
-	if img == nil then
-		return false -- warned once at assign time
-	end
-	local size = crustCfg.imageSize
-	local pxPerStud = size / (SIZE * CELL)
-	local cx = ((pos.X - gridCfg.origin.x) / (SIZE * CELL) + 0.5) * (size - 1)
-	local cz = ((pos.Z - gridCfg.origin.z) / (SIZE * CELL) + 0.5) * (size - 1)
-	local linesRange = if kind == "land" then cracksCfg.landLines else cracksCfg.stepLines
-	local lengthRange = if kind == "land" then cracksCfg.landLength else cracksCfg.stepLength
-	local lines = rngCrack:NextInteger(linesRange[1], linesRange[2])
-	local color = band.crackColor or BLACK
-	for _ = 1, lines do
-		local angle = rngCrack:NextNumber(0, math.pi * 2)
-		local length = rngCrack:NextNumber(lengthRange[1], lengthRange[2]) * pxPerStud
-		local segLen = math.max(2, cracksCfg.segmentStuds * pxPerStud)
-		local x, z = cx, cz
-		local walked = 0
-		while walked < length do
-			local step = math.min(segLen, length - walked)
-			local nx = x + math.cos(angle) * step
-			local nz = z + math.sin(angle) * step
-			img:DrawLine(
-				Vector2.new(math.clamp(x, 0, size - 1), math.clamp(z, 0, size - 1)),
-				Vector2.new(math.clamp(nx, 0, size - 1), math.clamp(nz, 0, size - 1)),
-				color,
-				0,
-				Enum.ImageCombineType.Overwrite
-			)
-			x, z = nx, nz
-			angle += rngCrack:NextNumber(-cracksCfg.jitter, cracksCfg.jitter)
-			walked += step
+	-- Deeper geometry stomp: seed squishOff on the surface vertices around the
+	-- impact (the squish loop eases it back to the standing press / 0).
+	local fx = (pos.X - gridCfg.origin.x) / CELL + SIZE / 2
+	local fz = (pos.Z - gridCfg.origin.z) / CELL + SIZE / 2
+	local sRad = fractureCfg.landRadius
+	local sVerts = math.ceil(sRad / CELL)
+	for vz = math.floor(fz) - sVerts, math.floor(fz) + sVerts do
+		for vx = math.floor(fx) - sVerts, math.floor(fx) + sVerts do
+			if vx >= 0 and vz >= 0 and vx < VSIZE and vz < VSIZE then
+				local vi = vidx(vx, vz)
+				local off = fractureOffsetAt(vi, fx, fz, sRad, fractureCfg.landDepthMult)
+				if off ~= nil then
+					local cur = squishOff[vi] or 0
+					squishOff[vi] = if off < cur then off else cur
+				end
+			end
 		end
 	end
 	return true
@@ -758,8 +1149,8 @@ end
 -- visualColumns=true  -> the "keycap grid" fallback look (grooves, jitter,
 --                        gloss) + collision.
 -- visualColumns=false -> invisible CanCollide/CanQuery colliders under the
---                        band meshes, snapped to server truth.
-local visualColumns = false
+--                        slab meshes, snapped to server truth.
+-- (visualColumns itself is declared above the rebuild that flips it.)
 local columns: { Part } = {}
 local colTargetH: { number } = {}
 local colDisplayH: { number } = {}
@@ -953,34 +1344,49 @@ end
 -- ── Public interface ────────────────────────────────────────────────────
 
 --API
--- Builds the renderer (band mesh pool + invisible collision columns,
--- falling back to visible columns). Called once from CakeSubsClient.Start.
--- ⚠ CreateMeshPartAsync YIELDS (13x here) — the first snapshot can arrive
--- mid-Setup, and OnSnapshot before `impl` is set is a no-op. The tail of
--- Setup re-runs the rebuild when the mirror already holds a cake (this
--- exact race once shipped a permanently WHITE cake).
+-- Builds the renderer (static layout + invisible collision columns; slab
+-- meshes are created lazily on the first snapshot, sized to the actual
+-- composition). Called once from CakeSubsClient.Start.
 function CakeRenderer.Setup(cakeFieldModule)
 	fieldModule = cakeFieldModule
-	if not renderCfg.forceFallback and setupEditable() then
-		impl = "editable"
-		visualColumns = false
-	else
+	if renderCfg.forceFallback then
 		impl = "parts"
 		visualColumns = true
+	else
+		buildStaticLayout()
+		impl = "editable"
+		visualColumns = false
 	end
-	setupParts() -- column grid exists in BOTH modes (collision/fallback)
-	Log.Sum("CakeRenderer", `renderer ready — implementation: {impl}`)
+	setupParts() -- column grid exists in ALL modes (collision/fallback)
+	Log.Sum("CakeRenderer", `renderer ready — implementation: {impl} (slabs lazy per composition)`)
 	if fieldModule.Meta() then
 		CakeRenderer.OnSnapshot()
 	end
 end
 
 --API
--- Full visual refresh (snapshot / new cake).
+-- Full visual refresh (snapshot / new cake). May YIELD on the editable
+-- path (lazy mesh creation) — guarded against overlapping snapshots; a
+-- snapshot arriving mid-rebuild re-runs after the current one finishes.
 function CakeRenderer.OnSnapshot()
 	if impl == "editable" then
-		editableRebuild()
+		if rebuilding then
+			snapshotPending = true
+			return
+		end
+		rebuilding = true
+		-- pcall: an unhandled throw here would leave `rebuilding` stuck true
+		-- and freeze the renderer forever with no ongoing warn (R8).
+		local ok, err = pcall(editableRebuild) -- may flip impl to "parts" on budget exhaustion
 		columnsRebuild()
+		rebuilding = false
+		if not ok then
+			Log.Warn("CakeRenderer", `rebuild FAILED ({err}) — cake visuals stale until the next snapshot`)
+		end
+		if snapshotPending then
+			snapshotPending = false
+			CakeRenderer.OnSnapshot()
+		end
 	elseif impl == "parts" then
 		buildPalette()
 		columnsRebuild()
@@ -993,6 +1399,9 @@ end
 function CakeRenderer.Step(dt: number, footPos: Vector3?)
 	clock += dt
 	if impl == "editable" then
+		if rebuilding then
+			return -- mid-rebuild: mirror keeps accumulating, rebuild snaps all
+		end
 		editableStep(dt, footPos)
 	elseif impl == "parts" then
 		partsStep(dt, footPos)

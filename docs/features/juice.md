@@ -12,10 +12,10 @@ paths, GDD §16.10). Tuning ONLY in `Shared/config/JuiceConfig`.
 | `CameraShake` | trauma-based impulse shake, applied post-Camera render step |
 | `ComboMeter` | x1→x10, +1/2s continuous, reset >1.5s pause. FX-ONLY (never calories) |
 | `FloatingNumbers` | 24 pooled BillboardGuis, size scales with combo |
-| `BodyMorphController` | attribute-driven scale lerp for all characters + local squash&stretch impulse |
 
 ## Event → FX map
-bite (predicted): layer SFX + crumbs (palette color) + shake + squash;
+bite (predicted): layer SFX + crumbs (palette color) + shake + the eat gesture
+(flying layer piece, `EatGestureController` — see `features/cake-sim.md`);
 chocolate adds shard burst + crack. Landing on a fresh cake: crust crack
 ring + big snap (§7.1, once per cake, client-local). Server deltas ≠ own
 prediction → slump loop volume + (renderer) smooth lerp avalanches. Gym
@@ -28,5 +28,5 @@ Sound ids are rbxasset built-ins (guaranteed placeholders) — replace with
 uploaded ASMR samples in `JuiceConfig.sounds` before release; keys stay.
 
 ## Files
-`src/client/modules/` (six modules above), consumed by `CakeSubsClient` /
+`src/client/modules/` (five modules above), consumed by `CakeSubsClient` /
 `BodySubsClient`; config `src/shared/config/JuiceConfig.lua`.

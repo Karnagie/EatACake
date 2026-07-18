@@ -29,7 +29,7 @@ function CakeCycleService.RollComposition(biome: string, playerCount: number)
 	local grid = cakeCfg.grid
 	local footprint = comp.footprint
 
-	-- Middle layers: 3-5 from the pool, no immediate repeats.
+	-- Middle layers: middleCountMin..Max from the pool, no immediate repeats.
 	local middleCount = math.random(comp.middleCountMin, comp.middleCountMax)
 	local middles = {}
 	local lastId = nil
