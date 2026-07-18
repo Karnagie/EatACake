@@ -25,7 +25,11 @@ whitelists to keep in sync.
 3. Reconcile: fill missing keys from defaults (recursively)
 4. Normalize declared `intKeySets`
 5. `sanitize`
-6. `__schema[key] = version`
+6. Stamp `__schema[key] = max(storedVersion, version)` — the stamp is NEVER
+   downgraded (a fresh/missing section from step 1 just stamps `version`). On a
+   mixed-version fleet an old server must not re-stamp its lower version onto
+   data a newer server already migrated, or the migration re-runs and corrupts
+   the section (`PersistenceService.lua`).
 
 Sections removed from the schema are preserved in stored data untouched.
 

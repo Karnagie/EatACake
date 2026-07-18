@@ -17,9 +17,12 @@ Profile section `stomach` `{fill, stored}` (persists across rejoins).
 Runtime: `PlayerRuntimeData.gymSessions/lastAutoBurn/lastMorphFill`.
 
 ## Replication
-- `StomachUpdate` (per bite / on join): `{fill, capacity, stored, gained,
-  glutton, layerId}` → HUD belly bar + floating numbers. The client also
-  reads `fill ≥ capacity` from it to gate eating (CakeSubsClient `isFull`).
+- `StomachUpdate` → HUD belly bar + floating numbers. The full shape
+  `{fill, capacity, stored, gained, glutton, layerId}` is the PER-BITE payload
+  (CakeSubs). The on-join push AND the post-gym-burn resync go through
+  `BodySubs.SendStomach` and carry only `{fill, stored, capacity, gained}` (no
+  `glutton`/`layerId`). The client also reads `fill ≥ capacity` from it to gate
+  eating (CakeSubsClient `isFull`).
 - **Body morph = only the TORSO scales** (bigger + fatter with fill) — arms,
   legs and head keep their NATURAL size. NO proxy mesh, NO added parts. We
   can't use Humanoid BodyScale (it scales the WHOLE body); instead we grow each
@@ -32,8 +35,9 @@ Runtime: `PlayerRuntimeData.gymSessions/lastAutoBurn/lastMorphFill`.
   to reach full / return to natural). The true natural size is captured once
   per torso part (never compound the scaled value); rigs without `OriginalSize`
   skip. ⚠ The huge torso can engulf the third-person camera at close zoom.
-- Server also writes attribute `StomachFill` (0..1, rounded 0.01) — HUD + the
-  tumble driver below.
+- Server also writes attribute `StomachFill` (0..1, rounded 0.01) — read by
+  the client tumble driver below (the HUD belly bar reads the `StomachUpdate`
+  payload above, not this attribute).
 - **Tumble** (`BallRollController`, `BodyConfig.tumble`): past `tumbleFill`
   EVERY client tumbles that character's whole (scaled) body forward as it MOVES,
   and settles it UPRIGHT when stopped, by rotating the ROOT joint's STATIC

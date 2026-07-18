@@ -1,5 +1,5 @@
 --[[ UIKit
-	Candy-style ReactRoblox UI kit: Theme (single source of style) + 23 components + demos.
+	Candy-style ReactRoblox UI kit: Theme (single source of style) + component catalog (the Components table below) + demos.
 	HOW to build UI with it (mandatory reading for agents): .claude/skills/roblox-ui-kit/SKILL.md
 	Integration contract: docs/features/ui-kit.md
 	Requires @jsdotlua react packages in ReplicatedStorage.Packages (vendored as ReactLua-Packages.rbxmx; see feature doc).

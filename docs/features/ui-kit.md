@@ -9,7 +9,7 @@ doc covers integration only; do not duplicate the skill here.
 
 | Piece | Path |
 |---|---|
-| Kit (Theme + 16 components + demos) | `src/shared/UIKit/` → `ReplicatedStorage.Shared.UIKit` |
+| Kit (Theme + component catalog + demos) | `src/shared/UIKit/` → `ReplicatedStorage.Shared.UIKit` (exact list: `UIKit.init` Components table) |
 | React root owner (client) | `src/client/modules/UiRoot.lua` — `Init()` by bootstrap, `Render(element)`, `Unmount()` |
 | React packages | `ReactLua-Packages.rbxmx` — vendored model (React + ReactRoblox + node_modules), rojo-mapped to `ReplicatedStorage.Packages` |
 | Demo selector | `UIKit.Demos.Selector` (`SHOW` constant: Hud / PetsInspect / Pets / Settings) |

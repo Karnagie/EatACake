@@ -34,7 +34,8 @@ inline (locale keys `cake-*`, `belly-*`).
 - useEffect deps must never contain nil (jsdotlua positional compare) —
   booleans/counters only.
 - Combo state is throttled by CakeSubsClient (Set only on VALUE change);
-  announceKey lifetime is CakeSubsClient's task.delay(3), Clear via `false`.
+  announceKey lifetime is `Theme.AnnounceBanner.Duration` (via CakeSubsClient's
+pushAnnounce `task.delay`), Clear via `false`.
 - petReveal uses `false` (not nil) for "dismissed"; `petRevealCount`
   increments per roll so back-to-back reveals re-spin.
 - Layout numbers live in `Theme.AppHud` (+ new sections) — not in code.

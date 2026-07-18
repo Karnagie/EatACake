@@ -7,8 +7,9 @@ final day. Ported from Dices.
 
 ## Tuning (per game)
 `src/server/data/DailyRewardsData.lua` — the single tuning point: `daysCount`
-and `days[day] = reward descriptor`. Template ships gold-only; game-specific
-kinds work as soon as their features register handlers in RewardGrantSubs.
+and `days[day] = reward descriptor`. Ships gems/boost/egg rewards (see
+`DailyRewardsData`); any kind works as soon as its feature registers a handler
+in RewardGrantSubs.
 
 ## Flow
 1. Join: `PlayerLifecycleSubs` pushes `DailyRewardUpdate`

@@ -32,8 +32,12 @@ fill in). Icon-upload gotcha: Open Cloud multipart file part must be named
 Ownership is Roblox-side: fetched on join (`UserOwnsGamePassAsync`, async
 re-push; aborts if the player leaves mid-fetch) and after
 `PromptGamePassPurchaseFinished`; cached runtime in `ShopData.passOwnership`.
-Game code reads perks via `ShopService.OwnsPass(userId, key)`. No grants on
-passes — they are permanent flags, not loot.
+Game code reads perks via `StatsService` (`CaloriesMult`/`GemsMult`/`Capacity`/
+`HasAutoEat`/`HasAutoGym`/`PetSlots`), which reads the `ShopData.passOwnership`
+cache DIRECTLY (StatsService cannot call ShopService — R3); the client reads the
+`AutoEat`/`AutoGym` player attributes set by ShopSubs. `ShopService.OwnsPass` is
+the shop domain's own owned-flag/resync check, NOT the gameplay perk-read path.
+No grants on passes — they are permanent flags, not loot.
 
 ## Payloads
 `ShopUpdate` = `{ products = ARRAY {key,label,priceRobux,section,order,

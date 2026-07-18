@@ -8,9 +8,11 @@ the SAME table renders in the UI (odds disclosure — Roblox policy).
 
 ## State
 Profile section `pets`: `owned {petId = copies}` (copies = level, dup merge
-is automatic), `equipped` (array ≤ slots; 3 base, 5 VIP via
-`StatsService.PetSlots`). Bonuses (calories/eatSpeed/gems %) aggregate over
-equipped pets × `(1 + mergeBonusPerCopy × (copies-1))` inside StatsService.
+is automatic), `equipped` (3 base slots, 5 VIP via `StatsService.PetSlots`).
+The equip cap is enforced at equip time against the CURRENT slot count, but the
+persisted `equipped` array can EXCEED it after a VIP lapse — StatsService pays
+out only the first `slots` entries. Bonuses (calories/eatSpeed/gems %) aggregate
+over equipped pets × `(1 + mergeBonusPerCopy × (copies-1))` inside StatsService.
 
 ## Flow
 - Cycle reward / `egg` grants → `PetRollUpdate {petId, rarity, copies,

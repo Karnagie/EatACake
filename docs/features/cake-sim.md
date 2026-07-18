@@ -20,7 +20,7 @@ impossible by construction.
 |---|---|---|
 | settle automaton | 20 Hz | `CakeFieldService.SettleStep` (≤ 1500 cells/tick) |
 | delta flush | 12 Hz | `CollectDelta` → `CakeDeltaUpdate` — up to 3 packets/flush, each ≤ 150 cells + 40 repair (UnreliableRemoteEvent drops fires over ~900 B!) |
-| collision | 5 Hz | `CakeCollisionService.UpdateHeights` (8×8 invisible parts) |
+| collision | 5 Hz | `CakeCollisionService.UpdateHeights` (16×16 invisible parts, 256) |
 | treasures | 2 Hz | `TreasureService.Tick` |
 | progress scan | 1 Hz | `ScanStats` (progress %, auto-sweep §7.6, bottom check) |
 
@@ -31,9 +31,10 @@ impossible by construction.
   computed SERVER-side — the client can spoof nothing but position. Server
   also drops the bite when the belly is full (`StomachService.IsFull`, before
   carving) — see `features/body-gym.md`.
-- `CakeSnapshotUpdate`: full buffer + meta `{cakeIndex, radiusCells,
+- `CakeSnapshotUpdate`: full buffer + meta `{cakeIndex, footprint,
   composition, rareKind, biome, phase, progress}` on join (via lifecycle
-  push) and on every new cake.
+  push) and on every new cake. (`footprint` = the rounded-rect loaf
+  `{hx, hz, corner}`; the client reads `meta.footprint`, never a radius.)
 - `CakeDeltaUpdate` (Unreliable): `(cakeIndex, buffer[u16 idx, u16 h]*n)`.
   Losses self-heal via the rotating repair cursor (full sweep ≈ 9 s).
 

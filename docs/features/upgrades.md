@@ -15,7 +15,7 @@ Failed spend just resyncs the client (stale balance). Costs are recomputed
 client-side from config — only levels travel.
 
 ## StatsService (R3-legal derived stats)
-Reads ONLY data modules: profile (upgrades/pets/progress/stomach),
+Reads ONLY data modules: profile (upgrades/pets/progress),
 `ShopData.passOwnership`, shared configs. Provides BiteRadius/BiteDepth/
 EatRate/Capacity/GymEfficiency/WalkSpeed/CaloriesMult/GemsMult/PetSlots/
 HasAutoEat/HasAutoGym/GrantBoost. Multiplier order (calories):
