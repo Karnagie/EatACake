@@ -41,6 +41,8 @@ function RebirthSubs.Start(data, services)
 	Net.Remote("DoRebirth").OnServerEvent:Connect(function(player)
 		local userId = player.UserId
 		if not services.PersistenceService.IsLoaded(userId) then
+			-- Joining: profile not ready (R8 — never silent, mirrors CakeSubs).
+			Log.Once(SCOPE, `rebirth-preload-{userId}`, `{player.Name}: DoRebirth before profile load — dropped until loaded`)
 			return
 		end
 		local cost = services.ProgressService.RebirthCost(userId)

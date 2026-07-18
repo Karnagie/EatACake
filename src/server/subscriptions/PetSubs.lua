@@ -67,6 +67,8 @@ function PetSubs.Start(data, services)
 		end
 		local userId = player.UserId
 		if not services.PersistenceService.IsLoaded(userId) then
+			-- Joining: profile not ready (R8 — never silent, mirrors CakeSubs).
+			Log.Once(SCOPE, `equip-preload-{userId}`, `{player.Name}: EquipPet before profile load — dropped until loaded`)
 			return
 		end
 		local ok, reason

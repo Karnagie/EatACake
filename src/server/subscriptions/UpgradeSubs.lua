@@ -44,6 +44,8 @@ function UpgradeSubs.Start(data, services)
 		end
 		local userId = player.UserId
 		if not services.PersistenceService.IsLoaded(userId) then
+			-- Joining: profile not ready (R8 — never silent, mirrors CakeSubs).
+			Log.Once(SCOPE, `buy-preload-{userId}`, `{player.Name}: BuyUpgrade before profile load — dropped until loaded`)
 			return
 		end
 		local cost = services.UpgradeService.NextCost(userId, id)
