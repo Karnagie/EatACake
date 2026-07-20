@@ -45,8 +45,11 @@ was skipped — that is a failure, not reuse.
    positions and lightness curve; the element's outline becomes a DARK version
    of the same hue. Never invent unrelated palettes.
 8. **Do not change existing component APIs** (backwards-compatible optional
-   props only, pattern: `props.style or Theme.X`). No hover/press animations,
-   no sounds unless the task explicitly asks.
+   props only, pattern: `props.style or Theme.X`). Press/hover feedback + pops
+   are BUILT IN via the `Interaction` primitive (`usePressable`/`pressLayer`,
+   timings in `Theme.Feel`; see `references/components.md` "Motion" + ADR-0006) —
+   reuse it, never hand-roll per-component animation. No sounds, and no NEW
+   animation beyond that primitive, unless the task explicitly asks.
 9. **Verify visually in Studio before reporting done** (protocol below). UI
    that was never seen running is not done.
 

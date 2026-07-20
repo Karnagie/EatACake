@@ -1,23 +1,27 @@
 --[[ GymOverlay
-	Gym mash overlay: full-screen transparent layer shown while a mash
-	session is active. Big round green TAP button (Outer/Rim/Face circle
-	stack, whole button is the hit area), a draining timer pill above it,
-	and a tap-counter label. The timer fill drains from 1 to 0 over
-	props.duration seconds starting at props.startedAt (os.clock() base),
-	animated by a ~10 Hz task-loop ticker into a binding.
-	Props: { active: boolean, duration: number?, startedAt: number?,
-		tapText: string, buttonText: string, onTap: () -> (), zIndex: number? }.
-	Style: Theme.GymOverlay (override via props.style). Defaults to the
-	open-panel layer (zIndex 50) so it renders above the HUD.
+	Fat-burn overlay: full-screen transparent layer shown while a burn session
+	is active. Bottom-RIGHT round green TAP button (Outer/Rim/Face circle stack,
+	the whole button is the hit area — sized/placed for the phone thumb), with a
+	"fat left" bar and a percentage label stacked just above it. The bar fill
+	eases toward `props.remain01` (the server-streamed remaining-fat fraction,
+	1 → 0) via a ~30 Hz task-loop into a binding, so the drain reads smoothly
+	between pushes. The rest of the screen stays interactive (the root frame is
+	NOT Active) so the player can walk away — which stops the session.
+	Props: { active: boolean, remain01: number?, fatText: string,
+		buttonText: string, onTap: () -> (), zIndex: number?, style: table? }.
+	Style: Theme.GymOverlay (override via props.style). Defaults to zIndex 40.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local React = require(ReplicatedStorage.Packages.React)
 local Theme = require(script.Parent.Parent.Theme)
+local Interaction = require(script.Parent.Parent.Interaction)
 local OutlinedText = require(script.Parent.OutlinedText)
 
--- Ticker step for the timer drain (~10 updates/sec is enough for a pill fill)
-local TICK_SECONDS = 0.1
+-- Ease step for the fat-bar drain (~30 updates/sec eases smoothly between the
+-- server's ~8 Hz progress pushes).
+local TICK_SECONDS = 0.03
+local EASE = 0.35
 
 local function roundedFrame(name, position, size, corner, zIndex, gradient)
 	return React.createElement("Frame", {
@@ -38,8 +42,20 @@ local function roundedFrame(name, position, size, corner, zIndex, gradient)
 	})
 end
 
-local function tapButton(style, active, buttonText, onTap, zIndex)
-	return React.createElement("TextButton", {
+-- The big round TAP button — a component (not a plain helper) so it can use the
+-- shared press primitive: every tap squishes + springs back (satisfying feedback
+-- on the button you mash to burn fat). Disabled while no session is active.
+local function TapButton(props)
+	local style = props.style
+	local zIndex = props.zIndex
+	local active = props.active
+
+	local scaleRef, handlers = Interaction.usePressable({
+		enabled = active,
+		onActivated = props.onTap,
+	})
+
+	return React.createElement("TextButton", Interaction.merge({
 		Name = "TapButton",
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(style.ButtonPosition.X, style.ButtonPosition.Y),
@@ -51,76 +67,74 @@ local function tapButton(style, active, buttonText, onTap, zIndex)
 		Active = active,
 		Selectable = active,
 		ZIndex = zIndex,
-		[React.Event.Activated] = function()
-			if active and onTap then
-				onTap()
-			end
-		end,
-	}, {
+	}, handlers), {
 		Aspect = React.createElement("UIAspectRatioConstraint", {
 			AspectRatio = style.ButtonAspect,
 		}),
-		Outer = roundedFrame(
-			"Outer",
-			UDim2.fromScale(0, 0),
-			UDim2.fromScale(1, 1),
-			style.ButtonOuterCorner,
-			zIndex,
-			style.ButtonOuterGradient
-		),
-		Rim = roundedFrame(
-			"Rim",
-			UDim2.fromScale(style.RimPosition.X, style.RimPosition.Y),
-			UDim2.fromScale(style.RimSize.X, style.RimSize.Y),
-			style.ButtonOuterCorner,
-			zIndex + 1,
-			style.ButtonRimGradient
-		),
-		Face = roundedFrame(
-			"Face",
-			UDim2.fromScale(style.FacePosition.X, style.FacePosition.Y),
-			UDim2.fromScale(style.FaceSize.X, style.FaceSize.Y),
-			style.ButtonOuterCorner,
-			zIndex + 2,
-			style.ButtonFaceGradient
-		),
-		Label = React.createElement(OutlinedText, {
-			text = buttonText,
-			position = UDim2.fromScale(style.TextPosition.X, style.TextPosition.Y),
-			size = UDim2.fromScale(style.TextSize.X, style.TextSize.Y),
-			textColor = Color3.new(1, 1, 1),
-			textGradient = style.ButtonTextGradient,
-			outlineColor = style.ButtonOutline,
-			textXAlignment = Enum.TextXAlignment.Center,
-			zIndex = zIndex + 3,
+		Content = Interaction.pressLayer(scaleRef, zIndex, {
+			Outer = roundedFrame(
+				"Outer",
+				UDim2.fromScale(0, 0),
+				UDim2.fromScale(1, 1),
+				style.ButtonOuterCorner,
+				zIndex,
+				style.ButtonOuterGradient
+			),
+			Rim = roundedFrame(
+				"Rim",
+				UDim2.fromScale(style.RimPosition.X, style.RimPosition.Y),
+				UDim2.fromScale(style.RimSize.X, style.RimSize.Y),
+				style.ButtonOuterCorner,
+				zIndex + 1,
+				style.ButtonRimGradient
+			),
+			Face = roundedFrame(
+				"Face",
+				UDim2.fromScale(style.FacePosition.X, style.FacePosition.Y),
+				UDim2.fromScale(style.FaceSize.X, style.FaceSize.Y),
+				style.ButtonOuterCorner,
+				zIndex + 2,
+				style.ButtonFaceGradient
+			),
+			Label = React.createElement(OutlinedText, {
+				text = props.buttonText,
+				position = UDim2.fromScale(style.TextPosition.X, style.TextPosition.Y),
+				size = UDim2.fromScale(style.TextSize.X, style.TextSize.Y),
+				textColor = Color3.new(1, 1, 1),
+				textGradient = style.ButtonTextGradient,
+				outlineColor = style.ButtonOutline,
+				textXAlignment = Enum.TextXAlignment.Center,
+				zIndex = zIndex + 3,
+			}),
 		}),
 	})
 end
 
-local function timerBar(style, fillSize, zIndex)
+-- Remaining-fat bar: a groove whose Fill width tracks `fillSize` (binding).
+local function fatBar(style, fillSize, zIndex)
 	return React.createElement("Frame", {
-		Name = "TimerBar",
+		Name = "FatBar",
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(style.TimerPosition.X, style.TimerPosition.Y),
-		Size = UDim2.fromScale(0.5, style.TimerHeight),
+		Position = UDim2.fromScale(style.BarPosition.X, style.BarPosition.Y),
+		Size = UDim2.fromScale(0.5, style.BarHeight),
 		BackgroundColor3 = Color3.new(1, 1, 1),
 		BorderSizePixel = 0,
 		ZIndex = zIndex,
 	}, {
 		Aspect = React.createElement("UIAspectRatioConstraint", {
-			AspectRatio = style.TimerAspect,
+			AspectRatio = style.BarAspect,
 		}),
 		Corner = React.createElement("UICorner", {
 			CornerRadius = UDim.new(1, 0),
 		}),
 		Gradient = React.createElement("UIGradient", {
-			Color = style.TimerOuterGradient,
+			Color = style.BarOuterGradient,
 			Rotation = 90,
 		}),
 		Groove = React.createElement("Frame", {
 			Name = "Groove",
-			Position = UDim2.fromScale(style.TimerGrooveInset.X, style.TimerGrooveInset.Y),
-			Size = UDim2.fromScale(1 - style.TimerGrooveInset.X * 2, 1 - style.TimerGrooveInset.Y * 2),
+			Position = UDim2.fromScale(style.BarGrooveInset.X, style.BarGrooveInset.Y),
+			Size = UDim2.fromScale(1 - style.BarGrooveInset.X * 2, 1 - style.BarGrooveInset.Y * 2),
 			BackgroundColor3 = Color3.new(1, 1, 1),
 			BorderSizePixel = 0,
 			ZIndex = zIndex + 1,
@@ -129,7 +143,7 @@ local function timerBar(style, fillSize, zIndex)
 				CornerRadius = UDim.new(1, 0),
 			}),
 			Gradient = React.createElement("UIGradient", {
-				Color = style.TimerGrooveGradient,
+				Color = style.BarGrooveGradient,
 				Rotation = 90,
 			}),
 			Fill = React.createElement("Frame", {
@@ -145,7 +159,7 @@ local function timerBar(style, fillSize, zIndex)
 					CornerRadius = UDim.new(1, 0),
 				}),
 				Gradient = React.createElement("UIGradient", {
-					Color = style.TimerFillGradient,
+					Color = style.BarFillGradient,
 					Rotation = 90,
 				}),
 			}),
@@ -155,48 +169,48 @@ end
 
 local function GymOverlay(props)
 	local style = props.style or Theme.GymOverlay
-	local zIndex = props.zIndex or 50
+	local zIndex = props.zIndex or 40
 	local active = props.active == true
 
 	local fillFraction, setFillFraction = React.useBinding(1)
 
-	-- Refs so the ticker always reads the LATEST duration/startedAt without
-	-- putting optional (possibly nil) numbers into the dependency array.
-	local durationRef = React.useRef(nil)
-	local startedAtRef = React.useRef(nil)
-	durationRef.current = props.duration
-	startedAtRef.current = props.startedAt
-
-	-- BOOLEAN dep only (jsdotlua: nil in a dep array breaks comparison)
-	local timerRunning = active
-		and type(props.duration) == "number"
-		and type(props.startedAt) == "number"
+	-- Ref so the ease loop always reads the LATEST remain01 without putting an
+	-- optional number in the effect's dependency array.
+	local remainRef = React.useRef(1)
+	remainRef.current = if type(props.remain01) == "number" then math.clamp(props.remain01, 0, 1) else 1
 
 	React.useEffect(function()
-		if not timerRunning then
+		if not active then
 			setFillFraction(1)
 			return
 		end
 		local alive = true
+		local cur = 1
 		task.spawn(function()
 			while alive do
-				local duration = durationRef.current
-				local startedAt = startedAtRef.current
-				local fraction = 1
-				if type(duration) == "number" and duration > 0 and type(startedAt) == "number" then
-					fraction = math.clamp(1 - (os.clock() - startedAt) / duration, 0, 1)
+				local target = remainRef.current or 0
+				-- Ease the DRAIN down; snap on any jump UP (a fresh session resets
+				-- remain01 to 1) so the bar can never stick near-empty between
+				-- sessions, even if two land in one render batch.
+				if target > cur + 0.05 then
+					cur = target
+				else
+					cur += (target - cur) * EASE
+					if math.abs(target - cur) < 0.003 then
+						cur = target
+					end
 				end
-				setFillFraction(fraction)
+				setFillFraction(cur)
 				task.wait(TICK_SECONDS)
 			end
 		end)
 		return function()
 			alive = false
 		end
-	end, { timerRunning })
+	end, { active })
 
 	local fillSize = fillFraction:map(function(fraction)
-		return UDim2.fromScale(fraction, 1)
+		return UDim2.fromScale(math.clamp(fraction, 0, 1), 1)
 	end)
 
 	return React.createElement("Frame", {
@@ -207,8 +221,14 @@ local function GymOverlay(props)
 		Visible = active,
 		ZIndex = zIndex,
 	}, {
-		TapButton = tapButton(style, active, props.buttonText, props.onTap, zIndex + 1),
-		TimerBar = timerBar(style, fillSize, zIndex + 1),
+		TapButton = React.createElement(TapButton, {
+			style = style,
+			active = active,
+			buttonText = props.buttonText,
+			onTap = props.onTap,
+			zIndex = zIndex + 1,
+		}),
+		FatBar = fatBar(style, fillSize, zIndex + 1),
 		Counter = React.createElement("Frame", {
 			Name = "Counter",
 			AnchorPoint = Vector2.new(0.5, 0.5),
@@ -219,7 +239,7 @@ local function GymOverlay(props)
 			ZIndex = zIndex + 1,
 		}, {
 			Value = React.createElement(OutlinedText, {
-				text = props.tapText,
+				text = props.fatText,
 				position = UDim2.fromScale(0, 0),
 				size = UDim2.fromScale(1, 1),
 				textColor = Color3.new(1, 1, 1),

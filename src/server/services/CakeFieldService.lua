@@ -77,6 +77,11 @@ function CakeFieldService.ResetCake(composition, footprint, rareKind: string?, b
 	state.biome = biome
 	state.cakeIndex += 1
 	state.floorUnits = GridUtil.StudsToUnits(composition[1].top) -- core band top
+	-- Layer gate: eating starts on the TOP band (frosting); bites clamp to
+	-- its bottom until it's consumed, then the active floor drops (ScanStats).
+	state.activeBandIndex = #composition
+	state.activeFloorUnits =
+		math.max(state.floorUnits, GridUtil.StudsToUnits(composition[#composition].bottom))
 	state.progress = 0
 
 	-- Reset queues (head/tail FIFOs).
@@ -148,9 +153,13 @@ function CakeFieldService.ApplyBite(px: number, pz: number, radiusStuds: number,
 	local preH = GridUtil.SurfaceHeightAt(field, grid, state.footprint, px, pz) or 0
 	local surfaceLayer = CakeOps.LayerAtStuds(state.composition, cakeCfg.layers, preH)
 
+	-- Layer gate: clamp the bite to the ACTIVE band's floor so a chomp can't
+	-- cut into the layer beneath before the top one is finished. Disabled ->
+	-- the absolute core floor (a single bite can slice through many layers).
+	local clampFloor = if cakeCfg.layerGate.enabled then state.activeFloorUnits else state.floorUnits
 	local removed, changed = CakeOps.ApplyBite(
 		field, grid, state.footprint, state.composition, cakeCfg.layers,
-		px, pz, radiusStuds, depthStuds, state.floorUnits
+		px, pz, radiusStuds, depthStuds, clampFloor
 	)
 
 	-- The chunk rips out NOW (net-dirty immediately); the crater only
@@ -328,6 +337,7 @@ function CakeFieldService.Snapshot(): (buffer, { [string]: any })
 		biome = state.biome,
 		phase = state.phase,
 		progress = state.progress,
+		activeBandIndex = state.activeBandIndex, -- layer gate (features/cake-sim.md)
 	}
 end
 
@@ -405,6 +415,21 @@ function CakeFieldService.ScanStats()
 			Log.Info("CakeField", `auto-sweep: band '{band.id}' tail collapsed ({math.floor(aboveVolume)} studs³ forfeited)`)
 		end
 	end
+
+	-- Layer gate: the active band is the current top band. When it was just
+	-- auto-swept flat to its bottom it's finished, so advance to the band
+	-- below in the SAME scan — otherwise the freshly-leveled floor would read
+	-- as "locked" for a second and spuriously cue the player.
+	local activeIndex = topBandIndex
+	if sweptBand and activeIndex > 1 then
+		activeIndex -= 1
+	end
+	if activeIndex ~= state.activeBandIndex then
+		Log.Info("CakeField", `layer gate: active band -> #{activeIndex} '{state.composition[activeIndex].id}'`)
+	end
+	state.activeBandIndex = activeIndex
+	state.activeFloorUnits =
+		math.max(state.floorUnits, GridUtil.StudsToUnits(state.composition[activeIndex].bottom))
 
 	return { progress = state.progress, topBandIndex = topBandIndex, sweptBand = sweptBand }
 end

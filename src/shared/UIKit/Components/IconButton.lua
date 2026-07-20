@@ -1,6 +1,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local React = require(ReplicatedStorage.Packages.React)
 local Theme = require(script.Parent.Parent.Theme)
+local Interaction = require(script.Parent.Parent.Interaction)
 
 local function roundedFrame(name, position, size, corner, zIndex, gradient)
 	return React.createElement("Frame", {
@@ -151,11 +152,13 @@ local function IconButton(props)
 	local zIndex = props.zIndex or 1
 	local enabled = props.enabled ~= false
 
+	local scaleRef, handlers = Interaction.usePressable({
+		enabled = enabled,
+		onActivated = props.onActivated,
+	})
+
+	-- Visual stack (everything but the Aspect, which stays on the hit target).
 	local children = {
-		Aspect = React.createElement("UIAspectRatioConstraint", {
-			AspectRatio = style.AspectRatio,
-			DominantAxis = Enum.DominantAxis.Width,
-		}),
 		Outer = roundedFrame(
 			"Outer",
 			UDim2.fromScale(0, 0),
@@ -223,7 +226,7 @@ local function IconButton(props)
 		end
 	end
 
-	return React.createElement("TextButton", {
+	return React.createElement("TextButton", Interaction.merge({
 		Name = props.name or "IconButton",
 		AnchorPoint = props.anchorPoint or Vector2.new(0, 0),
 		Position = props.position or UDim2.fromScale(0, 0),
@@ -235,12 +238,13 @@ local function IconButton(props)
 		Active = enabled,
 		Selectable = enabled,
 		ZIndex = zIndex,
-		[React.Event.MouseButton1Click] = function()
-			if enabled and props.onActivated then
-				props.onActivated()
-			end
-		end,
-	}, children)
+	}, handlers), {
+		Aspect = React.createElement("UIAspectRatioConstraint", {
+			AspectRatio = style.AspectRatio,
+			DominantAxis = Enum.DominantAxis.Width,
+		}),
+		Content = Interaction.pressLayer(scaleRef, zIndex, children),
+	})
 end
 
 return IconButton

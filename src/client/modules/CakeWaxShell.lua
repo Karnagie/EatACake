@@ -135,7 +135,11 @@ local function ensureBuilt()
 		return
 	end
 	local m = scratch :: EditableMesh
-	local birthY = gridCfg.origin.y + gridCfg.maxHeight * 0.5
+	-- FixedSize meshes cull from CREATION-time bounds, so this thin shell is born
+	-- at the MIDDLE of the cake-top range it will ride (solo ~52 → 4-player ~89
+	-- world Y) — 0.75·maxHeight ≈ 67 — keeping the worst-case overshoot within the
+	-- proven-safe band. (0.5·maxHeight would sit ~42 studs under a 4-player top.)
+	local birthY = gridCfg.origin.y + gridCfg.maxHeight * 0.75
 	local boundR = ext * 1.1
 
 	-- Loaf outline (the same rounded rect as the slab, inset a touch) as a CCW

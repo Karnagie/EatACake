@@ -13,7 +13,8 @@
 | cake-cycle (boss, rare, biomes) | `features/cake-cycle.md` | CakeCycleService, CakeSubs / BossView, CakeSubsClient |
 | treasures (finds) | `features/treasures.md` | TreasureService, CakeSubs / CakeSubsClient |
 | body-gym (stomach, morph, roll) | `features/body-gym.md` | StomachService, GymService, BodySubs (server morph) / BallRollController, BodySubsClient, UIKit/GymOverlay |
-| upgrades + stats | `features/upgrades.md` | UpgradeService, StatsService, UpgradeSubs / LocalStatsService, UpgradesSubsClient |
+| checkpoint (gym + upgrade station platform) | `features/checkpoint.md` | MapService (build/height/teleport + UpgradeStation computer), CakeSubs (ReturnToCheckpoint) / BodySubsClient (F key + button) |
+| upgrades (hex tier tree) | `features/upgrades.md` | UpgradeService, StatsService, UpgradeSubs / LocalStatsService, LocalUpgradeTree, UpgradesSubsClient (station prompt open), UIKit HexNode/HexTreeOverlay, HexUtil |
 | pets | `features/pets.md` | PetService, PetSubs / PetsSubsClient, PetFollowers, LocalPetsService |
 | rebirth + biomes | `features/rebirth.md` | ProgressService, RebirthSubs / RebirthSubsClient |
 | quests | `features/quests.md` | QuestService, QuestsSubs / QuestsSubsClient |

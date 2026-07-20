@@ -11,7 +11,7 @@
 | `core` | `ProfileSchema/CoreSection.lua` | `features/settings.md` (settings map) |
 | `economy` | `ProfileSchema/EconomySection.lua` (v2: calories+gems) | `features/economy.md` |
 | `stomach` | `ProfileSchema/StomachSection.lua` | `features/body-gym.md` |
-| `upgrades` | `ProfileSchema/UpgradesSection.lua` | `features/upgrades.md` |
+| `upgrades` | `ProfileSchema/UpgradesSection.lua` (v2: level→tier rescale) | `features/upgrades.md` |
 | `pets` | `ProfileSchema/PetsSection.lua` | `features/pets.md` |
 | `progress` | `ProfileSchema/ProgressSection.lua` | `features/rebirth.md` |
 | `quests` | `ProfileSchema/QuestsSection.lua` | `features/quests.md` |
@@ -51,8 +51,15 @@ Products: `starterpack`, `lucky-egg`, `mega-egg`, `instant-burn`,
 
 ## Shared config modules (ADR-0004)
 
-`CakeConfig`, `UpgradeConfig`, `BodyConfig`, `PetConfig`, `TreasureConfig`,
-`JuiceConfig` — `src/shared/config/`.
+`CakeConfig`, `UpgradeConfig`, `UpgradeTreeConfig` (honeycomb layout),
+`BodyConfig`, `PetConfig`, `TreasureConfig`, `JuiceConfig` — `src/shared/config/`.
+Shared util: `HexUtil` (axial hex math, sibling to `GridUtil`).
+
+## ProximityPrompt names (unique — clients filter PromptTriggered by name)
+
+`GymPrompt` (gym start, server `BodySubs`), `UpgradeStation` (open the upgrades
+hex-tree, client `UpgradesSubsClient`) — both defined in
+`MapConfigData.checkpoint` (`promptName` / `upgradePromptName`).
 
 ## Locale keys
 

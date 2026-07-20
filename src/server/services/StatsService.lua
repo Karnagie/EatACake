@@ -30,13 +30,16 @@ local function profile(userId: number)
 	return profileData.profiles[userId]
 end
 
+-- Value of the derived stat at the OWNED tier count (levels[id]); tier 0 =
+-- def.base, else def.tiers[tier].value (clamped to the last tier).
 local function upgradeValue(levels, id: string): number
 	local def = upgradeCfg.upgrades[id]
-	local level = levels and levels[id] or 0
-	if def.add then
-		return def.base + def.add * level
+	local tier = (levels and levels[id]) or 0
+	if tier <= 0 then
+		return def.base
 	end
-	return def.base * (1 + (def.pct or 0) * level)
+	local tiers = def.tiers
+	return tiers[math.min(tier, #tiers)].value
 end
 
 local function ownsPass(userId: number, passKey: string): boolean
@@ -119,6 +122,29 @@ end
 function StatsService.GymEfficiency(userId: number): number
 	local p = profile(userId)
 	return p and upgradeValue(p.upgrades.levels, "gymEff") or upgradeCfg.upgrades.gymEff.base
+end
+
+--API
+-- Fat-burn PASSIVE drain rate: fraction of the belly burned per second while
+-- standing at the gym machine (the "default burning speed" upgrade).
+function StatsService.BurnSpeed(userId: number): number
+	local p = profile(userId)
+	return p and upgradeValue(p.upgrades.levels, "burnSpeed") or upgradeCfg.upgrades.burnSpeed.base
+end
+
+--API
+-- Fat burned per on-screen TAP, as a fraction of the belly (base 0.10).
+function StatsService.BurnPerTap(userId: number): number
+	local p = profile(userId)
+	return p and upgradeValue(p.upgrades.levels, "burnPerTap") or upgradeCfg.upgrades.burnPerTap.base
+end
+
+--API
+-- Fraction of the belly removed the INSTANT the gym prompt is pressed (0 = none;
+-- the final tier is 1.0 = the whole belly at once).
+function StatsService.InstantBurn(userId: number): number
+	local p = profile(userId)
+	return p and upgradeValue(p.upgrades.levels, "instantBurn") or upgradeCfg.upgrades.instantBurn.base
 end
 
 --API

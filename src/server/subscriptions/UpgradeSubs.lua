@@ -40,6 +40,8 @@ function UpgradeSubs.Start(data, services)
 
 	Net.Remote("BuyUpgrade").OnServerEvent:Connect(function(player, id)
 		if type(id) ~= "string" then
+			-- Malformed payload (R8 — never silent, mirrors CakeSubs EatAt).
+			Log.Once(SCOPE, `bad-buy-payload-{player.UserId}`, `{player.Name}: BuyUpgrade with non-string id — dropped`)
 			return
 		end
 		local userId = player.UserId

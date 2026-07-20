@@ -9,6 +9,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local React = require(ReplicatedStorage.Packages.React)
 local Theme = require(script.Parent.Parent.Theme)
+local Interaction = require(script.Parent.Parent.Interaction)
 local OutlinedText = require(script.Parent.OutlinedText)
 
 local function BellyBar(props)
@@ -16,6 +17,9 @@ local function BellyBar(props)
 	local zIndex = props.zIndex or 1
 	local fill01 = math.clamp(props.fill01 or 0, 0, 1)
 	local glutton = props.glutton == true
+	-- Fill width glides to fill01 (see useFillGlide) so the belly meter fills
+	-- smoothly as you eat instead of jumping each bite tick.
+	local fillRef = Interaction.useFillGlide(fill01)
 
 	local fillGradient = glutton and style.FullFillGradient or style.FillGradient
 	local textGradient = glutton and style.GluttonTextGradient or style.TextGradient
@@ -54,7 +58,8 @@ local function BellyBar(props)
 				Name = "Fill",
 				AnchorPoint = Vector2.new(0, 0.5),
 				Position = UDim2.fromScale(0, 0.5),
-				Size = UDim2.fromScale(fill01, 1),
+				Size = Interaction.ZeroFill, -- glided to fill01 via fillRef
+				ref = fillRef,
 				BackgroundColor3 = Color3.new(1, 1, 1),
 				BorderSizePixel = 0,
 				ZIndex = zIndex + 2,

@@ -4,12 +4,13 @@
 	over HUD zIndex 1, hidden panels stay MOUNTED with visible = false).
 
 	Eat the Cake composition:
-	  HUD: calories + gems StatPills, menu column (9 buttons + badges),
+	  HUD: calories + gems StatPills, menu column (8 icon+label buttons, no bg),
 	       CakeBar (top center), BellyBar (bottom center), ComboBadge,
 	       AnnounceBanner
-	  Panels (zIndex 50): Pets (inspect), Upgrades, Rebirth, Quests, Shop,
+	  Panels (zIndex 50): Pets (inspect), Rebirth, Quests, Shop,
 	       DailyRewards, TimeRewards, Codes, Settings
-	  Overlays: GymOverlay (40), PetRevealOverlay (90)
+	  Overlays: GymOverlay (40), Upgrades hex-tree (60, opened from the
+	       checkpoint computer — no HUD button), PetRevealOverlay (90)
 
 	Data flows IN through AppRoot.Set(patch) (called by subscriptions when
 	remoteUpdates arrive); user actions flow OUT through callbacks registered
@@ -36,7 +37,7 @@ local LocalRewardsService = require(script.Parent.LocalRewardsService)
 local LocalSettingsService = require(script.Parent.LocalSettingsService)
 local LocalShopService = require(script.Parent.LocalShopService)
 local LocalPetsService = require(script.Parent.LocalPetsService)
-local LocalStatsService = require(script.Parent.LocalStatsService)
+local LocalUpgradeTree = require(script.Parent.LocalUpgradeTree)
 
 local Theme = UIKit.Theme
 local Components = UIKit.Components
@@ -68,6 +69,9 @@ local current = {
 	quests = nil,
 	combo = nil,
 	announceKey = false,
+	-- Whether the player is far enough from the checkpoint platform to show the
+	-- TO CHECKPOINT button (BodySubsClient proximity check). Shown by default.
+	checkpointFar = true,
 }
 local callbacks = {}
 local applyState = nil -- setState captured while mounted
@@ -113,6 +117,14 @@ function AppRoot.Open(panel: string?)
 	end
 end
 
+--API
+-- The currently open panel/overlay name (nil = none). Lets subscriptions defer
+-- to a modal that owns shared world state (e.g. the upgrade tree disables the
+-- checkpoint ProximityPrompts while open — see BodySubsClient gym-prompt gate).
+function AppRoot.GetOpenPanel(): string?
+	return current.openPanel
+end
+
 -- ── helpers ─────────────────────────────────────────────────────────────
 
 local function formatNumber(amount: number): string
@@ -133,35 +145,6 @@ local function calculateScale(panelAspect: number, maxFraction: number): Vector2
 end
 
 local RARITY_RANK = { Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5, Secret = 6 }
-
--- View-model: upgrade panel rows from replicated levels + config formulas.
-local function buildUpgradeRows(levels, calories: number)
-	local rows = {}
-	for _, id in ipairs(UpgradeConfig.order) do
-		local def = UpgradeConfig.upgrades[id]
-		local level = (levels and levels[id]) or 0
-		local cost = LocalStatsService.NextCost(id)
-		local state, buttonText
-		if cost == nil then
-			state = "max"
-			buttonText = locale.T("btn-max")
-		elseif calories < cost then
-			state = "poor"
-			buttonText = locale.T("price-calories", { n = formatNumber(cost) })
-		else
-			state = "buy"
-			buttonText = locale.T("price-calories", { n = formatNumber(cost) })
-		end
-		table.insert(rows, {
-			id = id,
-			label = locale.T(def.nameKey),
-			subText = locale.T("label-level-n", { n = level, cap = def.cap }),
-			buttonText = buttonText,
-			state = state,
-		})
-	end
-	return rows
-end
 
 -- View-model: quest panel rows from the QuestsUpdate payload.
 local function buildQuestRows(quests)
@@ -239,8 +222,9 @@ local function App()
 	local codeInput, setCodeInput = React.useState("")
 	local selectedPetId, setSelectedPetId = React.useState(nil :: string?)
 	local sortByRarity, setSortByRarity = React.useState(true)
-	local gymTaps, setGymTaps = React.useState(0)
 	local _tick, setTick = React.useState(0)
+	-- Upgrades hex-tree navigation stack (top = the tree currently shown).
+	local treeStack, setTreeStack = React.useState({ "root" })
 
 	-- Bridge: subscriptions push state through AppRoot.Set.
 	React.useEffect(function()
@@ -305,17 +289,12 @@ local function App()
 		end
 	end, { timePanelOpen })
 
-	-- Gym tap counter resets when a session starts. Keyed on SESSION
-	-- IDENTITY (startedAt), not the active boolean: with a concurrent root,
-	-- "result" + next "started" can batch into one render where the boolean
-	-- never flips — the new session would inherit the old tap count.
+	-- Fat-burn overlay: active while a session is open; `remain01` is the
+	-- server-streamed remaining-fat fraction (1 = untouched, 0 = empty).
 	local gymActive = state.gym ~= nil and state.gym.active == true
-	local gymSessionKey = (state.gym ~= nil and state.gym.startedAt) or 0
-	React.useEffect(function()
-		if gymActive then
-			setGymTaps(0)
-		end
-	end, { gymSessionKey })
+	local gymRemain01 = if state.gym ~= nil and type(state.gym.remain01) == "number"
+		then math.clamp(state.gym.remain01, 0, 1)
+		else 1
 
 	local function togglePanel(name: string)
 		AppRoot.Open(if state.openPanel == name then nil else name)
@@ -354,9 +333,25 @@ local function App()
 		return props
 	end, { state.pets or false, selectedPetId or false, sortByRarity })
 
-	local upgradeRows = React.useMemo(function()
-		return buildUpgradeRows(state.upgrades, state.calories)
-	end, { state.upgrades or false, state.calories })
+	-- Upgrades hex-tree: reset to the root honeycomb each time it opens; build
+	-- the current tree's node/edge model from the replicated levels + calories.
+	local upgradesOpen = state.openPanel == "Upgrades"
+	React.useEffect(function()
+		-- Reset to root when CLOSED, so the next open starts at root with NO
+		-- one-frame flash of the previous sub-tree (the reset lands while hidden).
+		if not upgradesOpen then
+			setTreeStack({ "root" })
+		end
+	end, { upgradesOpen })
+	local currentTree = treeStack[#treeStack] or "root"
+	local upgradeTree = React.useMemo(function()
+		-- Only build while open — the overlay is hidden otherwise, and this keeps
+		-- calorie ticks (auto-gym etc.) from rebuilding the model when closed.
+		if not upgradesOpen then
+			return { nodes = {}, nodeWidth = 0.1, nodeHeight = 0.1 }
+		end
+		return LocalUpgradeTree.BuildTree(currentTree, state.upgrades, state.calories)
+	end, { upgradesOpen, currentTree, state.upgrades or false, state.calories })
 	local questRows = React.useMemo(function()
 		return buildQuestRows(state.quests)
 	end, { state.quests or false })
@@ -374,6 +369,10 @@ local function App()
 	end
 
 	local cakeFill, cakeText, cakeMode = cakeBarModel(state.cake)
+	-- Hide the top-center bar during normal eating (no more "CAKE 45%"); keep it
+	-- for boss fights (HP/timer) and the new-cake countdown / reward flash.
+	local cakePhase = if state.cake ~= nil then (state.cake.phase or "eating") else "eating"
+	local cakeVisible = cakePhase ~= "eating"
 	local stomach = state.stomach
 	local capacity = stomach and math.max(1, stomach.capacity or 1) or 1
 	local bellyFill = stomach and math.clamp((stomach.fill or 0) / capacity, 0, 1) or 0
@@ -391,9 +390,10 @@ local function App()
 	local reveal = if type(state.petReveal) == "table" then LocalPetsService.BuildReveal(state.petReveal) else nil
 
 	-- ── menu ─────────────────────────────────────────────────────────────
+	-- NOTE: no "Upgrades" button — the hex-tree opens from the checkpoint
+	-- computer's ProximityPrompt (UpgradesSubsClient), not the HUD menu.
 	local menu = {
 		{ name = "Pets", label = locale.T("menu-pets"), badge = false },
-		{ name = "Upgrades", label = locale.T("menu-upgrades"), badge = false },
 		{ name = "Rebirth", label = locale.T("menu-rebirth"), badge = canRebirth },
 		{ name = "Quests", label = locale.T("menu-quests"), badge = questsBadge },
 		{ name = "Shop", label = locale.T("menu-shop"), badge = false },
@@ -404,44 +404,38 @@ local function App()
 	}
 	local hud = Theme.AppHud
 	local menuCount = #menu
-	local menuTotalHeight = hud.MenuButtonHeight * menuCount + hud.MenuGap * (menuCount - 1)
+	-- Icon GRID: buttons flow left-to-right, wrapping after MenuColumns, so the
+	-- 8 buttons form a compact block (2x4) instead of a column running to the
+	-- bottom of the screen. Cell size/padding are fractions of this frame.
+	local menuColumns = math.max(hud.MenuColumns or 1, 1)
+	local menuRows = math.ceil(menuCount / menuColumns)
+	local menuTotalHeight = hud.MenuButtonHeight * menuRows + hud.MenuGap * (menuRows - 1)
+	local menuTotalWidth = hud.MenuButtonWidth * menuColumns + hud.MenuGapX * (menuColumns - 1)
 	local menuChildren = {
-		Layout = React.createElement("UIListLayout", {
-			FillDirection = Enum.FillDirection.Vertical,
+		Layout = React.createElement("UIGridLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			FillDirectionMaxCells = menuColumns,
 			HorizontalAlignment = Enum.HorizontalAlignment.Left,
+			VerticalAlignment = Enum.VerticalAlignment.Top,
 			SortOrder = Enum.SortOrder.LayoutOrder,
-			Padding = UDim.new(hud.MenuGap / menuTotalHeight, 0),
+			CellSize = UDim2.fromScale(hud.MenuButtonWidth / menuTotalWidth, hud.MenuButtonHeight / menuTotalHeight),
+			CellPadding = UDim2.fromScale(hud.MenuGapX / menuTotalWidth, hud.MenuGap / menuTotalHeight),
 		}),
 	}
 	for index, item in ipairs(menu) do
-		menuChildren[item.name] = React.createElement("Frame", {
-			Name = item.name,
-			Size = UDim2.fromScale(1, hud.MenuButtonHeight / menuTotalHeight),
-			BackgroundTransparency = 1,
-			BorderSizePixel = 0,
-			LayoutOrder = index,
-			ZIndex = 1,
-		}, {
-			Aspect = React.createElement("UIAspectRatioConstraint", {
-				AspectRatio = Theme.MenuButton.AspectRatio,
-			}),
-			Button = React.createElement(Components.Button, {
-				name = "Open",
-				style = Theme.MenuButton,
-				text = item.label,
-				textXAlignment = Enum.TextXAlignment.Center,
-				zIndex = 1,
-				onActivated = function()
-					togglePanel(item.name)
-				end,
-			}),
-			Badge = React.createElement(Components.Badge, {
-				visible = item.badge,
-				anchorPoint = hud.BadgeAnchor,
-				position = UDim2.fromScale(hud.BadgePosition.X, hud.BadgePosition.Y),
-				size = UDim2.fromScale(hud.BadgeSize.X, hud.BadgeSize.Y),
-				zIndex = 3,
-			}),
+		-- Bare icon + label-below, no background (HudMenuButton). The button fills
+		-- its grid cell (biggest tap area); UIGridLayout controls cell size, so no
+		-- explicit size here.
+		menuChildren[item.name] = React.createElement(Components.HudMenuButton, {
+			name = item.name,
+			icon = hud.MenuIcons[item.name] or hud.MenuIconPlaceholder,
+			label = item.label,
+			badge = item.badge,
+			layoutOrder = index,
+			zIndex = 1,
+			onActivated = function()
+				togglePanel(item.name)
+			end,
 		})
 	end
 
@@ -489,13 +483,14 @@ local function App()
 		Menu = React.createElement("Frame", {
 			Name = "Menu",
 			Position = UDim2.fromScale(hud.MenuPosition.X, hud.MenuPosition.Y),
-			Size = UDim2.fromScale(hud.MenuWidth, menuTotalHeight),
+			Size = UDim2.fromScale(menuTotalWidth, menuTotalHeight),
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
 			ZIndex = 1,
 		}, menuChildren),
 		CakeBar = React.createElement(Components.CakeBar, {
 			name = "CakeBar",
+			visible = cakeVisible,
 			anchorPoint = Vector2.new(0.5, 0),
 			position = UDim2.fromScale(hud.CakeBarPosition.X, hud.CakeBarPosition.Y),
 			size = UDim2.fromScale(0.5, hud.CakeBarHeight),
@@ -514,6 +509,36 @@ local function App()
 			text = bellyText,
 			glutton = glutton,
 			zIndex = 1,
+		}),
+		-- Return to the checkpoint platform (gym) to burn fat — also the F key
+		-- (BodySubsClient). Sits just above the belly bar.
+		CheckpointBtn = React.createElement("Frame", {
+			Name = "CheckpointBtn",
+			-- Only shown when the player is away from the checkpoint platform
+			-- (proximity fed by BodySubsClient); hidden once you are on/at it.
+			Visible = state.checkpointFar ~= false,
+			AnchorPoint = Vector2.new(0.5, 1),
+			Position = UDim2.fromScale(hud.CheckpointPosition.X, hud.CheckpointPosition.Y),
+			Size = UDim2.fromScale(0.3, hud.CheckpointHeight),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			ZIndex = 1,
+		}, {
+			Aspect = React.createElement("UIAspectRatioConstraint", {
+				AspectRatio = Theme.CheckpointButton.AspectRatio,
+			}),
+			Button = React.createElement(Components.Button, {
+				name = "Return",
+				style = Theme.CheckpointButton,
+				text = locale.T("hud-burn-fat"),
+				textXAlignment = Enum.TextXAlignment.Center,
+				zIndex = 1,
+				onActivated = function()
+					if callbacks.onReturnCheckpoint then
+						callbacks.onReturnCheckpoint()
+					end
+				end,
+			}),
 		}),
 		Combo = React.createElement(Components.ComboBadge, {
 			name = "Combo",
@@ -585,20 +610,43 @@ local function App()
 				AppRoot.Open(nil)
 			end,
 		}),
-		Upgrades = React.createElement(Components.UpgradesPanel, {
-			name = "UpgradesPanel",
-			title = locale.T("title-upgrades"),
+		Upgrades = React.createElement(Components.HexTreeOverlay, {
+			name = "UpgradesOverlay",
 			visible = state.openPanel == "Upgrades",
-			size = UDim2.fromScale(portraitScale.X, portraitScale.Y),
-			zIndex = 50,
-			rows = upgradeRows,
-			onBuy = function(id)
-				if callbacks.onBuyUpgrade then
-					callbacks.onBuyUpgrade(id)
+			zIndex = 60,
+			treeKey = currentTree,
+			nodes = upgradeTree.nodes,
+			nodeWidth = upgradeTree.nodeWidth,
+			nodeHeight = upgradeTree.nodeHeight,
+			caloriesText = formatNumber(state.calories),
+			onNodeActivated = function(action)
+				if action.type == "open" then
+					setTreeStack(function(stack)
+						local copy = table.clone(stack)
+						table.insert(copy, action.id)
+						return copy
+					end)
+				elseif action.type == "back" then
+					setTreeStack(function(stack)
+						if #stack <= 1 then
+							return stack
+						end
+						local copy = table.clone(stack)
+						table.remove(copy)
+						return copy
+					end)
+				elseif action.type == "buy" and callbacks.onBuyUpgrade then
+					callbacks.onBuyUpgrade(action.id)
 				end
 			end,
 			onClose = function()
-				AppRoot.Open(nil)
+				-- Route through the subscription (blur off + unbind E); it calls
+				-- AppRoot.Open(nil). Fallback direct-close if not wired yet.
+				if callbacks.onCloseUpgrades then
+					callbacks.onCloseUpgrades()
+				else
+					AppRoot.Open(nil)
+				end
 			end,
 		}),
 		Rebirth = React.createElement(Components.RebirthPanel, {
@@ -748,15 +796,11 @@ local function App()
 		Gym = React.createElement(Components.GymOverlay, {
 			name = "GymOverlay",
 			active = gymActive,
-			duration = state.gym and state.gym.duration or nil,
-			startedAt = state.gym and state.gym.startedAt or nil,
-			tapText = locale.T("gym-taps-n", { n = gymTaps }),
+			remain01 = gymRemain01,
+			fatText = locale.T("gym-fat-left", { n = math.ceil(gymRemain01 * 100) }),
 			buttonText = locale.T("gym-tap"),
 			zIndex = 40,
 			onTap = function()
-				setGymTaps(function(n)
-					return n + 1
-				end)
 				if callbacks.onGymTap then
 					callbacks.onGymTap()
 				end

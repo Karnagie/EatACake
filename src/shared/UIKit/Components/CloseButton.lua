@@ -2,6 +2,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local React = require(ReplicatedStorage.Packages.React)
 
 local Theme = require(script.Parent.Parent.Theme)
+local Interaction = require(script.Parent.Parent.Interaction)
 local STYLE = Theme.Exit
 
 local function roundedFrame(name, position, size, corner, zIndex, gradient, color)
@@ -56,7 +57,12 @@ local function CloseButton(props)
 	local zIndex = props.zIndex or 1
 	local enabled = props.enabled ~= false
 
-	return React.createElement("TextButton", {
+	local scaleRef, handlers = Interaction.usePressable({
+		enabled = enabled,
+		onActivated = props.onActivated,
+	})
+
+	return React.createElement("TextButton", Interaction.merge({
 		Name = props.name or "CloseButton",
 		AnchorPoint = props.anchorPoint or Vector2.new(0, 0),
 		Position = props.position or UDim2.fromScale(0, 0),
@@ -68,52 +74,49 @@ local function CloseButton(props)
 		Active = enabled,
 		Selectable = enabled,
 		ZIndex = zIndex,
-		[React.Event.MouseButton1Click] = function()
-			if enabled and props.onActivated then
-				props.onActivated()
-			end
-		end,
-	}, {
+	}, handlers), {
 		Aspect = React.createElement("UIAspectRatioConstraint", {
 			AspectRatio = STYLE.AspectRatio,
 			DominantAxis = Enum.DominantAxis.Height,
 		}),
-		Outer = roundedFrame(
-			"Outer",
-			UDim2.fromScale(0, 0),
-			UDim2.fromScale(1, 1),
-			STYLE.OuterCorner,
-			zIndex,
-			STYLE.OuterGradient
-		),
-		Rim = roundedFrame(
-			"Rim",
-			UDim2.fromScale(STYLE.RimPosition.X, STYLE.RimPosition.Y),
-			UDim2.fromScale(STYLE.RimSize.X, STYLE.RimSize.Y),
-			STYLE.RimCorner,
-			zIndex + 1,
-			STYLE.RimGradient
-		),
-		InnerRim = roundedFrame(
-			"InnerRim",
-			UDim2.fromScale(STYLE.InnerRimPosition.X, STYLE.InnerRimPosition.Y),
-			UDim2.fromScale(STYLE.InnerRimSize.X, STYLE.InnerRimSize.Y),
-			STYLE.InnerRimCorner,
-			zIndex + 2,
-			STYLE.InnerRimGradient
-		),
-		Face = roundedFrame(
-			"Face",
-			UDim2.fromScale(STYLE.FacePosition.X, STYLE.FacePosition.Y),
-			UDim2.fromScale(STYLE.FaceSize.X, STYLE.FaceSize.Y),
-			STYLE.FaceCorner,
-			zIndex + 3,
-			STYLE.FaceGradient
-		),
-		XOutlineA = arm("XOutlineA", 45, UDim2.fromScale(STYLE.XOutlineSize.X, STYLE.XOutlineSize.Y), STYLE.XOutline, zIndex + 4),
-		XOutlineB = arm("XOutlineB", -45, UDim2.fromScale(STYLE.XOutlineSize.X, STYLE.XOutlineSize.Y), STYLE.XOutline, zIndex + 4),
-		XFillA = arm("XFillA", 45, UDim2.fromScale(STYLE.XFillSize.X, STYLE.XFillSize.Y), Color3.new(1, 1, 1), zIndex + 5, STYLE.XGradient, 45),
-		XFillB = arm("XFillB", -45, UDim2.fromScale(STYLE.XFillSize.X, STYLE.XFillSize.Y), Color3.new(1, 1, 1), zIndex + 5, STYLE.XGradient, 135),
+		Content = Interaction.pressLayer(scaleRef, zIndex, {
+			Outer = roundedFrame(
+				"Outer",
+				UDim2.fromScale(0, 0),
+				UDim2.fromScale(1, 1),
+				STYLE.OuterCorner,
+				zIndex,
+				STYLE.OuterGradient
+			),
+			Rim = roundedFrame(
+				"Rim",
+				UDim2.fromScale(STYLE.RimPosition.X, STYLE.RimPosition.Y),
+				UDim2.fromScale(STYLE.RimSize.X, STYLE.RimSize.Y),
+				STYLE.RimCorner,
+				zIndex + 1,
+				STYLE.RimGradient
+			),
+			InnerRim = roundedFrame(
+				"InnerRim",
+				UDim2.fromScale(STYLE.InnerRimPosition.X, STYLE.InnerRimPosition.Y),
+				UDim2.fromScale(STYLE.InnerRimSize.X, STYLE.InnerRimSize.Y),
+				STYLE.InnerRimCorner,
+				zIndex + 2,
+				STYLE.InnerRimGradient
+			),
+			Face = roundedFrame(
+				"Face",
+				UDim2.fromScale(STYLE.FacePosition.X, STYLE.FacePosition.Y),
+				UDim2.fromScale(STYLE.FaceSize.X, STYLE.FaceSize.Y),
+				STYLE.FaceCorner,
+				zIndex + 3,
+				STYLE.FaceGradient
+			),
+			XOutlineA = arm("XOutlineA", 45, UDim2.fromScale(STYLE.XOutlineSize.X, STYLE.XOutlineSize.Y), STYLE.XOutline, zIndex + 4),
+			XOutlineB = arm("XOutlineB", -45, UDim2.fromScale(STYLE.XOutlineSize.X, STYLE.XOutlineSize.Y), STYLE.XOutline, zIndex + 4),
+			XFillA = arm("XFillA", 45, UDim2.fromScale(STYLE.XFillSize.X, STYLE.XFillSize.Y), Color3.new(1, 1, 1), zIndex + 5, STYLE.XGradient, 45),
+			XFillB = arm("XFillB", -45, UDim2.fromScale(STYLE.XFillSize.X, STYLE.XFillSize.Y), Color3.new(1, 1, 1), zIndex + 5, STYLE.XGradient, 135),
+		}),
 	})
 end
 

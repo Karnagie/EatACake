@@ -44,8 +44,13 @@ function CakeCycleService.RollComposition(biome: string, playerCount: number)
 
 	-- Thicknesses: roll raw, then scale middles so the total hits the
 	-- rolled target height (clamped to the grid ceiling).
+	-- Easy-mode co-op scaling: a TALLER (== longer-to-eat) shared loaf for a
+	-- crowd, but SUBLINEAR so more mouths still clear it faster — solo ~40 min,
+	-- 4 players ~18 min (not ~10). The footprint is fixed, so height is the only
+	-- population lever (CakeConfig.composition.perPlayerScale, features/cake-cycle.md).
+	local playerScale = 1 + (comp.perPlayerScale or 0) * math.max(0, math.max(1, playerCount) - 1)
 	local totalTarget = math.min(
-		math.random(comp.totalHeight[1], comp.totalHeight[2]),
+		math.floor(math.random(comp.totalHeight[1], comp.totalHeight[2]) * playerScale),
 		grid.maxHeight
 	)
 	local frosting = math.random(comp.frostingThickness[1], comp.frostingThickness[2])

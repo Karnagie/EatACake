@@ -1,14 +1,22 @@
 --[[
 	MapService — builds the candy room (floor, walls with candy props, cake
-	platform, gym zone, spawn, candle landmarks) from MapConfigData at boot;
-	recolors per biome.
+	platform, CHECKPOINT platform, spawn, candle landmarks) from MapConfigData
+	at boot; recolors per biome.
 
 	The map is CODE-BUILT (no Studio-authored scene in this project yet) —
 	one-time construction (Build is called from CakeSubs.Start, before the
 	first cake), not a runtime hot path. Studded surfaces use the native
-	Studs SurfaceType (the reference "chocolate LEGO wall" look). Gym
-	machines carry a ProximityPrompt named MapConfigData.gym.promptName;
-	BodySubs connects the trigger (R4 — no event wiring here).
+	Studs SurfaceType (the reference "chocolate LEGO wall" look).
+
+	CHECKPOINT (fat extraction, features/checkpoint.md): a platform on 4 legs
+	beside the loaf whose TOP tracks the current top-layer height. It carries the
+	gym machine + a ProximityPrompt named MapConfigData.checkpoint.promptName
+	(BodySubs connects the trigger, R4) AND an upgrade-station "computer" whose
+	ProximityPrompt (checkpoint.upgradePromptName) opens the upgrades hex-tree
+	client-side (UpgradesSubsClient). CakeSubs drives its height via
+	SetCheckpointHeight and teleports players onto it (GetCheckpointCFrame) on the
+	ReturnToCheckpoint remote. This service owns the parts (part refs are cached
+	locals, the code-built-map pattern) but never subscribes to events.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -19,6 +27,7 @@ local MapService = {}
 
 local mapCfg -- MapConfigData
 local gridCfg -- CakeConfigData.cake.grid
+local footprintCfg -- CakeConfigData.cake.composition.footprint (FIXED loaf)
 
 local mapFolder: Folder?
 local floorPart: BasePart?
@@ -28,11 +37,22 @@ local wallParts: { BasePart } = {}
 local accentWallParts: { BasePart } = {}
 local beamParts: { BasePart } = {}
 local ceilingPart: BasePart?
-local machinePositions: { Vector3 } = {}
+
+-- Checkpoint platform (built once, moved by SetCheckpointHeight).
+local checkpointFolder: Folder?
+local checkpointPlate: BasePart?
+local checkpointLegs: { BasePart } = {}
+local checkpointMachine: BasePart?
+local checkpointStationBody: BasePart? -- upgrade "computer" body (rides the plate)
+local checkpointStationScreen: BasePart? -- its glowing screen
+local checkpointCenter: Vector3? -- XZ center of the plate (Y unused)
+local checkpointTopY: number? -- current world Y of the plate's top surface
+local cakeSpawnPart: BasePart? -- CakeSpawn pad; Y rides the cake top (SetCheckpointHeight)
 
 function MapService.Init(data)
 	mapCfg = data.MapConfigData
 	gridCfg = data.CakeConfigData.cake.grid
+	footprintCfg = data.CakeConfigData.cake.composition.footprint
 end
 
 local function makePart(props: { [string]: any }): Part
@@ -427,54 +447,119 @@ function MapService.Build()
 		light.Parent = flame
 	end
 
-	-- Gym zone (§8).
-	local gym = mapCfg.gym
-	local pad = makePart({
-		Name = "GymPad",
-		Size = Vector3.new(gym.padSize, 1, gym.padSize),
-		CFrame = CFrame.new(origin.x + gym.center.x, 0.5, origin.z + gym.center.z),
-		Color = Color3.fromRGB(240, 130, 190),
+	-- Checkpoint platform (§8 gym): a platform on 4 legs beside the loaf whose
+	-- TOP tracks the current top-layer height (SetCheckpointHeight, driven by
+	-- CakeSubs). The gym machine + prompt ride it; players teleport onto it
+	-- (GetCheckpointCFrame). Built once here, then positioned per cake.
+	local cp = mapCfg.checkpoint
+	local loafEdgeX = footprintCfg.hx * gridCfg.cell -- +X straight edge of the loaf
+	local plateCenterX = origin.x + loafEdgeX + cp.edgeGap + cp.plateDepth / 2
+	local plateCenterZ = origin.z
+	checkpointCenter = Vector3.new(plateCenterX, 0, plateCenterZ)
+
+	local cpFolder = Instance.new("Folder")
+	cpFolder.Name = "Checkpoint"
+	checkpointFolder = cpFolder
+
+	checkpointPlate = makePart({
+		Name = "CheckpointPlate",
+		Size = Vector3.new(cp.plateDepth, cp.plateThickness, cp.plateWidth),
+		CFrame = CFrame.new(plateCenterX, 0, plateCenterZ),
+		Color = cp.plateColor,
 		Material = Enum.Material.SmoothPlastic,
-		Parent = folder,
+		Reflectance = 0.04,
+		Parent = cpFolder,
 	})
-	pad.TopSurface = Enum.SurfaceType.Studs
-	table.clear(machinePositions)
-	for k = 1, gym.machineCount do
-		local angle = (k - 1) / gym.machineCount * math.pi * 2
-		local mx = origin.x + gym.center.x + math.cos(angle) * gym.padSize * 0.32
-		local mz = origin.z + gym.center.z + math.sin(angle) * gym.padSize * 0.32
-		local machine = makePart({
-			Name = `GymMachine_{k}`,
-			Size = Vector3.new(4, 6, 4),
-			CFrame = CFrame.new(mx, 4, mz),
-			Color = Color3.fromRGB(220, 60, 80),
+	checkpointPlate.TopSurface = Enum.SurfaceType.Studs
+
+	-- 4 legs at the plate corners (positioned/resized by SetCheckpointHeight).
+	table.clear(checkpointLegs)
+	for _ = 1, 4 do
+		table.insert(checkpointLegs, makePart({
+			Name = "CheckpointLeg",
+			Size = Vector3.new(cp.legSize, cp.minLegHeight, cp.legSize),
+			CFrame = CFrame.new(plateCenterX, 0, plateCenterZ),
+			Color = cp.legColor,
 			Material = Enum.Material.SmoothPlastic,
-			Parent = folder,
-		})
-		studAllSurfaces(machine)
-		local prompt = Instance.new("ProximityPrompt")
-		prompt.Name = gym.promptName
-		prompt.ActionText = "Burn it off!"
-		prompt.ObjectText = "Gym"
-		prompt.HoldDuration = 0
-		prompt.MaxActivationDistance = 10
-		prompt.RequiresLineOfSight = false
-		prompt.Parent = machine
-		table.insert(machinePositions, machine.Position)
+			Parent = cpFolder,
+		}))
 	end
 
+	-- Gym machine near the OUTER edge (leaves the cake-side clear to walk back).
+	checkpointMachine = makePart({
+		Name = "GymMachine",
+		Size = cp.machineSize,
+		CFrame = CFrame.new(plateCenterX, 0, plateCenterZ),
+		Color = cp.machineColor,
+		Material = Enum.Material.SmoothPlastic,
+		Parent = cpFolder,
+	})
+	studAllSurfaces(checkpointMachine)
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = cp.promptName
+	prompt.ActionText = "Burn it off!"
+	prompt.ObjectText = "Gym"
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = cp.promptRange
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = checkpointMachine
+
+	-- Upgrade station "computer": a terminal on the cake-side corner of the plate
+	-- whose ProximityPrompt opens the upgrades hex-tree (client handles the open —
+	-- features/upgrades.md). Positioned/ridden by SetCheckpointHeight.
+	checkpointStationBody = makePart({
+		Name = "UpgradeStationBody",
+		Size = cp.stationSize,
+		CFrame = CFrame.new(plateCenterX, 0, plateCenterZ),
+		Color = cp.stationBodyColor,
+		Material = Enum.Material.SmoothPlastic,
+		Parent = cpFolder,
+	})
+	studAllSurfaces(checkpointStationBody)
+	checkpointStationScreen = makePart({
+		Name = "UpgradeStationScreen",
+		Size = cp.stationScreenSize,
+		CFrame = CFrame.new(plateCenterX, 0, plateCenterZ),
+		Color = cp.stationScreenColor,
+		Material = Enum.Material.Neon,
+		Parent = cpFolder,
+	})
+	local screenLight = Instance.new("PointLight")
+	screenLight.Color = cp.stationScreenColor
+	screenLight.Range = 12
+	screenLight.Brightness = 1.2
+	screenLight.Parent = checkpointStationScreen
+	local upgradePrompt = Instance.new("ProximityPrompt")
+	upgradePrompt.Name = cp.upgradePromptName
+	upgradePrompt.ActionText = "Upgrades"
+	upgradePrompt.ObjectText = "Upgrade Station"
+	upgradePrompt.HoldDuration = 0
+	upgradePrompt.MaxActivationDistance = cp.upgradePromptRange
+	upgradePrompt.RequiresLineOfSight = false
+	upgradePrompt.Parent = checkpointStationBody
+
+	cpFolder.Parent = folder
+
+	-- Initial placement (spawnNewCake corrects it to the real top layer per cake).
+	MapService.SetCheckpointHeight(origin.y + gridCfg.maxHeight * 0.6)
+
 	-- Spawn: directly on the cake (§12.1) — invisible, non-colliding pad
-	-- above the frosting; players drop onto the crust.
+	-- above the frosting; players drop onto the crust. Its Y RIDES the current
+	-- cake top via SetCheckpointHeight (below) so the drop stays a small
+	-- crust-crack, NOT a fall from `maxHeight` (which is now sized for the tall
+	-- 4-player loaf — a fixed maxHeight pad would drop solo players ~40 studs).
+	-- Initial Y matches the initial checkpoint height; the first cake corrects it.
 	local spawn = Instance.new("SpawnLocation")
 	spawn.Name = "CakeSpawn"
 	spawn.Size = Vector3.new(14, 1, 14)
-	spawn.CFrame = CFrame.new(origin.x, origin.y + gridCfg.maxHeight + mapCfg.spawnHeightAboveCake, origin.z)
+	spawn.CFrame = CFrame.new(origin.x, origin.y + gridCfg.maxHeight * 0.6 + mapCfg.spawnHeightAboveCake, origin.z)
 	spawn.Transparency = 1
 	spawn.CanCollide = false
 	spawn.Anchored = true
 	spawn.Neutral = true
 	spawn.Duration = 0
 	spawn.Parent = folder
+	cakeSpawnPart = spawn
 
 	folder.Parent = workspace
 
@@ -489,7 +574,7 @@ function MapService.Build()
 
 	Log.Sum(
 		"Map",
-		`candy room built — floor, plate, 4 walls (+props x{mapCfg.room.propsPerWall * 4}), {#mapCfg.candles} candles, gym x{gym.machineCount}, cake spawn`
+		`candy room built — floor, plate, 4 walls (+props x{mapCfg.room.propsPerWall * 4}), {#mapCfg.candles} candles, checkpoint platform (gym + upgrade station), cake spawn`
 	)
 end
 
@@ -528,15 +613,112 @@ function MapService.ApplyBiome(biomeId: string)
 end
 
 --API
--- Whether a character position is close enough to any gym machine
--- (server-side range check for GymStart).
-function MapService.NearGym(position: Vector3): boolean
-	for _, machinePos in ipairs(machinePositions) do
-		if (position - machinePos).Magnitude <= mapCfg.gym.maxUseDistanceStuds then
-			return true
+-- Positions the checkpoint so its plate TOP sits at world Y `topY`: the legs
+-- resize down to the floor (y = 0) and the gym machine rides the plate top.
+-- Called by CakeSubs on each new cake and whenever the top layer steps down.
+function MapService.SetCheckpointHeight(topY: number)
+	if checkpointPlate == nil or checkpointCenter == nil then
+		Log.Warn("Map", "SetCheckpointHeight before the checkpoint was built — ignored")
+		return
+	end
+	local cp = mapCfg.checkpoint
+	-- Never let the plate sit so low the legs vanish (near-bare cake / core).
+	topY = math.max(topY, cp.minLegHeight + cp.plateThickness)
+	-- Skip redundant moves (the 1 Hz scan re-asserts the same height between
+	-- layer changes — no point re-replicating 5 anchored parts every second).
+	if checkpointTopY ~= nil and math.abs(checkpointTopY - topY) < 0.01 then
+		return
+	end
+	checkpointTopY = topY
+	local cx, cz = checkpointCenter.X, checkpointCenter.Z
+	local plateBottomY = topY - cp.plateThickness
+	checkpointPlate.CFrame = CFrame.new(cx, topY - cp.plateThickness / 2, cz)
+
+	-- The cake spawn pad rides the SAME cake top (topY = the current top-layer
+	-- surface, updated per cake + per layer step) so a (re)spawn is a small drop
+	-- onto the crust, not a fall from the tall-cake ceiling (maxHeight, now sized
+	-- for the 4-player loaf).
+	if cakeSpawnPart then
+		cakeSpawnPart.CFrame =
+			CFrame.new(cakeSpawnPart.Position.X, topY + mapCfg.spawnHeightAboveCake, cakeSpawnPart.Position.Z)
+	end
+
+	-- Legs stand on the floor (y = 0) up to the plate bottom.
+	local legHalfDepth = cp.plateDepth / 2 - cp.legInset - cp.legSize / 2
+	local legHalfWidth = cp.plateWidth / 2 - cp.legInset - cp.legSize / 2
+	local legHeight = math.max(cp.minLegHeight, plateBottomY)
+	local corners = {
+		Vector3.new(-legHalfDepth, 0, -legHalfWidth),
+		Vector3.new(-legHalfDepth, 0, legHalfWidth),
+		Vector3.new(legHalfDepth, 0, -legHalfWidth),
+		Vector3.new(legHalfDepth, 0, legHalfWidth),
+	}
+	for k, leg in ipairs(checkpointLegs) do
+		local corner = corners[k]
+		if corner then
+			leg.Size = Vector3.new(cp.legSize, legHeight, cp.legSize)
+			leg.CFrame = CFrame.new(cx + corner.X, legHeight / 2, cz + corner.Z)
 		end
 	end
-	return false
+
+	if checkpointMachine then
+		local machineX = cx + cp.plateDepth / 2 - cp.machineSize.X / 2 - 1
+		checkpointMachine.CFrame = CFrame.new(machineX, topY + cp.machineSize.Y / 2, cz)
+	end
+
+	if checkpointStationBody then
+		-- Cake-side (−X) edge, +Z corner: keeps the centre landing and the −X
+		-- walk-back path to the loaf clear. The screen sits on top facing the plate
+		-- centre (where a returning player arrives).
+		local sx = cx - cp.plateDepth / 2 + cp.stationSize.X / 2 + 1
+		local sz = cz + cp.plateWidth / 2 - cp.stationSize.Z / 2 - 1.5
+		checkpointStationBody.CFrame = CFrame.new(sx, topY + cp.stationSize.Y / 2, sz)
+		if checkpointStationScreen then
+			local screenPos = Vector3.new(sx, topY + cp.stationSize.Y - cp.stationScreenSize.Y / 2 + 0.4, sz)
+			checkpointStationScreen.CFrame = CFrame.lookAt(screenPos, Vector3.new(cx, screenPos.Y, cz))
+		end
+	end
+end
+
+--API
+-- Teleport target: standing on the plate, facing the cake (walk forward, -X, to
+-- step back onto the loaf). nil until the checkpoint is built + positioned.
+function MapService.GetCheckpointCFrame(): CFrame?
+	if checkpointCenter == nil or checkpointTopY == nil then
+		return nil
+	end
+	-- Land at the plate center (within the gym prompt's range so it's active on
+	-- arrival) facing the cake (walk forward, -X, to step back onto the loaf).
+	local pos = Vector3.new(
+		checkpointCenter.X,
+		checkpointTopY + mapCfg.checkpoint.standHeight,
+		checkpointCenter.Z
+	)
+	return CFrame.lookAt(pos, pos - Vector3.xAxis)
+end
+
+--API
+-- True if a world position sits over the checkpoint plate's XZ footprint —
+-- CakeSubs uses it to re-seat a player standing on the platform when it jumps
+-- UP to a fresh cake (the anchored plate leaves them behind otherwise).
+function MapService.IsOverCheckpoint(position: Vector3): boolean
+	if checkpointCenter == nil then
+		return false
+	end
+	local cp = mapCfg.checkpoint
+	local dx = math.abs(position.X - checkpointCenter.X)
+	local dz = math.abs(position.Z - checkpointCenter.Z)
+	return dx <= cp.plateDepth / 2 and dz <= cp.plateWidth / 2
+end
+
+--API
+-- Whether a character position is close enough to the checkpoint's gym machine
+-- (server-side range check for GymStart). The machine moves with the platform.
+function MapService.NearGym(position: Vector3): boolean
+	if checkpointMachine == nil then
+		return false
+	end
+	return (position - checkpointMachine.Position).Magnitude <= mapCfg.checkpoint.maxUseDistanceStuds
 end
 
 return MapService

@@ -17,11 +17,12 @@ local levels: { [string]: number } = {}
 
 local function upgradeValue(id: string): number
 	local def = UpgradeConfig.upgrades[id]
-	local level = levels[id] or 0
-	if def.add then
-		return def.base + def.add * level
+	local tier = levels[id] or 0
+	if tier <= 0 then
+		return def.base
 	end
-	return def.base * (1 + (def.pct or 0) * level)
+	local tiers = def.tiers
+	return tiers[math.min(tier, #tiers)].value
 end
 
 --API
@@ -54,17 +55,20 @@ function LocalStatsService.EatRate(): number
 end
 
 --API
--- Next-level cost for the upgrades panel (same formula as the server).
+-- Next-tier cost for the upgrades tree (same table as the server); nil = maxed.
 function LocalStatsService.NextCost(id: string): number?
 	local def = UpgradeConfig.upgrades[id]
 	if not def then
 		return nil
 	end
-	local level = levels[id] or 0
-	if level >= def.cap then
-		return nil
-	end
-	return math.floor(def.baseCost * def.growth ^ level)
+	local nextTier = def.tiers[(levels[id] or 0) + 1]
+	return nextTier and nextTier.cost or nil
+end
+
+--API
+-- Owned tier count for an upgrade id (0 = none).
+function LocalStatsService.Level(id: string): number
+	return levels[id] or 0
 end
 
 return LocalStatsService

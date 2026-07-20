@@ -77,6 +77,7 @@ function CakeSubs.Start(data, services)
 			boss = state.boss and { hp = state.boss.hp, maxHp = state.boss.maxHp } or nil,
 			rareKind = state.rareKind,
 			biome = state.biome,
+			activeBandIndex = state.activeBandIndex, -- layer gate (features/cake-sim.md)
 			announce = announce,
 		})
 	end
@@ -103,6 +104,8 @@ function CakeSubs.Start(data, services)
 		services.CakeFieldService.ResetCake(composition, footprint, rareKind, biome)
 		services.TreasureService.SpawnForCake()
 		services.MapService.ApplyBiome(biome)
+		-- Checkpoint rides the fresh cake's TOP layer (the last band).
+		services.MapService.SetCheckpointHeight(cakeCfg.grid.origin.y + composition[#composition].top)
 		services.CakeCycleService.BeginEating()
 		-- The new cake materializes AROUND anyone standing in its footprint —
 		-- lift them onto the fresh frosting instead of burying them alive.
@@ -118,6 +121,13 @@ function CakeSubs.Start(data, services)
 				local dz = math.abs(root.Position.Z - grid.origin.z)
 				if dx <= extentX and dz <= extentZ and root.Position.Y < topY then
 					root.CFrame = CFrame.new(root.Position.X, topY, root.Position.Z)
+				elseif services.MapService.IsOverCheckpoint(root.Position) then
+					-- Standing on the checkpoint: the plate just jumped UP to the
+					-- fresh cake — ride it up instead of being left on the floor.
+					local cf = services.MapService.GetCheckpointCFrame()
+					if cf then
+						root.CFrame = cf
+					end
 				end
 			end
 		end
@@ -223,7 +233,11 @@ function CakeSubs.Start(data, services)
 			pos.X, pos.Z, biteRadius, services.StatsService.BiteDepth(userId)
 		)
 		if removed <= 0 then
-			return -- core / already-bare cells: nothing to eat
+			-- Core / already-bare cells, or the layer gate stopped the bite at
+			-- the active floor (the layer beneath stays locked until the top
+			-- one is gone) — nothing to eat. The client shows the "eat the top
+			-- layer first" cue; here it's a normal no-op, no log spam.
+			return
 		end
 
 		local biomeMult = (biomes[state.biome] and biomes[state.biome].caloriesMult) or 1
@@ -243,7 +257,41 @@ function CakeSubs.Start(data, services)
 		end
 	end)
 
-	-- ── Tick fabric ─────────────────────────────────────────────────────
+	-- ReturnToCheckpoint: teleport onto the checkpoint platform (features/
+	-- checkpoint.md) — F key / HUD button. The checkpoint's height is server
+	-- truth, so the teleport is server-authoritative (no client-supplied
+	-- destination). Debounced so a mashed key/button can't rag-doll the player.
+	local returnCooldown: { [number]: number } = {}
+	Net.Remote("ReturnToCheckpoint").OnServerEvent:Connect(function(player)
+		local userId = player.UserId
+		if not services.PersistenceService.IsLoaded(userId) then
+			Log.Once(SCOPE, `return-preload-{userId}`, `{player.Name}: ReturnToCheckpoint before profile load — ignored`)
+			return
+		end
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if not root then
+			Log.Once(SCOPE, `return-nochar-{userId}`, `{player.Name}: ReturnToCheckpoint with no character — ignored`)
+			return
+		end
+		local now = os.clock()
+		local last = returnCooldown[userId]
+		if last and now - last < 0.5 then
+			return -- debounce (legit double-tap, not a failure — no log)
+		end
+		local cf = services.MapService.GetCheckpointCFrame()
+		if cf == nil then
+			Log.Once(SCOPE, "return-nocp", "ReturnToCheckpoint before the checkpoint was positioned — ignored")
+			return
+		end
+		returnCooldown[userId] = now
+		root.CFrame = cf
+	end)
+	Players.PlayerRemoving:Connect(function(player)
+		returnCooldown[player.UserId] = nil
+	end)
+
+	-- Tick fabric (one Heartbeat connection, accumulator per job)
 	local settleAcc, netAcc, collisionAcc, treasureAcc, scanAcc, cycleAcc = 0, 0, 0, 0, 0, 0
 	RunService.Heartbeat:Connect(function(dt)
 		-- Cycle timers run every frame (cheap), transitions are rare.
@@ -316,7 +364,22 @@ function CakeSubs.Start(data, services)
 		if scanAcc >= 1 / cakeCfg.sim.statsScanHz then
 			scanAcc = 0
 			if state.phase == "eating" then
-				services.CakeFieldService.ScanStats()
+				local prevActiveBand = state.activeBandIndex
+				local stats = services.CakeFieldService.ScanStats()
+				-- Step the checkpoint down to the current TOP layer's height.
+				local topBand = stats and state.composition[stats.topBandIndex]
+				if topBand then
+					services.MapService.SetCheckpointHeight(cakeCfg.grid.origin.y + topBand.top)
+				end
+				-- Layer gate: the moment the active band advances, push it on the
+				-- reliable cycle channel NOW — don't wait for the periodic cycle tick
+				-- (phase-drifted from this scan after the boss's 4 Hz cycle). The
+				-- freshly-swept surface reaches the client on the fast delta channel;
+				-- if the new floor lagged behind it the client would briefly re-lock
+				-- and flash "eat the top layer first" right after clearing the layer.
+				if state.activeBandIndex ~= prevActiveBand then
+					broadcastCycle(nil)
+				end
 				if services.CakeFieldService.IsBottomReached() then
 					services.CakeCycleService.BeginBoss(math.max(1, #Players:GetPlayers()))
 					broadcastCycle("boss-spawned")

@@ -1,17 +1,29 @@
 --[[
 	BodySubsClient — stomach/gym/body domain on the client (R4, GDD §8):
 	  * StomachUpdate -> HUD state + floating calorie numbers (§7.3)
-	  * GymUpdate -> gym minigame state + deflate celebration (coins, whoosh)
+	  * GymUpdate -> fat-burn overlay state (started/progress/result/stopped) +
+	    deflate celebration (coins, whoosh)
 	  * drives BallRollController (full-belly tumble) + PetFollowers per frame
-	  * gym taps: AppRoot's onGymTap callback -> GymTap remote
+	  * gym taps: AppRoot's onGymTap callback -> GymTap remote (+ per-tap sound)
+	  * return to checkpoint: F key (ContextActionService) + AppRoot's
+	    onReturnCheckpoint callback -> ReturnToCheckpoint remote (server teleports
+	    onto the checkpoint platform — features/checkpoint.md)
 ]]
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Net = require(Shared:WaitForChild("Net"))
+local Log = require(Shared:WaitForChild("Log"))
+local Theme = require(Shared:WaitForChild("UIKit"):WaitForChild("Theme"))
 local JuiceConfig = require(Shared:WaitForChild("config"):WaitForChild("JuiceConfig"))
+local BodyConfig = require(Shared:WaitForChild("config"):WaitForChild("BodyConfig"))
+
+local SCOPE = "Body"
 
 local BodySubsClient = {}
 
@@ -26,6 +38,13 @@ function BodySubsClient.Start(data, modules)
 
 	local player = Players.LocalPlayer
 	local rGymTap = Net.Remote("GymTap")
+	local rReturn = Net.Remote("ReturnToCheckpoint")
+
+	-- Return to the checkpoint platform to burn fat. Fired by the HUD button
+	-- (onReturnCheckpoint) and the F key; the server owns the destination.
+	local function returnToCheckpoint()
+		rReturn:FireServer()
+	end
 
 	local function headPosition(): Vector3?
 		local character = player.Character
@@ -33,11 +52,51 @@ function BodySubsClient.Start(data, modules)
 		return root and root.Position + Vector3.new(0, 3.5, 0) or nil
 	end
 
+	-- Hide the gym "Burn it off!" prompt for THIS player while the belly is empty
+	-- (mirrors the server's `fill < minStartFill` no-op guard, features/body-gym.md):
+	-- setting Enabled locally on the shared world prompt affects only this client.
+	-- Re-checked from StomachUpdate AND the ~5 Hz loop so a late-replicating prompt
+	-- (or a rebuilt one, which defaults Enabled=true) converges either way.
+	local gymMinStartFill = BodyConfig.gym.minStartFill
+	local lastFill = 0
+	-- GymMachine carries exactly one ProximityPrompt (the gym prompt) — resolve by
+	-- class so the client doesn't depend on the server-only prompt name.
+	local function resolveGymPrompt(): ProximityPrompt?
+		local map = Workspace:FindFirstChild("Map")
+		local checkpoint = map and map:FindFirstChild("Checkpoint")
+		local machine = checkpoint and checkpoint:FindFirstChild("GymMachine")
+		return machine and machine:FindFirstChildWhichIsA("ProximityPrompt") :: ProximityPrompt?
+	end
+	local function updateGymPrompt()
+		-- The upgrade-tree modal OWNS every checkpoint prompt while open (it disables
+		-- them so the E-to-close press can't also start a gym session behind the
+		-- overlay — UpgradesSubsClient). Don't fight it: skip while it's open; it
+		-- restores prompts on close and this gate re-applies on the next tick.
+		if AppRoot.GetOpenPanel() == "Upgrades" then
+			return
+		end
+		local prompt = resolveGymPrompt()
+		if prompt == nil then
+			-- R8: warn once (deferred, non-blocking) only if it truly never resolves.
+			-- A missing checkpoint/plate is already GraceOnce'd in the proximity check.
+			Log.GraceOnce(SCOPE, "no-gym-prompt", 10, function()
+				return resolveGymPrompt() == nil
+			end, "workspace.Map.Checkpoint.GymMachine ProximityPrompt missing — gym prompt can't empty-hide (stays shown)")
+			return
+		end
+		local shouldEnable = lastFill >= gymMinStartFill
+		if prompt.Enabled ~= shouldEnable then
+			prompt.Enabled = shouldEnable
+		end
+	end
+
 	Net.Update("StomachUpdate").OnClientEvent:Connect(function(payload)
 		if type(payload) ~= "table" then
 			return
 		end
 		AppRoot.Set({ stomach = payload })
+		lastFill = tonumber(payload.fill) or lastFill
+		updateGymPrompt()
 		local gained = tonumber(payload.gained) or 0
 		if gained >= 1 then
 			local pos = headPosition()
@@ -50,37 +109,114 @@ function BodySubsClient.Start(data, modules)
 		end
 	end)
 
+	-- Fat-burn session events (features/body-gym.md): "started" opens the tap
+	-- overlay, "progress" streams the remaining-fat fraction (~stepHz) into it,
+	-- and "result"/"stopped"/"auto"/"instant" close it. Only the burns that
+	-- actually banked calories ("stopped" is a walk-away, no payout) play the FX.
 	Net.Update("GymUpdate").OnClientEvent:Connect(function(payload)
 		if type(payload) ~= "table" then
 			return
 		end
-		if payload.event == "started" then
-			AppRoot.Set({ gym = { active = true, duration = payload.duration, startedAt = os.clock() } })
+		local event = payload.event
+		if event == "started" then
+			AppRoot.Set({ gym = { active = true, remain01 = 1 } })
 			SoundPool.Play("uiClick")
-		elseif payload.event == "result" or payload.event == "auto" or payload.event == "instant" then
-			AppRoot.Set({ gym = { active = false, banked = payload.banked, bonus = payload.bonus } })
-			if (tonumber(payload.banked) or 0) > 0 then
+		elseif event == "progress" then
+			AppRoot.Set({ gym = { active = true, remain01 = tonumber(payload.remain01) or 0 } })
+		elseif event == "result" or event == "stopped" or event == "auto" or event == "instant" then
+			AppRoot.Set({ gym = { active = false } })
+			local banked = tonumber(payload.banked) or 0
+			if banked > 0 and event ~= "stopped" then
 				SoundPool.Play("gymWhoosh")
 				SoundPool.Play("coinBurst")
 				local pos = headPosition()
 				if pos then
 					ParticlePool.Burst(pos, Color3.fromRGB(255, 220, 90), JuiceConfig.particles.coinsPerGymBurn)
-					FloatingNumbers.Show(pos, `+{payload.banked} cal`, 1, Color3.fromRGB(150, 255, 150))
+					FloatingNumbers.Show(pos, `+{banked} cal`, 1, Color3.fromRGB(150, 255, 150))
 				end
 			end
 		end
 	end)
 
-	-- Gym mash taps flow from the kit UI through AppRoot's callback.
+	-- Gym mash taps + the return-to-checkpoint button flow from the kit UI
+	-- through AppRoot's callbacks.
 	AppRoot.SetCallbacks({
 		onGymTap = function()
 			rGymTap:FireServer()
+			SoundPool.Play("uiClick") -- tactile per-tap feedback while burning
 		end,
+		onReturnCheckpoint = returnToCheckpoint,
 	})
+
+	-- F key shortcut (desktop). ContextActionService actions can fire while a
+	-- kit TextBox (e.g. the codes input) is focused — skip those so typing "f"
+	-- never teleports the player.
+	ContextActionService:BindAction("ReturnToCheckpoint", function(_, inputState)
+		if inputState ~= Enum.UserInputState.Begin then
+			return Enum.ContextActionResult.Pass
+		end
+		if UserInputService:GetFocusedTextBox() ~= nil then
+			return Enum.ContextActionResult.Pass
+		end
+		returnToCheckpoint()
+		return Enum.ContextActionResult.Sink
+	end, false, Enum.KeyCode.F)
+
+	-- TO CHECKPOINT button visibility: hide it once the player is on/at the
+	-- checkpoint platform (no point teleporting where you already are). The plate
+	-- replicates under workspace.Map.Checkpoint; "near" = inside its XZ footprint
+	-- expanded by a small margin (Theme.AppHud.CheckpointHideMarginStuds, kept <
+	-- the loaf→plate edgeGap so the near zone's inner edge stays outside the loaf
+	-- — a player anywhere on the cake reads "far"). Throttled; pushes on change.
+	local margin = Theme.AppHud.CheckpointHideMarginStuds
+	local checkAccum = math.huge -- force a check on the first frame
+	local wasFar: boolean? = nil
+
+	local function setFar(far: boolean)
+		if wasFar ~= far then
+			wasFar = far
+			AppRoot.Set({ checkpointFar = far })
+		end
+	end
+
+	local function updateCheckpointProximity()
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if root == nil then
+			return -- no character yet; hold the last state
+		end
+		local map = Workspace:FindFirstChild("Map")
+		local checkpoint = map and map:FindFirstChild("Checkpoint")
+		local plate = checkpoint and checkpoint:FindFirstChild("CheckpointPlate") :: BasePart?
+		if plate == nil then
+			-- Not replicated yet: keep the button visible (the server no-ops
+			-- ReturnToCheckpoint until the plate exists anyway). Warn once, deferred
+			-- and non-blocking (R8), only if it truly never arrives.
+			Log.GraceOnce(SCOPE, "no-checkpoint-plate", 10, function()
+				local m = Workspace:FindFirstChild("Map")
+				local c = m and m:FindFirstChild("Checkpoint")
+				return c == nil or c:FindFirstChild("CheckpointPlate") == nil
+			end, "workspace.Map.Checkpoint.CheckpointPlate missing — TO CHECKPOINT button can't proximity-hide (stays visible)")
+			setFar(true)
+			return
+		end
+		-- Plate is axis-aligned (built with an unrotated CFrame): Size.X = plate
+		-- depth (world X), Size.Z = plate width (world Z).
+		local delta = root.Position - plate.Position
+		local near = math.abs(delta.X) <= plate.Size.X / 2 + margin
+			and math.abs(delta.Z) <= plate.Size.Z / 2 + margin
+		setFar(not near)
+	end
 
 	RunService.RenderStepped:Connect(function(dt)
 		BallRollController.Step(dt) -- full-belly -> tumble roll (every character)
 		PetFollowers.Step(dt)
+		checkAccum += dt
+		if checkAccum >= 0.2 then -- ~5 Hz poll (checkpoint button + gym prompt show/hide)
+			checkAccum = 0
+			updateCheckpointProximity()
+			updateGymPrompt()
+		end
 	end)
 end
 

@@ -5,9 +5,9 @@
 	a dedicated EditableMesh slab (heightfield clamped to the band) so each
 	layer carries its OWN Material / Transparency / Reflectance — translucent
 	marmalade, grainy sponge, glossy caramel. The CRUST is a thin PALE WAX
-	FILM painted INTO each layer's XZ-planar EditableImage texture: cells
-	whose surface sits within crust.depth of the layer top show the lighter
-	waxy skin; eating below repaints them as layer body.
+	FILM look of the always-visible CakeWaxShell web on top (below). Each
+	multi-band slab renders a SOLID body Color (NO per-band texture); only the
+	single-slab palette FALLBACK paints an EditableImage (height palette/cell).
 
 	CRUNCHY BUTTER (reference: the "Crunchy Butter" ASMR games — a thin hard wax
 	crust over soft butter). This file owns the SOFT SQUISH: the mesh dents
@@ -206,7 +206,6 @@ type Band = {
 	sink: number, -- eaten-through tuck depth under the local surface
 	single: boolean?, -- palette mode: this one band renders the whole cake
 	bodyColor: Color3?,
-	crustFill: Color3?, -- pale wax crust base color
 }
 
 local pool: { PoolEntry } = {}
@@ -653,7 +652,9 @@ local function paintBandImage(bandIdx: number)
 		return -- inedible floor: solid color part, no texture wanted
 	end
 	local pe = pool[band.poolIdx]
-	local img = if pe.imageFailed then nil else pe.image -- assignBands already ensured it
+	-- Only single (palette) mode creates an image; multi-band pe.image is nil
+	-- (flat body Color, no texture) — the guard below makes this a no-op then.
+	local img = if pe.imageFailed then nil else pe.image
 	if img == nil then
 		return
 	end
@@ -814,7 +815,6 @@ local function assignBands(meta): { number }?
 			local layerDef = layersCfg[simBand.id]
 			local hMid = (simBand.bottom + simBand.top) * 0.5
 			local bodyColor = tinted(layerDef.colors.bottom:Lerp(layerDef.colors.top, 0.55), meta.rareKind, hMid, topStuds)
-			local crustFill = tinted(layerDef.colors.top:Lerp(WHITE, crustCfg.lighten), meta.rareKind, simBand.top, topStuds)
 			local band: Band = {
 				layerId = simBand.id,
 				bottom = simBand.bottom,
@@ -822,7 +822,6 @@ local function assignBands(meta): { number }?
 				poolIdx = bi,
 				sink = renderCfg.hideSink.base + renderCfg.hideSink.perBand * bi,
 				bodyColor = bodyColor,
-				crustFill = crustFill,
 			}
 			bands[bi] = band
 			local pe = pool[bi]
@@ -831,14 +830,18 @@ local function assignBands(meta): { number }?
 			part.Material = layerDef.material or Enum.Material.SmoothPlastic
 			part.Reflectance = layerDef.gloss or 0
 			transparencies[bi] = layerDef.transparency or 0
-			-- Core is the inedible floor: solid color, no film, no reveal.
-			if simBand.id ~= "core" and ensureImage(pe) ~= nil then
-				part.Color = WHITE
-				part.TextureContent = Content.fromObject(pe.image :: EditableImage)
-			else
-				part.TextureContent = Content.none
-				part.Color = bodyColor
-			end
+			-- SOLID body color, no per-band texture. The pale crust look is the
+			-- always-visible CakeWaxShell riding ON TOP (features/cake-sim.md), so a
+			-- multi-band slab's EditableImage would only ever hold a UNIFORM bodyColor
+			-- fill (paintBandImage/updateCellPixels both write bodyColor everywhere) —
+			-- visually identical to part.Color. Painting it cost a 384² buffer fill +
+			-- WritePixelsBuffer upload PER band on every rebuild (the new-cake frame
+			-- spike) and a DrawRectangle per eaten cell PER band on every bite
+			-- (eating-time churn / GC pressure), for ZERO visual gain. Flat Color
+			-- instead: no paint, no upload, no EditableImage budget (helps mobile).
+			-- The palette fallback (single mode, above) still needs its texture.
+			part.TextureContent = Content.none
+			part.Color = bodyColor
 			if layerDef.wobble then
 				table.insert(wobbleBandIndices, bi)
 			end

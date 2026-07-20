@@ -1,14 +1,33 @@
---[[ Badge — green notification dot (ring + gradient fill). ]]
+--[[ Badge — green notification dot (ring + gradient fill). Pops in (UIScale
+	0 -> 1, springy) whenever it becomes visible, so a newly-available
+	notification draws the eye instead of blinking in. ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 local React = require(ReplicatedStorage.Packages.React)
 local Theme = require(script.Parent.Parent.Theme)
 
 local function Badge(props)
 	local style = props.style or Theme.Badge
 	local zIndex = props.zIndex or 60
+	local visible = props.visible ~= false
 
-	if props.visible == false then
+	-- Hooks run before the early-return (Rules of Hooks). The frame + UIScale
+	-- only exist while visible, so the ref is populated exactly when the pop
+	-- should play (visible flips true -> ref attached -> this effect fires).
+	local scaleRef = React.useRef(nil)
+	-- Layout effect (pre-paint) so Scale is 0 before the first frame renders —
+	-- no flash of the full-size badge before the pop.
+	React.useLayoutEffect(function()
+		local scale = scaleRef.current
+		if not scale then
+			return
+		end
+		scale.Scale = 0
+		TweenService:Create(scale, Theme.Feel.BadgePopTween, { Scale = 1 }):Play()
+	end, { visible })
+
+	if not visible then
 		return nil
 	end
 
@@ -24,6 +43,7 @@ local function Badge(props)
 		Aspect = React.createElement("UIAspectRatioConstraint", {
 			AspectRatio = style.AspectRatio,
 		}),
+		Pop = React.createElement("UIScale", { ref = scaleRef }),
 		Ring = React.createElement("Frame", {
 			Name = "Ring",
 			Size = UDim2.fromScale(1, 1),
