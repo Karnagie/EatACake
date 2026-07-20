@@ -26,34 +26,34 @@ function UpgradeService.GetLevel(userId: number, id: string): number?
 end
 
 --API
--- Cost of the NEXT level, or nil when capped / unknown id / no profile.
+-- Cost of the NEXT tier, or nil when maxed / unknown id / no profile.
 function UpgradeService.NextCost(userId: number, id: string): number?
 	local def = upgradeCfg.upgrades[id]
 	local map = levels(userId)
 	if not def or not map then
 		return nil
 	end
-	local level = map[id] or 0
-	if level >= def.cap then
-		return nil
+	local nextTier = def.tiers[(map[id] or 0) + 1]
+	if nextTier == nil then
+		return nil -- capped (no further tier)
 	end
-	return math.floor(def.baseCost * def.growth ^ level)
+	return nextTier.cost
 end
 
 --API
--- Applies one level AFTER the subscription successfully spent the cost.
--- Returns the new level, or nil if capped/invalid.
+-- Applies one tier AFTER the subscription successfully spent the cost.
+-- Returns the new tier count, or nil if maxed/invalid.
 function UpgradeService.ApplyLevel(userId: number, id: string): number?
 	local def = upgradeCfg.upgrades[id]
 	local map = levels(userId)
 	if not def or not map then
 		return nil
 	end
-	local level = map[id] or 0
-	if level >= def.cap then
-		return nil
+	local tier = map[id] or 0
+	if def.tiers[tier + 1] == nil then
+		return nil -- capped
 	end
-	map[id] = level + 1
+	map[id] = tier + 1
 	return map[id]
 end
 

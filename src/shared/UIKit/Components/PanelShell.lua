@@ -1,4 +1,5 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 local React = require(ReplicatedStorage.Packages.React)
 local Theme = require(script.Parent.Parent.Theme)
 
@@ -27,11 +28,57 @@ end
 
 local function PanelShell(props)
 	local style = props.style or Theme.Panel
+	local feel = Theme.Feel
+	local visible = props.visible ~= false
+
+	-- Open = springy pop from PanelClosedScale; close = quick shrink, THEN hide
+	-- (so the shrink is visible). `shown` gates Visible; the panel stays mounted
+	-- either way so the UIScale ref persists across open/close cycles.
+	local scaleRef = React.useRef(nil)
+	local shown, setShown = React.useState(visible)
+	local firstRun = React.useRef(true)
+
+	React.useEffect(function()
+		local scale = scaleRef.current
+		if firstRun.current then
+			-- No entrance animation on first mount — just match the initial state.
+			firstRun.current = false
+			if scale then
+				scale.Scale = if visible then 1 else feel.PanelClosedScale
+			end
+			setShown(visible)
+			return
+		end
+		if visible then
+			setShown(true)
+			if scale then
+				scale.Scale = feel.PanelClosedScale
+				TweenService:Create(scale, feel.PanelOpenTween, { Scale = 1 }):Play()
+			end
+			return
+		end
+		if not scale then
+			setShown(false)
+			return
+		end
+		local tween = TweenService:Create(scale, feel.PanelCloseTween, { Scale = feel.PanelClosedScale })
+		local connection
+		connection = tween.Completed:Connect(function()
+			connection:Disconnect()
+			setShown(false)
+		end)
+		tween:Play()
+		return function()
+			connection:Disconnect()
+		end
+	end, { visible })
+
 	local children = {
 		Aspect = React.createElement("UIAspectRatioConstraint", {
 			AspectRatio = style.AspectRatio,
 			DominantAxis = Enum.DominantAxis.Height,
 		}),
+		OpenScale = React.createElement("UIScale", { ref = scaleRef }),
 		BodyShadow = roundedFrame(
 			"BodyShadow",
 			UDim2.fromScale(style.ShadowPosition.X, style.ShadowPosition.Y),
@@ -74,7 +121,7 @@ local function PanelShell(props)
 		Size = props.size,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Visible = props.visible ~= false,
+		Visible = shown,
 		ZIndex = props.zIndex or 1,
 	}, children)
 end

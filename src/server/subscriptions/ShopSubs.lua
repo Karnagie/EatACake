@@ -177,6 +177,9 @@ local function processReceipt(receiptInfo)
 	local userId = receiptInfo.PlayerId
 	local player = Players:GetPlayerByUserId(userId)
 	if not player then
+		-- Payer isn't in THIS server (cross-server timing / rejoin churn).
+		-- R8: never silent on a money path — Roblox retries on rejoin.
+		Log.Once(SCOPE, `receipt-offline-{userId}`, `receipt '{key}' for {userId}: payer not in this server — NotProcessedYet (retries on rejoin)`)
 		return Enum.ProductPurchaseDecision.NotProcessedYet -- retried on rejoin
 	end
 	-- A pending receipt can arrive BEFORE the profile loads (join with a

@@ -9,11 +9,12 @@
 |---|---|---|
 | persistence | `features/persistence.md` | PersistenceService, ProfileSchema/, PlayerLifecycleSubs / — |
 | economy (calories+gems) | `features/economy.md` | EconomyService, EconomySubs / EconomySubsClient |
-| cake-sim (heightfield) | `features/cake-sim.md` + ADR-0003 | CakeFieldService, CakeCollisionService, CakeSubs / LocalCakeField, CakeRenderer, CakeWaxShell, EatGestureController, CakeSubsClient, CakeFeelSubsClient |
+| cake-sim (heightfield) | `features/cake-sim.md` + ADR-0003 | CakeFieldService, CakeCollisionService, CakeSubs / LocalCakeField, CakeRenderer, CakeWaxShell, ChunkDebris, EatGestureController, CakeSubsClient, CakeFeelSubsClient |
 | cake-cycle (boss, rare, biomes) | `features/cake-cycle.md` | CakeCycleService, CakeSubs / BossView, CakeSubsClient |
 | treasures (finds) | `features/treasures.md` | TreasureService, CakeSubs / CakeSubsClient |
-| body-gym (stomach, morph, roll) | `features/body-gym.md` | StomachService, GymService, BodySubs (server morph) / BallRollController, BodySubsClient, GymOverlay |
-| upgrades + stats | `features/upgrades.md` | UpgradeService, StatsService, UpgradeSubs / LocalStatsService, UpgradesSubsClient |
+| body-gym (stomach, morph, roll) | `features/body-gym.md` | StomachService, GymService, BodySubs (server morph) / BallRollController, BodySubsClient, UIKit/GymOverlay |
+| checkpoint (gym + upgrade station platform) | `features/checkpoint.md` | MapService (build/height/teleport + UpgradeStation computer), CakeSubs (ReturnToCheckpoint) / BodySubsClient (F key + button) |
+| upgrades (hex tier tree) | `features/upgrades.md` | UpgradeService, StatsService, UpgradeSubs / LocalStatsService, LocalUpgradeTree, UpgradesSubsClient (station prompt open), UIKit HexNode/HexTreeOverlay, HexUtil |
 | pets | `features/pets.md` | PetService, PetSubs / PetsSubsClient, PetFollowers, LocalPetsService |
 | rebirth + biomes | `features/rebirth.md` | ProgressService, RebirthSubs / RebirthSubsClient |
 | quests | `features/quests.md` | QuestService, QuestsSubs / QuestsSubsClient |

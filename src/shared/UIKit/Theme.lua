@@ -267,6 +267,28 @@ local Theme = {
 	},
 }
 
+-- ===== Motion / "juice" (shared feel for every interactive element) =====
+-- One place tuning the whole UI's responsiveness. Press feedback (usePressable,
+-- Interaction.lua), panel open/close pops (PanelShell), badge pop-ins (Badge),
+-- and bar-fill glides (BellyBar/CakeBar) all read from here.
+Theme.Feel = {
+	-- Button press/hover bounce (UIScale multipliers).
+	HoverScale = 1.05,
+	PressScale = 0.93,
+	PressTween = TweenInfo.new(0.09, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	ReleaseTween = TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+	-- Panel window open (springy pop) / close (quick shrink then hide).
+	PanelClosedScale = 0.85,
+	PanelOpenTween = TweenInfo.new(0.24, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+	PanelCloseTween = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+	-- Notification badge pop-in from nothing.
+	BadgePopTween = TweenInfo.new(0.26, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+	-- Progress bars gliding to a new fill instead of snapping.
+	FillTween = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	-- Settings toggle knob sliding across its track.
+	ToggleTween = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+}
+
 -- ===== Wide (landscape) panel family. Nominal grids: panel 1000x600, header 1000x120. =====
 
 Theme.PanelWide = {
@@ -850,6 +872,27 @@ Theme.MenuButton = {
 	TextGradient = Theme.Button.TextGradient,
 }
 
+-- Bare HUD menu button (icon + label BELOW it, NO background — the simulator
+-- "icon column" archetype; see Components/HudMenuButton). Zones are fractions
+-- of the button (nominal 100x118): icon zone y 0..86, gap 4, label y 90..114
+-- (24), bottom margin 4 -> 118 ✓. The button FILLS its layout cell (biggest
+-- tap area); the icon (ScaleType.Fit) self-fits a square, so no aspect
+-- constraint is needed — the zones hold at whatever shape the cell is. Bigger
+-- than the old MenuButton for phones.
+Theme.HudMenuButton = {
+	IconPosition = Vector2.new(0, 0),
+	IconSize = Vector2.new(1, 86 / 118),
+	IconColor = Color3.new(1, 1, 1), -- no tint (placeholder icons are pre-colored)
+	LabelPosition = Vector2.new(0, 90 / 118),
+	LabelSize = Vector2.new(1, 24 / 118),
+	LabelGradient = Theme.Hud.ButtonLabelGradient,
+	LabelOutlineColor = Theme.Colors.TextOutline,
+	-- Notification dot on the icon's top-right (Badge self-squares from width).
+	BadgeAnchor = Vector2.new(0.5, 0.5),
+	BadgePosition = Vector2.new(0.80, 0.12),
+	BadgeSize = Vector2.new(0.26, 0.26),
+}
+
 -- App HUD geometry (template glue): gold pill top-left, menu column under it.
 -- Reference screen 1920x1080 (Hud family).
 Theme.AppHud = {
@@ -857,13 +900,15 @@ Theme.AppHud = {
 	PillHeight = 64 / 1080,
 	PillPosition = Vector2.new(22 / 1920, 24 / 1080),
 	MenuPosition = Vector2.new(22 / 1920, 110 / 1080),
-	MenuWidth = 220 / 1920,
-	MenuButtonHeight = 56 / 1080,
-	MenuGap = 12 / 1080,
-	-- Badge sits on the button's top-right corner.
-	BadgeAnchor = Vector2.new(0.5, 0.5),
-	BadgePosition = Vector2.new(0.94, 0.08),
-	BadgeSize = Vector2.new(24 / 170, 24 / 56),
+	-- Icon GRID (was a single tall column that ran to the bottom of the screen).
+	-- Buttons flow left-to-right, wrapping after MenuColumns — 8 buttons become a
+	-- 2x4 block that stops around mid-screen. Each cell is comfortable to tap on
+	-- phones; the HudMenuButton icon self-fits its cell (no aspect constraint).
+	MenuColumns = 2,
+	MenuButtonWidth = 92 / 1920,
+	MenuButtonHeight = 100 / 1080,
+	MenuGap = 12 / 1080, -- vertical gap between rows
+	MenuGapX = 12 / 1920, -- horizontal gap between columns
 }
 
 -- ===== Eat the Cake game sections =====
@@ -1027,34 +1072,36 @@ Theme.UpgradesLayout = {
 	RowGap = 10 / 563,
 }
 
--- Gym mash overlay (reference screen 1920x1080): round green TAP button at
--- (0.5, 0.74) d 220; timer bar 360x40 at (0.5, 0.60); counter above it.
+-- Gym fat-burn overlay (reference screen 1920x1080). RIGHT-THUMB layout for the
+-- phone (the user's request): round green TAP button bottom-right at (0.82, 0.70)
+-- d 240; a "fat left" bar 260x34 at (0.82, 0.52) and a % label above it. The bar
+-- fill tracks the remaining-fat fraction (drains 1 → 0 as you burn).
 Theme.GymOverlay = {
-	ButtonHeight = 220 / 1080,
+	ButtonHeight = 240 / 1080,
 	ButtonAspect = 1,
-	ButtonPosition = Vector2.new(0.5, 0.74),
+	ButtonPosition = Vector2.new(0.82, 0.70),
 	ButtonOuterCorner = 1, -- circle
 	ButtonOutline = Theme.EquipGreen.OutlineColor,
 	ButtonOuterGradient = Theme.EquipGreen.OuterGradient,
 	ButtonRimGradient = Theme.EquipGreen.RimGradient,
 	ButtonFaceGradient = Theme.EquipGreen.FaceGradient,
 	ButtonTextGradient = Theme.EquipGreen.TextGradient,
-	-- Same inset ratios as IconButton, on the button's own nominal 220 grid.
-	RimPosition = Vector2.new(14 / 220, 14 / 220),
-	RimSize = Vector2.new(192 / 220, 174 / 220),
-	FacePosition = Vector2.new(21 / 220, 21 / 220),
-	FaceSize = Vector2.new(178 / 220, 160 / 220),
-	TextPosition = Vector2.new(30 / 220, 80 / 220),
-	TextSize = Vector2.new(160 / 220, 60 / 220),
-	TimerHeight = 40 / 1080,
-	TimerAspect = 360 / 40,
-	TimerPosition = Vector2.new(0.5, 0.60),
-	TimerOuterGradient = Theme.Toggle.OuterGradient,
-	TimerGrooveGradient = Theme.Scrollbar.GrooveGradient,
-	TimerFillGradient = Theme.PetCard.SelectRingGradient,
-	TimerGrooveInset = Vector2.new(5 / 360, 5 / 40),
-	CounterHeight = 36 / 1080,
-	CounterPosition = Vector2.new(0.5, 0.545),
+	-- Same inset ratios as IconButton, on the button's own nominal 240 grid.
+	RimPosition = Vector2.new(15 / 240, 15 / 240),
+	RimSize = Vector2.new(210 / 240, 190 / 240),
+	FacePosition = Vector2.new(23 / 240, 23 / 240),
+	FaceSize = Vector2.new(194 / 240, 174 / 240),
+	TextPosition = Vector2.new(33 / 240, 88 / 240),
+	TextSize = Vector2.new(174 / 240, 64 / 240),
+	BarHeight = 34 / 1080,
+	BarAspect = 260 / 34,
+	BarPosition = Vector2.new(0.82, 0.52),
+	BarOuterGradient = Theme.Toggle.OuterGradient,
+	BarGrooveGradient = Theme.Scrollbar.GrooveGradient,
+	BarFillGradient = Theme.PetCard.SelectRingGradient,
+	BarGrooveInset = Vector2.new(5 / 260, 5 / 34),
+	CounterHeight = 34 / 1080,
+	CounterPosition = Vector2.new(0.82, 0.455),
 	CounterGradient = Theme.Button.TextGradient,
 }
 
@@ -1164,11 +1211,12 @@ Theme.BuyButtonNeutral = buttonStyleWithAspect(Theme.ActionButton, 140 / 56) -- 
 Theme.ClaimButton = buttonStyleWithAspect(Theme.EquipGreen, 120 / 56) -- QuestRow claim zone
 Theme.ClaimButtonNeutral = buttonStyleWithAspect(Theme.ActionButton, 120 / 56)
 Theme.RebirthButton = buttonStyleWithAspect(Theme.EquipGreen, 318 / 84) -- RebirthLayout button zone
+Theme.CheckpointButton = buttonStyleWithAspect(Theme.EquipGreen, 300 / 64) -- HUD "return to gym" button (features/checkpoint.md)
 
 -- App HUD additions for the game: second currency pill, belly bar,
 -- cake progress bar, combo badge, announce banner. Two pills stack at
--- y 24..88 and 96..160; the menu moves DOWN to clear them:
--- 9 rows: 9*56 + 8*12 = 600 -> y 172..772 on the 1080 reference ✓.
+-- y 24..88 and 96..160; the menu (icon column) moves DOWN to clear them:
+-- 8 rows: 8*100 + 7*12 = 884 -> y 172..1056 on the 1080 reference ✓.
 Theme.AppHud.SecondPillPosition = Vector2.new(22 / 1920, 96 / 1080)
 Theme.AppHud.MenuPosition = Vector2.new(22 / 1920, 172 / 1080)
 Theme.AppHud.BellyPosition = Vector2.new(0.5, 0.955) -- anchor (0.5, 1)
@@ -1179,6 +1227,204 @@ Theme.AppHud.ComboPosition = Vector2.new(0.82, 0.40)
 Theme.AppHud.ComboHeight = 84 / 1080
 Theme.AppHud.AnnouncePosition = Vector2.new(0.5, 92 / 1080)
 Theme.AppHud.AnnounceHeight = 52 / 1080
+-- Return-to-checkpoint button: bottom-center, just ABOVE the belly bar (belly
+-- full -> burn is right here). Anchor (0.5, 1); height on the 1080 reference.
+Theme.AppHud.CheckpointPosition = Vector2.new(0.5, 897 / 1080)
+Theme.AppHud.CheckpointHeight = 52 / 1080
+-- The button HIDES when the player is already on/at the checkpoint platform
+-- (BodySubsClient proximity check): near = inside the plate's XZ footprint,
+-- expanded by this margin. Kept < the loaf→plate `edgeGap` (0.5) so the near
+-- zone's inner edge stays outside the loaf and the cake never counts as "on
+-- the plate". Studs, world space.
+Theme.AppHud.CheckpointHideMarginStuds = 0.4
+
+-- HUD menu button icons (one per panel). Placeholder for now — swap per game
+-- (like Theme.Hud.Icons). All point at the same asset until real art lands.
+local menuIconPlaceholder = "rbxassetid://138519589128299"
+Theme.AppHud.MenuIconPlaceholder = menuIconPlaceholder
+Theme.AppHud.MenuIcons = {
+	Pets = menuIconPlaceholder,
+	Rebirth = menuIconPlaceholder,
+	Quests = menuIconPlaceholder,
+	Shop = menuIconPlaceholder,
+	DailyRewards = menuIconPlaceholder,
+	TimeRewards = menuIconPlaceholder,
+	Codes = menuIconPlaceholder,
+	Settings = menuIconPlaceholder,
+}
+
+-- ===== Upgrades HEX TREE (features/upgrades.md) =====
+-- A full-screen honeycomb overlay. Each node is a flat-top hex SPRITE (white,
+-- aspect 512/444) stacked Outer/Rim/Face and tinted per STATE by a vertical
+-- UIGradient (the kit's bevel recipe, adapted to a shape UICorner can't make —
+-- the one place chrome uses a provided asset id, like Hud.Icons). Locked = gray,
+-- available = gold, owned = blue, category = purple, back = teal.
+local hexGrayOuter = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(48, 54, 64)),
+	ColorSequenceKeypoint.new(0.06, Color3.fromRGB(34, 39, 47)),
+	ColorSequenceKeypoint.new(0.8, Color3.fromRGB(33, 38, 46)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(30, 34, 42)),
+})
+local hexGrayRim = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 130, 145)),
+	ColorSequenceKeypoint.new(0.05, Color3.fromRGB(150, 160, 175)),
+	ColorSequenceKeypoint.new(0.72, Color3.fromRGB(104, 114, 130)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(78, 86, 100)),
+})
+local hexGrayFace = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(126, 136, 150)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(104, 113, 128)),
+	ColorSequenceKeypoint.new(0.93, Color3.fromRGB(90, 98, 112)),
+	ColorSequenceKeypoint.new(0.96, Color3.fromRGB(60, 66, 78)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(70, 77, 90)),
+})
+local hexGrayText = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(226, 231, 240)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(176, 184, 198)),
+})
+local hexGoldText = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 252, 236)),
+	ColorSequenceKeypoint.new(0.55, Color3.fromRGB(255, 238, 178)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 214, 120)),
+})
+local hexPurpleText = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 245, 255)),
+	ColorSequenceKeypoint.new(0.55, Color3.fromRGB(246, 205, 244)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(232, 170, 226)),
+})
+local hexTealText = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(240, 255, 252)),
+	ColorSequenceKeypoint.new(0.55, Color3.fromRGB(206, 246, 238)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(170, 232, 220)),
+})
+
+Theme.HexTree = {
+	HexImage = "rbxassetid://125037319877300",
+	HexAspect = 512 / 444,
+	-- Layer stack (centred; inner layers nudged UP so the bottom outline reads
+	-- thicker — the kit's "weight" rule for a centred hex).
+	RimCenter = Vector2.new(0.5, 0.47),
+	RimScale = 0.9,
+	FaceCenter = Vector2.new(0.5, 0.45),
+	FaceScale = 0.78,
+	-- Content zones (inside the hex's safe middle band).
+	NamePosition = Vector2.new(0.15, 0.32),
+	NameSize = Vector2.new(0.7, 0.19),
+	StatusPosition = Vector2.new(0.17, 0.54),
+	StatusSize = Vector2.new(0.66, 0.15),
+	-- Connector bar between a node and its parent (geometry in UpgradeTreeConfig).
+	ConnectorOwnedGradient = Theme.Button.RimGradient,
+	ConnectorLockedGradient = hexGrayRim,
+	-- Full-screen dim behind the honeycomb.
+	ScrimColor = Color3.fromRGB(8, 12, 22),
+	ScrimTransparency = 0.14,
+	-- Per-state hex visuals.
+	States = {
+		locked = {
+			Outer = hexGrayOuter,
+			Rim = hexGrayRim,
+			Face = hexGrayFace,
+			Outline = Color3.fromRGB(24, 28, 34),
+			Text = hexGrayText,
+		},
+		available = {
+			Outer = Theme.Rarity.Legendary.Outer,
+			Rim = Theme.Rarity.Legendary.Rim,
+			Face = Theme.Rarity.Legendary.Face,
+			Outline = Color3.fromRGB(74, 48, 0),
+			Text = hexGoldText,
+		},
+		owned = {
+			Outer = Theme.Button.OuterGradient,
+			Rim = Theme.Button.RimGradient,
+			Face = Theme.Button.FaceGradient,
+			Outline = Theme.Button.OutlineColor,
+			Text = Theme.Button.TextGradient,
+		},
+		category = {
+			Outer = Theme.Rarity.Epic.Outer,
+			Rim = Theme.Rarity.Epic.Rim,
+			Face = Theme.Rarity.Epic.Face,
+			Outline = Color3.fromRGB(54, 0, 45),
+			Text = hexPurpleText,
+		},
+		back = {
+			Outer = Theme.Rarity.Uncommon.Outer,
+			Rim = Theme.Rarity.Uncommon.Rim,
+			Face = Theme.Rarity.Uncommon.Face,
+			Outline = Color3.fromRGB(0, 52, 48),
+			Text = hexTealText,
+		},
+	},
+	-- Tooltip card (nominal 260x150), Chip-family dark surface.
+	Tooltip = {
+		AspectRatio = 260 / 150,
+		OuterGradient = Theme.Toggle.OuterGradient,
+		OuterCorner = 0.12,
+		FaceGradient = Theme.Chip.FaceGradient,
+		FaceInset = Vector2.new(5 / 260, 5 / 150),
+		FaceCorner = 0.1,
+		TitlePosition = Vector2.new(16 / 260, 12 / 150),
+		TitleSize = Vector2.new(228 / 260, 30 / 150),
+		DescPosition = Vector2.new(16 / 260, 50 / 150),
+		DescSize = Vector2.new(228 / 260, 58 / 150),
+		StatusPosition = Vector2.new(16 / 260, 112 / 150),
+		StatusSize = Vector2.new(228 / 260, 26 / 150),
+		TitleGradient = Theme.Button.TextGradient,
+		DescColor = Color3.fromRGB(206, 232, 250),
+	},
+	-- Calories chip + Close button placement on the overlay (1920x1080 ref).
+	CurrencyPosition = Vector2.new(30 / 1920, 30 / 1080),
+	CurrencyHeight = 64 / 1080,
+	-- Honeycomb canvas: upper-centre (square, fraction of the shorter axis) so
+	-- the bottom detail panel + top bar stay clear.
+	CanvasCenter = Vector2.new(0.5, 0.42),
+	CanvasMaxViewportFraction = 0.64,
+	-- Close = red X top-right (anchor 0.5,0.5).
+	CloseCenter = Vector2.new(0.955, 74 / 1080),
+	CloseHeight = 78 / 1080,
+	-- Zoom controls: bottom-right vertical stack of +/-/reset (anchor 0.5,0.5).
+	ZoomButtonHeight = 66 / 1080,
+	ZoomInCenter = Vector2.new(0.955, 0.63),
+	ZoomOutCenter = Vector2.new(0.955, 0.725),
+	ResetCenter = Vector2.new(0.955, 0.82),
+	MinZoom = 0.6,
+	MaxZoom = 3.2,
+	ZoomStep = 1.25, -- per +/- press or wheel notch
+	-- Canvas holds the tree at rest; zoom/pan is applied on a WORLD frame inside.
+	-- Detail card is positioned NEXT TO the tapped hex (screen space).
+	DetailWidth = 0.32, -- fraction of the shorter viewport axis
+	Detail = {
+		AspectRatio = 300 / 200,
+		OuterGradient = Theme.Toggle.OuterGradient,
+		OuterCorner = 0.09,
+		FaceGradient = Theme.Chip.FaceGradient,
+		FaceInset = Vector2.new(6 / 300, 6 / 200),
+		FaceCorner = 0.075,
+		TitlePosition = Vector2.new(18 / 300, 14 / 200),
+		TitleSize = Vector2.new(264 / 300, 40 / 200),
+		DescPosition = Vector2.new(18 / 300, 60 / 200),
+		DescSize = Vector2.new(264 / 300, 66 / 200),
+		StatusPosition = Vector2.new(18 / 300, 140 / 200),
+		StatusSize = Vector2.new(264 / 300, 42 / 200),
+		BuyPosition = Vector2.new(66 / 300, 134 / 200),
+		BuySize = Vector2.new(168 / 300, 54 / 200),
+		TitleGradient = Theme.Button.TextGradient,
+		DescColor = Color3.fromRGB(210, 234, 252),
+		StatusGradient = Theme.PetCard.NameGradient,
+	},
+	-- Red circular "!" notifier badge (fractions of the hex node).
+	Notifier = {
+		Center = Vector2.new(0.77, 0.16),
+		Size = 0.34,
+		OuterGradient = Theme.Exit.OuterGradient,
+		FaceGradient = Theme.Exit.FaceGradient,
+		MarkGradient = Theme.Exit.XGradient,
+		Outline = Theme.Exit.XOutline,
+	},
+}
+Theme.HexTree.BuyButton = buttonStyleWithAspect(Theme.EquipGreen, 168 / 54)
+Theme.HexTree.ZoomButton = buttonStyleWithAspect(Theme.ActionButton, 1)
 
 table.freeze(Theme.Rarity.Uncommon)
 table.freeze(Theme.Rarity.Secret)
@@ -1187,6 +1433,7 @@ table.freeze(Theme.BuyButtonNeutral)
 table.freeze(Theme.ClaimButton)
 table.freeze(Theme.ClaimButtonNeutral)
 table.freeze(Theme.RebirthButton)
+table.freeze(Theme.CheckpointButton)
 table.freeze(Theme.BellyBar)
 table.freeze(Theme.CakeBar)
 table.freeze(Theme.ComboBadge)
@@ -1199,7 +1446,20 @@ table.freeze(Theme.RebirthLayout.StatPositions)
 table.freeze(Theme.RebirthLayout)
 table.freeze(Theme.QuestRow)
 table.freeze(Theme.QuestsLayout)
+table.freeze(Theme.HexTree.States.locked)
+table.freeze(Theme.HexTree.States.available)
+table.freeze(Theme.HexTree.States.owned)
+table.freeze(Theme.HexTree.States.category)
+table.freeze(Theme.HexTree.States.back)
+table.freeze(Theme.HexTree.States)
+table.freeze(Theme.HexTree.Tooltip)
+table.freeze(Theme.HexTree.Detail)
+table.freeze(Theme.HexTree.Notifier)
+table.freeze(Theme.HexTree.BuyButton)
+table.freeze(Theme.HexTree.ZoomButton)
+table.freeze(Theme.HexTree)
 
+table.freeze(Theme.Feel)
 table.freeze(Theme.Colors)
 table.freeze(Theme.Gradients)
 table.freeze(Theme.Toggle)
@@ -1240,5 +1500,7 @@ table.freeze(Theme.ShopLayout)
 table.freeze(Theme.TextInput)
 table.freeze(Theme.CodesLayout)
 table.freeze(Theme.MenuButton)
+table.freeze(Theme.HudMenuButton)
+table.freeze(Theme.AppHud.MenuIcons)
 table.freeze(Theme.AppHud)
 return table.freeze(Theme)

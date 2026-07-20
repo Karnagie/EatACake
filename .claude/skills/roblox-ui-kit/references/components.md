@@ -19,11 +19,38 @@ Common props on nearly everything: `name`, `anchorPoint`, `position`, `size`
 | `CloseButton` | Red X button (4 layers + rotated-pill X) | `onActivated`, `enabled` |
 | `StatPill` | Dark pill: icon + value (currency display) | `value` (string), `iconImage` OR `icon` = `"coin" \| "chevrons" \| "bolt"`, `valueGradient`, `valueOutline` |
 
+## Motion / interaction (`Interaction.lua`, `Theme.Feel`) — ADR-0006
+
+Press/hover feedback and pops are BUILT IN — don't hand-roll animation. Base
+buttons (`Button`/`IconButton`/`CloseButton`/`HudMenuButton`) already bounce on
+hover/press; `PanelShell` pops open/closed; `Badge` pops in; `BellyBar`/`CakeBar`
+fills glide; `Toggle` knob slides. Tune everything in `Theme.Feel`.
+
+`require(ReplicatedStorage.Shared.UIKit.Interaction)`:
+- `usePressable(config) -> (scaleRef, handlers)` — `config = {enabled?,
+  onActivated?, hoverScale?, pressScale?, feel?}`. Spread `handlers` onto the
+  root `TextButton` (via `Interaction.merge(rootProps, handlers)`); the hook owns
+  activation (`onActivated`).
+- `pressLayer(scaleRef, zIndex, childrenDict)` — wraps visuals in a
+  `(0.5,0.5)`-anchored transparent `Content` frame carrying the press `UIScale`,
+  so the pop grows from CENTER while the root TextButton stays the unscaled hit
+  target / layout cell. Keep the `UIAspectRatioConstraint` on the TextButton,
+  NOT inside `pressLayer`.
+- `useFillGlide(fill01) -> fillRef` + `ZeroFill` — glide a horizontal fill
+  frame's width; give that frame `Size = Interaction.ZeroFill` and the `ref`.
+
+**Iron rule (ADR-0006):** a property animated by TweenService on a `ref` must
+NEVER also be written by React on re-render (the HUD re-renders ~14×/s → React
+clobbers the tween). Pass NO prop (UIScale carries no `Scale`) or a CONSTANT
+(`ZeroFill`, a module-level `KNOB_INITIAL`) the reconciler skips. A new
+interactive component reuses `usePressable`/`pressLayer` rather than inventing
+its own animation.
+
 ## Structure
 
 | Component | Purpose | Key props |
 |---|---|---|
-| `PanelShell` | Panel body (Shadow/Border/Fill) + aspect | `style` (`Theme.Panel` portrait / `Theme.PanelWide` landscape), `visible`, `zIndex`, `children` |
+| `PanelShell` | Panel body (Shadow/Border/Fill) + aspect + open/close pop | `style` (`Theme.Panel` portrait / `Theme.PanelWide` landscape), `visible`, `zIndex`, `children` |
 | `Header` | Header bar with title + close | `title`, `style` (`Theme.Header` / `Theme.HeaderWide`), `showTitle`, `showClose`, `closeEnabled`, `onClose`, `size` |
 | `PanelWithHeader` | PanelShell + Header composed | `title`, `panelStyle`, `headerStyle`, `headerSize`, `onClose`, `visible`, `zIndex`, `children` (content is positioned in panel-grid fractions, zIndex 5) |
 | `ScrollPane` | Scroll window + custom kit scrollbar | `windowFraction`, `barWidth`, `canvasHeightScale` (REQUIRED for grids — rows math, see patterns), `scrollbarStyle`, `children` (put UIGridLayout/UIListLayout + items here) |

@@ -40,10 +40,14 @@ function UpgradeSubs.Start(data, services)
 
 	Net.Remote("BuyUpgrade").OnServerEvent:Connect(function(player, id)
 		if type(id) ~= "string" then
+			-- Malformed payload (R8 — never silent, mirrors CakeSubs EatAt).
+			Log.Once(SCOPE, `bad-buy-payload-{player.UserId}`, `{player.Name}: BuyUpgrade with non-string id — dropped`)
 			return
 		end
 		local userId = player.UserId
 		if not services.PersistenceService.IsLoaded(userId) then
+			-- Joining: profile not ready (R8 — never silent, mirrors CakeSubs).
+			Log.Once(SCOPE, `buy-preload-{userId}`, `{player.Name}: BuyUpgrade before profile load — dropped until loaded`)
 			return
 		end
 		local cost = services.UpgradeService.NextCost(userId, id)

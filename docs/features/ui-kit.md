@@ -9,7 +9,8 @@ doc covers integration only; do not duplicate the skill here.
 
 | Piece | Path |
 |---|---|
-| Kit (Theme + 16 components + demos) | `src/shared/UIKit/` → `ReplicatedStorage.Shared.UIKit` |
+| Kit (Theme + component catalog + demos) | `src/shared/UIKit/` → `ReplicatedStorage.Shared.UIKit` (exact list: `UIKit.init` Components table) |
+| Interaction primitive (press/tween juice) | `src/shared/UIKit/Interaction.lua` — `usePressable`, `pressLayer`, `merge`, `useFillGlide`, `ZeroFill`; timings in `Theme.Feel`. ADR-0006 |
 | React root owner (client) | `src/client/modules/UiRoot.lua` — `Init()` by bootstrap, `Render(element)`, `Unmount()` |
 | React packages | `ReactLua-Packages.rbxmx` — vendored model (React + ReactRoblox + node_modules), rojo-mapped to `ReplicatedStorage.Packages` |
 | Demo selector | `UIKit.Demos.Selector` (`SHOW` constant: Hud / PetsInspect / Pets / Settings) |
@@ -37,6 +38,14 @@ To update React: replace the `.rbxmx` (re-export the jsdotlua packages under a
 - R5 note: the React tree is the kit's declarative "template"; do not
   hand-build Instance trees for kit UI. Studio-authored UI (UiData resolver)
   remains valid for non-kit bespoke visuals.
+- **Animation** (ADR-0006): base buttons already carry press/hover feedback via
+  `Interaction.usePressable` + `pressLayer`; panels pop (`PanelShell`), badges
+  pop-in, belly/cake bars glide, the settings toggle knob slides. Tune via
+  `Theme.Feel`. Animate a property with `TweenService` on a `ref` — NEVER also
+  pass that property as a React prop that changes (React clobbers the tween on
+  the next re-render, and the HUD re-renders ~14×/s). Pass no prop (UIScale) or a
+  constant (`Interaction.ZeroFill`, `KNOB_INITIAL`). New kit buttons should reuse
+  `usePressable`/`pressLayer` rather than hand-rolling animation.
 
 ## Gotchas
 

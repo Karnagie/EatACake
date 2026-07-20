@@ -12,8 +12,9 @@
 local MapConfigData = {}
 
 MapConfigData.floor = { size = 340, thickness = 2 }
--- Rectangular cake tray under the loaf (84x57 studs of cake + a lip).
-MapConfigData.platform = { length = 100, width = 72, height = 2 } -- top = cake bottom
+-- Rectangular cake tray under the loaf (90x78 studs of cake + a ~5-stud lip;
+-- grown from 100x72 for the bigger footprint so the loaf never overhangs it).
+MapConfigData.platform = { length = 100, width = 88, height = 2 } -- top = cake bottom
 MapConfigData.spawnHeightAboveCake = 8 -- fall onto the frosting (§7.1 crust crack)
 
 -- The room: four decorated walls around the play area.
@@ -35,24 +36,62 @@ MapConfigData.room = {
 	},
 }
 
--- Gym zone (GDD §8): a pad with machines, right next to the cake so the
--- eat->burn loop takes seconds, not a hike.
-MapConfigData.gym = {
-	center = { x = 78, z = 0 },
-	padSize = 28,
-	machineCount = 4,
+-- Checkpoint platform (GDD §8 gym): a platform standing on 4 legs BESIDE the
+-- cake, its top surface tracking the current TOP LAYER height — it steps DOWN
+-- one layer at a time as the cake is eaten (CakeSubs.SetCheckpointHeight, driven
+-- by CakeFieldService.ScanStats topBandIndex). You return to it (F key / HUD
+-- button -> ReturnToCheckpoint remote) to burn fat at the gym machine on it.
+-- This REPLACES the old floor gym zone: fat is now extracted here, always at
+-- your eating height, so a full belly is seconds from the machine.
+--
+-- Placement: the +X side of the loaf. The loaf's +X edge is at
+-- footprint.hx * grid.cell (30 * 1.5 = 45 studs); the plate's inner edge sits
+-- `edgeGap` studs off it (its z-span stays inside the straight edge, clear of
+-- the rounded corners). Legs drop to the floor (y = 0). All heights are RELATIVE
+-- to the cake origin; MapService adds origin.x/z.
+MapConfigData.checkpoint = {
+	edgeGap = 0.5, -- studs between the loaf edge and the plate's inner (cake-side) edge
+	plateDepth = 18, -- studs, X extent (away from the cake)
+	plateWidth = 26, -- studs, Z extent (along the cake side; < straight-edge span)
+	plateThickness = 2,
+	legSize = 3, -- studs, square leg cross-section
+	legInset = 2, -- studs the legs are inset from the plate edges
+	minLegHeight = 2, -- studs, floor for the leg height when the cake is near-bare
+	machineSize = Vector3.new(4, 6, 4), -- gym machine box, near the outer edge
+	standHeight = 3.5, -- studs above the plate top for the teleport landing point
 	promptName = "GymPrompt", -- BodySubs listens for this prompt name
-	maxUseDistanceStuds = 14, -- server-side range validation
+	-- Gym reachability lives here (not baked in MapService): the teleport lands
+	-- the player at the plate CENTRE, the machine sits near the outer edge —
+	-- keep promptRange ≥ (plateDepth/2 - machineSize.X/2 - 1) so the prompt is
+	-- active on arrival, and maxUseDistanceStuds ≥ promptRange so the server
+	-- range re-check never rejects a legit prompt. Widen both if plateDepth grows.
+	promptRange = 10, -- ProximityPrompt.MaxActivationDistance
+	maxUseDistanceStuds = 16, -- server-side range validation (gym start)
+	-- Upgrade station: a "computer" terminal standing on the plate (cake-side
+	-- corner, clear of the centre landing + the walk-back path to the loaf). Its
+	-- ProximityPrompt OPENS the upgrades hex-tree — handled entirely client-side
+	-- (UpgradesSubsClient listens for this prompt name); no server round-trip,
+	-- since opening a menu is local UI. Rides the plate height like the machine.
+	stationSize = Vector3.new(4, 5, 3),
+	stationScreenSize = Vector3.new(4.4, 3.2, 0.5),
+	upgradePromptName = "UpgradeStation",
+	upgradePromptRange = 10, -- ProximityPrompt.MaxActivationDistance (open range)
+	-- Candy scaffold palette (static — it's structure, not a biome surface).
+	plateColor = Color3.fromRGB(240, 130, 190),
+	legColor = Color3.fromRGB(150, 92, 60),
+	machineColor = Color3.fromRGB(220, 60, 80),
+	stationBodyColor = Color3.fromRGB(70, 120, 190),
+	stationScreenColor = Color3.fromRGB(120, 224, 255),
 }
 
 -- Landmark candles (§6.3): static towers on the TRAY corners, just outside
--- the loaf footprint (±42 × ±28.5) but inside the plate (±50 × ±36).
+-- the loaf footprint (now ±45 × ±39) but inside the tray (±50 × ±44).
 -- Inside-the-cake placement clipped through the mesh walls and read as
--- rendering glitches (user feedback 2026-07-17).
+-- rendering glitches (user feedback 2026-07-17) — moved out with the bigger loaf.
 MapConfigData.candles = {
-	{ x = 46, z = 32, height = 78, radius = 2.5 },
-	{ x = -46, z = -32, height = 72, radius = 2 },
-	{ x = -46, z = 32, height = 84, radius = 3 },
+	{ x = 48, z = 42, height = 78, radius = 2.5 },
+	{ x = -48, z = -42, height = 72, radius = 2 },
+	{ x = -48, z = 42, height = 84, radius = 3 },
 }
 
 -- Conveyor the cake "arrived" on: purely decorative.

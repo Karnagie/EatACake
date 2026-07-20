@@ -18,7 +18,12 @@ local CakeConfig = {}
 CakeConfig.grid = {
 	size = 64, -- 64x64 cells
 	cell = 1.5, -- studs per cell -> 96x96 stud field
-	maxHeight = 70, -- studs, hard ceiling (u16 easily covers it)
+	-- Hard height ceiling. Raised from 70 to fit the per-player taller cake
+	-- (composition.perPlayerScale): a 4-player loaf tops out ~87 studs. u16
+	-- fixed-point (655 stud max) easily covers it; taller = taller collision
+	-- columns + render slabs, NOT more cells (weak-device vertex budget is
+	-- driven by cell count, which is unchanged).
+	maxHeight = 90,
 	-- World placement: bottom of the cake sits at this Y; grid is centered
 	-- on origin XZ. MapService builds the platform to match.
 	origin = { x = 0, y = 2, z = 0 },
@@ -353,16 +358,41 @@ CakeConfig.composition = {
 	frostingThickness = { 6, 8 }, -- studs
 	coreThickness = 3, -- exposed cavity floor, not edible
 	middleThickness = { 10, 16 },
-	totalHeight = { 52, 68 }, -- clamped to grid.maxHeight
-	-- Footprint: a rounded-rectangle LOAF (Drain-the-Lake scale, fixed for
-	-- any population — the cake is a landmark, not a per-player snack).
-	-- 28x19 cells at 1.5 studs = 84x57 studs of cake.
-	footprint = { hx = 28, hz = 19, corner = 8 },
+	totalHeight = { 50, 60 }, -- clamped to grid.maxHeight (×perPlayerScale first)
+	-- Footprint: a rounded-rectangle LOAF (Drain-the-Lake scale). A LANDMARK,
+	-- not a per-player snack — the XZ size is FIXED for any population (the 64-
+	-- cell grid caps hx/hz at ~31; growing the grid would blow the render
+	-- vertex budget). 30x26 cells at 1.5 studs = 90x78 studs of cake (~46%
+	-- more area than the old 28x19 loaf — a longer, wider cake to eat).
+	footprint = { hx = 30, hz = 26, corner = 10 },
+	-- Easy-mode co-op scaling (the ONE population lever, since the footprint is
+	-- fixed): the rolled totalHeight is multiplied by 1 + perPlayerScale*(n-1)
+	-- for n players present at spawn, then clamped to grid.maxHeight. A TALLER
+	-- (== "longer to eat") shared loaf for a crowd, sublinear so more mouths
+	-- still clear it faster: solo ~40 min, 4 players ~18 min (not ~10).
+	-- Applied in CakeCycleService.RollComposition. See features/cake-cycle.md.
+	perPlayerScale = 0.15,
 	-- Rare cakes (GDD §5): rolled per cake, announced server-wide.
 	rare = {
 		golden = { chance = 0.04, caloriesMult = 3 },
 		rainbow = { chance = 0.01, caloriesMult = 1.5, guaranteedRarity = "epic" },
 	},
+}
+
+-- ── Layer gate (eat top-down, ONE layer at a time) ──────────────────────
+-- Bites may not dig below the current TOP band's bottom until that band is
+-- consumed (leveled or auto-swept, §7.6). Once the top layer is gone the
+-- active floor drops and the next layer unlocks. Trying to eat the still-
+-- locked layer beneath shows a "finish the top layer first" cue on the
+-- client (the server enforces the floor either way). enabled=false restores
+-- the old free-dig behavior (a single bite could cut through many layers).
+CakeConfig.layerGate = {
+	enabled = true,
+	-- Surface within this many studs of the active floor counts as "eaten to
+	-- the floor here" (the top layer is gone at this spot) -> the client cues
+	-- the lock. Tiny vs. band thickness, so it only fires at the true floor.
+	lockEpsilon = 0.3,
+	cueInterval = 1.2, -- seconds between locked cues (client debounce)
 }
 
 -- ── Cycle (GDD §9) ──────────────────────────────────────────────────────

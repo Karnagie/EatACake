@@ -42,6 +42,8 @@ function QuestsSubs.Start(data, services)
 		end
 		local userId = player.UserId
 		if not services.PersistenceService.IsLoaded(userId) then
+			-- Joining: profile not ready (R8 — never silent, mirrors CakeSubs).
+			Log.Once(SCOPE, `claim-preload-{userId}`, `{player.Name}: ClaimQuest before profile load — dropped until loaded`)
 			return
 		end
 		-- Peek the reward kind BEFORE consuming (never eat a claim on a

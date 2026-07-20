@@ -21,8 +21,9 @@ effect hook + `SetSetting(id, value)` fire-and-forget (server coerces
 `value == true`).
 
 ## Effects hook
-`SettingsSubsClient.applySetting(id, value)` — apply SoundService group
-volumes etc. per game. Currently logs only.
+The local `applySetting(id, value)` inside `SettingsSubsClient.Start` (NOT a
+module member — it's the in-`Start` effect hook to fill in per game): apply
+SoundService group volumes etc. Currently logs only.
 
 ## Files
 Server: `CoreSection` (storage), `SettingsSubs`. Client: `SettingsData`,

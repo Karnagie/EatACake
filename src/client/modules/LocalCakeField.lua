@@ -28,6 +28,11 @@ local gridCfg = CakeConfig.grid
 
 local field: buffer
 local meta = nil -- nil until the first snapshot arrives
+-- Layer gate (features/cake-sim.md): index of the current TOP edible band.
+-- Seeded from the snapshot meta, refreshed by CakeCycleUpdate (SetActiveBand)
+-- so PredictBite clamps to the SAME floor the server does — no phantom
+-- craters cut into a still-locked layer beneath.
+local activeBandIndex = 0
 
 local changedSet: { [number]: boolean } = {}
 local changedList: { number } = {}
@@ -62,9 +67,35 @@ function LocalCakeField.ApplySnapshot(buf: buffer, newMeta)
 	end
 	buffer.copy(field, 0, buf, 0)
 	meta = newMeta
+	activeBandIndex = newMeta.activeBandIndex or #newMeta.composition
 	table.clear(changedSet)
 	table.clear(changedList)
 	avalancheStuds3 = 0
+end
+
+--API
+-- Layer gate: refresh the active (top) band from a CakeCycleUpdate so the
+-- prediction floor tracks the server between snapshots.
+function LocalCakeField.SetActiveBand(index: number)
+	if type(index) == "number" and index >= 1 then
+		activeBandIndex = index
+	end
+end
+
+--API
+function LocalCakeField.ActiveBandIndex(): number
+	return activeBandIndex
+end
+
+--API
+-- Studs height of the active band's floor — bites can't go below it while
+-- the layer gate is on. nil before the first snapshot.
+function LocalCakeField.ActiveFloorStuds(): number?
+	if meta == nil then
+		return nil
+	end
+	local idx = math.clamp(activeBandIndex, 1, #meta.composition)
+	return math.max(meta.composition[1].top, meta.composition[idx].bottom)
 end
 
 --API
@@ -99,7 +130,16 @@ function LocalCakeField.PredictBite(px: number, pz: number, radiusStuds: number,
 	end
 	local preH = GridUtil.SurfaceHeightAt(field, gridCfg, meta.footprint, px, pz) or 0
 	local layer = CakeOps.LayerAtStuds(meta.composition, layersCfg, preH)
+	-- Match the server's clamp: the active-band floor while the layer gate is
+	-- on, else the absolute core floor. Otherwise prediction would carve below
+	-- a locked layer and the next delta would snap it back (visible pop).
 	local floorUnits = GridUtil.StudsToUnits(meta.composition[1].top)
+	if CakeConfig.layerGate.enabled then
+		local activeFloor = LocalCakeField.ActiveFloorStuds()
+		if activeFloor then
+			floorUnits = GridUtil.StudsToUnits(activeFloor)
+		end
+	end
 	local removed, changed = CakeOps.ApplyBite(
 		field, gridCfg, meta.footprint, meta.composition, layersCfg,
 		px, pz, radiusStuds, depthStuds, floorUnits

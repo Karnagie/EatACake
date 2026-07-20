@@ -82,9 +82,25 @@ function StomachService.IsFull(userId: number, capacity: number): boolean
 end
 
 --API
--- Converts the whole belly into bankable calories and empties it.
--- Returns the banked amount (0 if nothing stored), or nil if no profile.
--- The caller credits EconomyService.AddCalories and fires the updates.
+-- Directly sets the belly to `fill`/`stored` (both clamped >= 0). Used by the
+-- gym fat-DRAIN, which computes them from the session baseline (start fill ×
+-- (1 - burnProgress)) and banks the calories delta itself. Returns false if
+-- the profile isn't loaded.
+function StomachService.SetBelly(userId: number, fill: number, stored: number): boolean
+	local section = stomach(userId)
+	if not section then
+		return false
+	end
+	section.fill = math.max(0, fill)
+	section.stored = math.max(0, stored)
+	return true
+end
+
+--API
+-- Converts the whole belly into bankable calories and empties it (used by
+-- auto-gym and the instant-burn reward — the manual gym drains gradually via
+-- SetBelly instead). Returns the banked amount (0 if nothing stored), or nil
+-- if no profile. The caller credits EconomyService.AddCalories and fires updates.
 function StomachService.Burn(userId: number, efficiency: number, bonusMult: number): number?
 	local section = stomach(userId)
 	if not section then

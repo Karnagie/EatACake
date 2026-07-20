@@ -1,12 +1,20 @@
 --[[
 	BodySubs — body/gym domain orchestration (R4, GDD §8):
-	  * GymStart / GymTap remotes + the 4 Hz session-payout loop
-	  * auto-gym for pass holders
+	  * gym fat-DRAIN sessions: GymPrompt start (+ instant-burn) / GymTap remote /
+	    the stepHz drain loop that banks calories as the belly empties and STOPS
+	    when the player steps away from the machine
+	  * auto-gym (full burn) for pass holders + the "burn" reward kind
 	  * body replication: "StomachFill" player attribute (clients morph
 	    locally) + authoritative WalkSpeed (fullness penalty, caramel slow)
 
 	Cross-subs contract: CakeSubs/UpgradeSubs call RefreshBody(player) after
 	anything that changes fill or stats.
+
+	Gym model (see features/body-gym.md + GymService): pressing the prompt opens a
+	session that drains the belly from its start fill to 0 — passively (burnSpeed)
+	and per TAP (burnPerTap) — banking stored → calories (× gymEff) as it goes.
+	The instantBurn upgrade removes a slice on press (final tier = all of it).
+	Leaving the machine ends the session and keeps the partially-burned belly.
 ]]
 
 local Players = game:GetService("Players")
@@ -88,13 +96,38 @@ function BodySubs.Start(data, services)
 	uStomach = Net.Update("StomachUpdate")
 
 	local gymCfg = bodyCfg.gym
+	local stepTick = 1 / math.max(1, gymCfg.stepHz)
 
-	local function payout(player: Player, bonus: number, event: string)
+	-- Applies a GymService step/instant result: subtracts the drain's OWN delta
+	-- from the current belly (so a mid-session bite survives — see GymService),
+	-- banks the calorie delta, and resyncs the HUD belly bar + WalkSpeed/morph.
+	local function creditResult(player: Player, result)
 		local userId = player.UserId
-		local banked = services.StomachService.Burn(
-			userId, services.StatsService.GymEfficiency(userId), bonus
-		)
+		local state = services.StomachService.GetState(userId)
+		if state then
+			services.StomachService.SetBelly(userId, state.fill - result.dFill, state.stored - result.dStored)
+		end
+		if result.bankDelta and result.bankDelta > 0 then
+			services.EconomyService.AddCalories(userId, result.bankDelta)
+			services.ProgressService.AddStat(userId, "lifetimeCalories", result.bankDelta)
+			EconomySubs.SendCurrency(player)
+		end
+		-- fill/stored changed → HUD belly bar + RefreshBody (speed/morph attr).
+		BodySubs.SendStomach(player)
+	end
+
+	-- Full instant burn (auto-gym + the "burn" reward): empties the belly at
+	-- once and banks stored × gymEff. The manual gym drains gradually instead.
+	local function burnAll(player: Player, event: string)
+		local userId = player.UserId
+		-- Supersede any manual drain session so its baseline can't re-inflate the
+		-- belly we're emptying here (the drain rewrites fill from startFill/tick).
+		services.GymService.EndSession(userId)
+		local banked = services.StomachService.Burn(userId, services.StatsService.GymEfficiency(userId), 1)
 		if banked == nil then
+			-- Both callers pre-check GetState, so this is defensive — but R8:
+			-- never return silently from a missing-profile failure path.
+			Log.Once(SCOPE, `burnall-noprofile-{userId}`, `{player.Name}: {event} burn before profile load — skipped`)
 			return
 		end
 		if banked > 0 then
@@ -102,31 +135,47 @@ function BodySubs.Start(data, services)
 			services.ProgressService.AddStat(userId, "lifetimeCalories", banked)
 			EconomySubs.SendCurrency(player)
 		end
-		uGym:FireClient(player, { event = event, banked = banked, bonus = bonus })
-		-- Full stomach resync (fill/stored just changed) — includes RefreshBody.
+		uGym:FireClient(player, { event = event, banked = banked })
+		-- Full stomach resync (fill/stored now 0) — includes RefreshBody.
 		BodySubs.SendStomach(player)
 	end
 
 	-- Gym sessions start from the machine's ProximityPrompt (server-side
 	-- event — no client remote to spoof a start from across the map).
 	local ProximityPromptService = game:GetService("ProximityPromptService")
-	local promptName = data.MapConfigData.gym.promptName
+	local promptName = data.MapConfigData.checkpoint.promptName
 	ProximityPromptService.PromptTriggered:Connect(function(prompt, player)
 		if prompt.Name ~= promptName then
 			return
 		end
 		local userId = player.UserId
 		if not services.PersistenceService.IsLoaded(userId) then
+			Log.Once(SCOPE, `gym-preload-{userId}`, `{player.Name}: GymPrompt before profile load — gym start ignored`)
 			return
+		end
+		if services.GymService.HasSession(userId) then
+			return -- already burning (re-press) — ignore, don't re-seed instant-burn
 		end
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if not root or not services.MapService.NearGym(root.Position) then
-			return -- not at a machine (§13 range validation)
+			return -- not at a machine (§13 range validation — legit, no log)
 		end
-		local ok = services.GymService.StartSession(userId)
-		if ok then
-			uGym:FireClient(player, { event = "started", duration = gymCfg.duration })
+		local state = services.StomachService.GetState(userId)
+		if not state or state.fill < gymCfg.minStartFill then
+			return -- nothing to burn (empty belly) — legit no-op, no session opened
+		end
+		local gymEff = services.StatsService.GymEfficiency(userId)
+		local start =
+			services.GymService.StartSession(userId, state.fill, state.stored, services.StatsService.InstantBurn(userId), gymEff)
+		creditResult(player, start) -- applies the instant-burn slice (if any)
+		if start.complete then
+			-- instant-burn maxed (final tier) — whole belly gone on press, no session.
+			services.GymService.EndSession(userId)
+			uGym:FireClient(player, { event = "instant", banked = start.bankedTotal })
+		else
+			uGym:FireClient(player, { event = "started" })
+			uGym:FireClient(player, { event = "progress", remain01 = 1 - start.burned01 })
 		end
 	end)
 
@@ -134,23 +183,23 @@ function BodySubs.Start(data, services)
 		services.GymService.RegisterTap(player.UserId)
 	end)
 
-	-- Reward kind "burn": instant fat burn (dev product) — a full gym
-	-- payout at neutral bonus, anywhere, no machine needed.
+	-- Reward kind "burn": instant fat burn (dev product) — a full burn anywhere,
+	-- no machine needed.
 	RewardGrantSubs.Register("burn", function(player: Player, reward, source: string?)
 		local stomachState = services.StomachService.GetState(player.UserId)
 		if not stomachState then
 			return nil
 		end
-		payout(player, 1, "instant")
+		burnAll(player, "instant")
 		return { kind = "burn" }
 	end)
 
-	-- Session payouts (4 Hz) + auto-gym + 1 Hz surface/caramel check + body
+	-- Fat-drain loop (stepHz) + auto-gym + 1 Hz surface/caramel check + body
 	-- morph lerp (MUST be server-side: runtime part-size changes are reverted by
 	-- replication when written client-side).
 	local morphCfg = bodyCfg.morph
 	local morphTick = 1 / math.max(1, morphCfg.rateHz)
-	local payoutAcc, surfaceAcc, morphAcc = 0, 0, 0
+	local drainAcc, surfaceAcc, morphAcc = 0, 0, 0
 	-- Natural (unscaled) size of each torso part, captured once on first sight —
 	-- so we always scale from the TRUE original, never compound the scaled value.
 	-- Pruned (below) when the part is destroyed, so it can't leak.
@@ -217,17 +266,41 @@ function BodySubs.Start(data, services)
 	end
 
 	RunService.Heartbeat:Connect(function(dt)
-		payoutAcc += dt
-		if payoutAcc >= 0.25 then
-			payoutAcc = 0
+		drainAcc += dt
+		if drainAcc >= stepTick then
+			local mdt = drainAcc
+			drainAcc = 0
 			for _, player in ipairs(Players:GetPlayers()) do
 				local userId = player.UserId
-				if services.GymService.IsFinishDue(userId) then
-					local bonus = services.GymService.FinishSession(userId)
-					if bonus then
-						payout(player, bonus, "result")
+				if not services.PersistenceService.IsLoaded(userId) then
+					continue -- profile unloaded (leaving/session-taken): skip gym work
+				end
+				if services.GymService.HasSession(userId) then
+					-- STOP if the player stepped away from the machine (user rule:
+					-- "walk away and it all stops"). Keeps the drained belly as-is.
+					local character = player.Character
+					local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+					if not root or not services.MapService.NearGym(root.Position) then
+						services.GymService.EndSession(userId)
+						uGym:FireClient(player, { event = "stopped" })
+					else
+						local result = services.GymService.Advance(
+							userId,
+							mdt,
+							services.StatsService.BurnSpeed(userId),
+							services.StatsService.BurnPerTap(userId)
+						)
+						if result then
+							creditResult(player, result)
+							if result.complete then
+								services.GymService.EndSession(userId)
+								uGym:FireClient(player, { event = "result", banked = result.bankedTotal })
+							else
+								uGym:FireClient(player, { event = "progress", remain01 = 1 - result.burned01 })
+							end
+						end
 					end
-				elseif services.StatsService.HasAutoGym(userId) and runtime.gymSessions[userId] == nil then
+				elseif services.StatsService.HasAutoGym(userId) then
 					local stomachState = services.StomachService.GetState(userId)
 					local last = runtime.lastAutoBurn[userId] or 0
 					if
@@ -236,7 +309,7 @@ function BodySubs.Start(data, services)
 						and os.clock() - last >= gymCfg.autoBurnInterval
 					then
 						runtime.lastAutoBurn[userId] = os.clock()
-						payout(player, 1, "auto")
+						burnAll(player, "auto")
 					end
 				end
 			end

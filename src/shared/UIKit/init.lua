@@ -1,5 +1,5 @@
 --[[ UIKit
-	Candy-style ReactRoblox UI kit: Theme (single source of style) + 23 components + demos.
+	Candy-style ReactRoblox UI kit: Theme (single source of style) + component catalog (the Components table below) + demos.
 	HOW to build UI with it (mandatory reading for agents): .claude/skills/roblox-ui-kit/SKILL.md
 	Integration contract: docs/features/ui-kit.md
 	Requires @jsdotlua react packages in ReplicatedStorage.Packages (vendored as ReactLua-Packages.rbxmx; see feature doc).
@@ -25,6 +25,7 @@ local Components = {
 	PetsInspectPanel = require(ComponentsFolder.PetsInspectPanel),
 	StatPill = require(ComponentsFolder.StatPill),
 	Hud = require(ComponentsFolder.Hud),
+	HudMenuButton = require(ComponentsFolder.HudMenuButton),
 	Badge = require(ComponentsFolder.Badge),
 	DayCard = require(ComponentsFolder.DayCard),
 	RewardsPanel = require(ComponentsFolder.RewardsPanel),
@@ -40,6 +41,8 @@ local Components = {
 	AnnounceBanner = require(ComponentsFolder.AnnounceBanner),
 	UpgradeRow = require(ComponentsFolder.UpgradeRow),
 	UpgradesPanel = require(ComponentsFolder.UpgradesPanel),
+	HexNode = require(ComponentsFolder.HexNode),
+	HexTreeOverlay = require(ComponentsFolder.HexTreeOverlay),
 	GymOverlay = require(ComponentsFolder.GymOverlay),
 	PetRevealOverlay = require(ComponentsFolder.PetRevealOverlay),
 	RebirthPanel = require(ComponentsFolder.RebirthPanel),

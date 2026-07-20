@@ -17,8 +17,16 @@ return event strings the subscription acts on (R3).
   snapshot broadcast.
 
 ## Composition roll (`RollComposition`)
-frosting top + 3-5 middles (no immediate repeats) + core bottom; thickness
-normalized to a rolled total height; radius scales ~√players. Rare cakes:
+frosting top + 3-4 middles (no immediate repeats) + core bottom; thickness
+normalized to a rolled total height. The loaf FOOTPRINT is a FIXED landmark
+(~90×78 studs) regardless of population. **Easy-mode co-op scaling**: the rolled
+`totalHeight` is multiplied by `1 + composition.perPlayerScale·(players−1)` (0.15;
+players present at spawn), clamped to `grid.maxHeight` (90) — a TALLER (== longer
+to eat) shared loaf for a crowd, SUBLINEAR so more mouths still clear it faster
+(solo ~40 min, 4 players ~18 min, not ~10; see `2026-07-19_easy-mode-balance.md`).
+Height is the only population lever because the 64-cell grid caps the footprint.
+Boss HP also scales with players.
+Rare cakes:
 golden 4% (x3 calories), rainbow 1% (Epic+ pet) — плюс **hourly event**: if
 no rare cake happened for 3600 s the next cake is forced golden (§12.2).
 
@@ -29,7 +37,11 @@ Server biome per cake = biome unlocked by the highest-rebirth player online
 
 ## Update contract
 `CakeCycleUpdate` (1 Hz; 4 Hz in boss): `{phase, progress, timer,
-boss = {hp, maxHp}?, rareKind, biome, avalanche, announce}`.
+boss = {hp, maxHp}?, rareKind, biome, activeBandIndex, announce}`.
+(`activeBandIndex` = the layer-gate top edible band, so the client's bite
+prediction/lock tracks the server between snapshots — see
+`features/cake-sim.md`. Avalanche/slump energy is a client-local value in
+`LocalCakeField`, never networked.)
 `announce` keys: `new-cake`, `rare-cake-golden`, `rare-cake-rainbow`,
 `boss-spawned`, `cake-cleared` → client `announce-*` locale keys.
 

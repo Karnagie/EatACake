@@ -57,6 +57,7 @@ function CakeSubsClient.Start(data, modules)
 	local profileLive = false -- first StomachUpdate = server accepts our bites
 	local isFull = false -- belly at capacity: eating is blocked (server + here)
 	local lastFullCueAt = 0
+	local lastLockCueAt = 0 -- layer gate: debounce the "eat the top layer first" cue
 	local lastComboSent = 1
 	local announceSeq = 0
 
@@ -111,6 +112,10 @@ function CakeSubsClient.Start(data, modules)
 			return
 		end
 		cyclePhase = payload.phase or cyclePhase
+		-- Layer gate: keep the prediction/lock floor in sync between snapshots.
+		if type(payload.activeBandIndex) == "number" then
+			LocalCakeField.SetActiveBand(payload.activeBandIndex)
+		end
 		if cyclePhase == "boss" then
 			if not BossView.IsShown() then
 				BossView.Show()
@@ -250,6 +255,30 @@ function CakeSubsClient.Start(data, modules)
 		if not point then
 			return
 		end
+
+		-- Layer gate: you must finish the current TOP layer before the next
+		-- unlocks. If the surface directly ahead is already eaten down to the
+		-- active-band floor, this bite would try to dig into the still-locked
+		-- layer beneath — cue "eat the top layer first" and skip it (the server
+		-- clamps to this floor too; here it's the instant, local nudge). The
+		-- cue only fires for HELD input, so passive Auto-Eat never nags.
+		if CakeConfig.layerGate.enabled then
+			local activeFloor = LocalCakeField.ActiveFloorStuds()
+			if activeFloor and LocalCakeField.ActiveBandIndex() >= 2
+				and point.Y - CakeConfig.grid.origin.y <= activeFloor + CakeConfig.layerGate.lockEpsilon
+			then
+				if eating then
+					local now = os.clock()
+					if now - lastLockCueAt > CakeConfig.layerGate.cueInterval then
+						lastLockCueAt = now
+						SoundPool.Play("uiClick", { pitchMult = 0.55 })
+						pushAnnounce("layer-locked")
+					end
+				end
+				return
+			end
+		end
+
 		rEatAt:FireServer(point)
 
 		-- No prediction/FX until the server confirms it accepts our bites

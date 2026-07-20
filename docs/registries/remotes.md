@@ -10,6 +10,7 @@
 | `ClientReady` | `PlayerLifecycleSubs` | `features/persistence.md` |
 | `EatAt` | `CakeSubs` | `features/cake-sim.md` |
 | `GymTap` | `BodySubs` | `features/body-gym.md` |
+| `ReturnToCheckpoint` | `CakeSubs` | `features/checkpoint.md` |
 | `BuyUpgrade` | `UpgradeSubs` | `features/upgrades.md` |
 | `EquipPet` | `PetSubs` | `features/pets.md` |
 | `DoRebirth` | `RebirthSubs` | `features/rebirth.md` |

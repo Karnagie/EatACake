@@ -7,7 +7,12 @@
 	  field         buffer (u16 heights, GridUtil layout), allocated in Init
 	  footprint     rounded-rect loaf { hx, hz, corner } in cells
 	  composition   array bottom-up: { { id, bottom, top } } (studs)
-	  floorUnits    core-top height in u16 units — bites clamp here
+	  floorUnits    core-top height in u16 units — the absolute cake floor
+	  activeBandIndex  index into composition of the current TOP edible band
+	                   (layer gate): bites can't dig below this band's bottom
+	  activeFloorUnits bottom of the active band in u16 units — the layer-gate
+	                   bite clamp (== floorUnits when the gate is disabled or
+	                   only the core remains). Advances as layers are eaten.
 	  cakeIndex     increments per cake (clients drop stale deltas)
 	  rareKind      nil | "golden" | "rainbow"
 	  biome         current biome id (from rebirth progression)
@@ -32,6 +37,10 @@ CakeStateData.footprint = { hx = 1, hz = 1, corner = 1 }
 CakeStateData.delayedSettle = {} :: { { i: number, dueAt: number } }
 CakeStateData.composition = {}
 CakeStateData.floorUnits = 0
+-- Layer gate (features/cake-sim.md): the top edible band and its floor. Set
+-- by CakeFieldService.ResetCake, advanced by ScanStats as layers are eaten.
+CakeStateData.activeBandIndex = 0
+CakeStateData.activeFloorUnits = 0
 CakeStateData.cakeIndex = 0
 CakeStateData.rareKind = nil :: string?
 CakeStateData.biome = "factory"

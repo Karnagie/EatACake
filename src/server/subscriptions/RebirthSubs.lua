@@ -41,6 +41,8 @@ function RebirthSubs.Start(data, services)
 	Net.Remote("DoRebirth").OnServerEvent:Connect(function(player)
 		local userId = player.UserId
 		if not services.PersistenceService.IsLoaded(userId) then
+			-- Joining: profile not ready (R8 — never silent, mirrors CakeSubs).
+			Log.Once(SCOPE, `rebirth-preload-{userId}`, `{player.Name}: DoRebirth before profile load — dropped until loaded`)
 			return
 		end
 		local cost = services.ProgressService.RebirthCost(userId)
@@ -53,6 +55,10 @@ function RebirthSubs.Start(data, services)
 			return
 		end
 		services.UpgradeService.ResetForRebirth(userId)
+		-- End any active fat-burn session first: the gym drain rewrites the belly
+		-- from its captured baseline each tick, which would otherwise re-inflate
+		-- the belly we're about to empty (BodySubs).
+		services.GymService.EndSession(userId)
 		services.StomachService.Burn(userId, 0, 0) -- empty the belly, bank nothing
 		services.EconomyService.ResetCalories(userId)
 		local rebirths = services.ProgressService.ApplyRebirth(userId)

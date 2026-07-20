@@ -1,8 +1,11 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 local React = require(ReplicatedStorage.Packages.React)
 local Theme = require(script.Parent.Parent.Theme)
 
 local STYLE = Theme.Toggle
+-- Stable initial knob Position (React sets it once; the ref-tween owns it after).
+local KNOB_INITIAL = UDim2.fromScale(STYLE.KnobOffCenter.X, STYLE.KnobOffCenter.Y)
 
 local function rounded(name, position, size, corner, zIndex, gradient, color, anchorPoint, backgroundTransparency)
 	local children = {
@@ -44,6 +47,25 @@ local function Toggle(props)
 	local knobOutlineColor = value and STYLE.KnobOnOutlineColor or STYLE.KnobOffOutlineColor
 	local knobCenter = value and STYLE.KnobOnCenter or STYLE.KnobOffCenter
 
+	-- Slide the knob across the track on change (snap on first mount). The ref
+	-- owns Position; React only ever writes the stable KNOB_INITIAL, so the
+	-- tween is never clobbered. KnobFill rides along as a child of the knob.
+	local knobRef = React.useRef(nil)
+	local firstRun = React.useRef(true)
+	React.useLayoutEffect(function()
+		local knob = knobRef.current
+		if not knob then
+			return
+		end
+		local goal = UDim2.fromScale(knobCenter.X, knobCenter.Y)
+		if firstRun.current then
+			firstRun.current = false
+			knob.Position = goal
+			return
+		end
+		TweenService:Create(knob, Theme.Feel.ToggleTween, { Position = goal }):Play()
+	end, { value })
+
 	return React.createElement("TextButton", {
 		Name = props.name or "Toggle",
 		AnchorPoint = props.anchorPoint or Vector2.new(0.5, 0.5),
@@ -82,31 +104,32 @@ local function Toggle(props)
 			zIndex + 1,
 			trackGradient
 		),
-		Knob = rounded(
-			"Knob",
-			UDim2.fromScale(knobCenter.X, knobCenter.Y),
-			UDim2.fromScale(STYLE.KnobSize.X, STYLE.KnobSize.Y),
-			1,
-			zIndex + 2,
-			nil,
-			knobOutlineColor,
-			Vector2.new(0.5, 0.5)
-		),
-		KnobFill = rounded(
-			"KnobFill",
-			UDim2.fromScale(
-				knobCenter.X - STYLE.KnobSize.X * 0.5 + STYLE.KnobSize.X * STYLE.KnobFillPosition.X,
-				knobCenter.Y - STYLE.KnobSize.Y * 0.5 + STYLE.KnobSize.Y * STYLE.KnobFillPosition.Y
-			),
-			UDim2.fromScale(
-				STYLE.KnobSize.X * STYLE.KnobFillSize.X,
-				STYLE.KnobSize.Y * STYLE.KnobFillSize.Y
-			),
-			1,
-			zIndex + 3,
-			knobGradient,
-			knobColor
-		),
+		Knob = React.createElement("Frame", {
+			Name = "Knob",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = KNOB_INITIAL, -- ref-tweened to knobCenter (see effect above)
+			Size = UDim2.fromScale(STYLE.KnobSize.X, STYLE.KnobSize.Y),
+			BackgroundColor3 = knobOutlineColor,
+			BorderSizePixel = 0,
+			ZIndex = zIndex + 2,
+			ref = knobRef,
+		}, {
+			Corner = React.createElement("UICorner", { CornerRadius = UDim.new(1, 0) }),
+			KnobFill = React.createElement("Frame", {
+				Name = "KnobFill",
+				Position = UDim2.fromScale(STYLE.KnobFillPosition.X, STYLE.KnobFillPosition.Y),
+				Size = UDim2.fromScale(STYLE.KnobFillSize.X, STYLE.KnobFillSize.Y),
+				BackgroundColor3 = knobGradient and Color3.new(1, 1, 1) or knobColor,
+				BorderSizePixel = 0,
+				ZIndex = zIndex + 3,
+			}, {
+				Corner = React.createElement("UICorner", { CornerRadius = UDim.new(1, 0) }),
+				Gradient = knobGradient and React.createElement("UIGradient", {
+					Color = knobGradient,
+					Rotation = 90,
+				}) or nil,
+			}),
+		}),
 	})
 end
 

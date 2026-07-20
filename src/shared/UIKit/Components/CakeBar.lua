@@ -9,12 +9,16 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local React = require(ReplicatedStorage.Packages.React)
 local Theme = require(script.Parent.Parent.Theme)
+local Interaction = require(script.Parent.Parent.Interaction)
 local OutlinedText = require(script.Parent.OutlinedText)
 
 local function CakeBar(props)
 	local style = props.style or Theme.CakeBar
 	local zIndex = props.zIndex or 1
 	local progress01 = math.clamp(props.progress01 or 0, 0, 1)
+	-- Fill width glides to progress01 so boss HP / spawn countdowns sweep
+	-- smoothly instead of snapping frame-to-frame.
+	local fillRef = Interaction.useFillGlide(progress01)
 
 	local outerGradient = props.rare and style.RareOuterGradient or style.OuterGradient
 	local fillGradient = props.mode == "boss" and style.BossFillGradient or style.FillGradient
@@ -24,6 +28,7 @@ local function CakeBar(props)
 		AnchorPoint = props.anchorPoint or Vector2.new(0, 0),
 		Position = props.position or UDim2.fromScale(0, 0),
 		Size = props.size or UDim2.fromScale(1, 1),
+		Visible = props.visible ~= false,
 		BackgroundColor3 = Color3.new(1, 1, 1),
 		BorderSizePixel = 0,
 		ZIndex = zIndex,
@@ -53,7 +58,8 @@ local function CakeBar(props)
 				Name = "Fill",
 				AnchorPoint = Vector2.new(0, 0.5),
 				Position = UDim2.fromScale(0, 0.5),
-				Size = UDim2.fromScale(progress01, 1),
+				Size = Interaction.ZeroFill, -- glided to progress01 via fillRef
+				ref = fillRef,
 				BackgroundColor3 = Color3.new(1, 1, 1),
 				BorderSizePixel = 0,
 				ZIndex = zIndex + 2,

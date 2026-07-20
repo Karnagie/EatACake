@@ -5,7 +5,7 @@
 
 	Each day's reward is a REWARD DESCRIPTOR (the game-wide loot grammar,
 	see RewardGrantSubs / ADR-0002):
-	  { kind = "gold", amount = n }
+	  { kind = "gems", amount = n }
 	  -- per-game kinds (items, cases, exp...) are registered by their
 	  -- features in RewardGrantSubs and can be used here freely.
 

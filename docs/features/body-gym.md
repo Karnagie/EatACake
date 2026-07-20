@@ -1,24 +1,30 @@
-# Body & gym (stomach, morph, ball, mash minigame)
+# Body & gym (stomach, morph, ball, fat-burn)
 
 ## The loop (GDD §8)
 Bites add VOLUME to `stomach.fill` (capped at the capacity stat) and
-CALORIES to `stomach.stored` (unbanked). The gym converts stored → banked
-calories (`× gymEff stat × mash bonus`) and empties the belly. As fill rises
-the body INFLATES (morph). **At full you can't eat** — `StomachService.IsFull`
-makes `CakeSubs` drop the bite before it carves the cake (the client gates
-too, with a soft cue), WalkSpeed is −40% (linear with fill), and the rig
-becomes a rolling **ball** (below). The gym is the only release valve.
-Glutton ×2 fires once — on the single bite that TOPS YOU OFF
+CALORIES to `stomach.stored` (unbanked). The gym **DRAINS** the belly from its
+start fill to empty while you stand at the machine, banking `stored → calories`
+(`× gymEff`) as it goes (see Gym below). As fill rises the body INFLATES
+(morph); as the gym drains it, the body slims back down. **At full you can't
+eat** — `StomachService.IsFull` makes `CakeSubs` drop the bite before it carves
+the cake (the client gates too, with a soft cue), WalkSpeed is −40% (linear
+with fill), and the rig becomes a rolling **ball** (below). The gym is the only
+release valve. Glutton ×2 fires once — on the single bite that TOPS YOU OFF
 (`glutton = fill + volume ≥ capacity`), never on sustained overeating (now
-impossible).
+impossible). **Easy-mode**: `capacity` is large (base 2600 = ~50 s of eating per
+fill, ~50–160 bites — not the old ~4), so the loop is EATING-dominant and the gym
+is an occasional quick beat; see `features/upgrades.md` + `2026-07-19_easy-mode-balance.md`.
 
 ## State
 Profile section `stomach` `{fill, stored}` (persists across rejoins).
 Runtime: `PlayerRuntimeData.gymSessions/lastAutoBurn/lastMorphFill`.
 
 ## Replication
-- `StomachUpdate` (per bite / on join): `{fill, capacity, stored, gained,
-  glutton, layerId}` → HUD belly bar + floating numbers. The client also
+- `StomachUpdate` → HUD belly bar + floating numbers. The full shape
+  `{fill, capacity, stored, gained, glutton, layerId}` is the PER-BITE payload
+  (CakeSubs). The on-join push, each gym-DRAIN tick (~stepHz), and the
+  stop/complete resync go through `BodySubs.SendStomach` and carry only
+  `{fill, stored, capacity, gained}` (no `glutton`/`layerId`). The client also
   reads `fill ≥ capacity` from it to gate eating (CakeSubsClient `isFull`).
 - **Body morph = only the TORSO scales** (bigger + fatter with fill) — arms,
   legs and head keep their NATURAL size. NO proxy mesh, NO added parts. We
@@ -32,8 +38,9 @@ Runtime: `PlayerRuntimeData.gymSessions/lastAutoBurn/lastMorphFill`.
   to reach full / return to natural). The true natural size is captured once
   per torso part (never compound the scaled value); rigs without `OriginalSize`
   skip. ⚠ The huge torso can engulf the third-person camera at close zoom.
-- Server also writes attribute `StomachFill` (0..1, rounded 0.01) — HUD + the
-  tumble driver below.
+- Server also writes attribute `StomachFill` (0..1, rounded 0.01) — read by
+  the client tumble driver below (the HUD belly bar reads the `StomachUpdate`
+  payload above, not this attribute).
 - **Tumble** (`BallRollController`, `BodyConfig.tumble`): past `tumbleFill`
   EVERY client tumbles that character's whole (scaled) body forward as it MOVES,
   and settles it UPRIGHT when stopped, by rotating the ROOT joint's STATIC
@@ -69,20 +76,78 @@ Runtime: `PlayerRuntimeData.gymSessions/lastAutoBurn/lastMorphFill`.
   table + prune). (This is why the old client-side `BodyMorphController` never
   scaled this avatar.)
 
-## Gym
-Machines built by MapService carry a ProximityPrompt (`GymPrompt`). Server
-`PromptTriggered` (+ range re-check) → `GymService.StartSession` → client
-`GymUpdate {event="started", duration}` opens the mash UI. Taps =
-`GymTap` remote, counted server-side, capped at `tapsPerSecondCap ×
-elapsed` (§13). After `duration`, the 4 Hz payout loop closes the session:
-bonus 1..maxBonus by taps → `StomachService.Burn` → `EconomyService.
-AddCalories` → `GymUpdate {event="result", banked, bonus}` + coins FX.
-Auto-Gym pass: background burns every 6 s at bonus 1. Reward kind
-`burn` (instant fat burn dev product) reuses the same payout.
+## Gym (fat-DRAIN session)
+The gym machine lives on the **checkpoint platform** beside the cake (it moved
+off the old floor zone — see `features/checkpoint.md`; you return to it with
+F / the HUD button). It carries a ProximityPrompt (`GymPrompt`).
+
+**Model** (GymService owns the session math; BodySubs orchestrates): pressing
+the prompt captures the belly's START `fill`/`stored` as a baseline (and LOCKS
+`gymEff`) and opens a session with one **burn progress** `burned01` 0..1. At
+`burned01 = 1` the whole captured baseline is burned and ALL captured stored has
+banked. Each tick the drain reports its OWN delta (`dFill`/`dStored`) and
+BodySubs SUBTRACTS it from the current belly (not an overwrite), so a bite taken
+mid-session — the cake edge is reachable from the plate — survives instead of
+being clobbered. Progress advances two ways every server tick (`stepHz = 8`):
+- **passive** — `burnSpeed` stat (fraction of the belly per second)
+- **per TAP** — `burnPerTap` stat (fraction per registered tap; base 0.10 → 10
+  taps clear a full belly)
+
+`instantBurn` stat SEEDS `burned01` at start (a slice removed on press; the
+final tier seeds 1.0 = whole belly instantly, no session opened). Banking is
+monotone via a banked-so-far integer marker (`bankTarget = floor(startStored ×
+gymEff × burned01)`, credit the DELTA each tick) so the session total is exactly
+`floor(startStored × gymEff)` — no drift, no double-count.
+
+**Flow**: `PromptTriggered` (name `GymPrompt`) → IsLoaded gate → HasSession
+re-press guard → `MapService.NearGym` range → empty-belly guard
+(`fill < minStartFill`) → `GymService.StartSession(fill, stored, instantBurn,
+gymEff)`. BodySubs applies the result (`SetBelly` + bank the instant slice) and
+fires `GymUpdate {event="started"}` + `{event="progress", remain01}`. Taps =
+`GymTap` remote → `RegisterTap` (counted server-side, capped `tapsPerSecondCap ×
+elapsed`; note fast tapping only drains the player's OWN bounded belly, so there
+is no calorie exploit). The stepHz drain loop calls `GymService.Advance` →
+`creditResult` (SetBelly + AddCalories(bankDelta) + ProgressService lifetimeCalories
++ SendCurrency + SendStomach) → `{event="progress"}`; on `burned01 ≥ 1` it ends
+the session with `{event="result", banked}`.
+
+**Stepping away STOPS it** (the user's rule): the drain loop re-checks
+`NearGym` each tick; leaving (or losing the character) ends the session
+(`{event="stopped"}`, no payout — the drained belly is kept) and closes the
+overlay client-side.
+
+**Full burns** (`burnAll`, EndSession-first so a live session can't re-inflate
+the belly): Auto-Gym pass burns the whole belly every 6 s (`{event="auto"}`);
+reward kind `burn` (instant-burn dev product) does the same anywhere
+(`{event="instant"}`). Rebirth also ends any live session before emptying.
+
+**Overlay** (`GymOverlay`, kit): a full-screen transparent layer with a
+bottom-**RIGHT** round TAP button (phone thumb), a "fat left" bar that eases
+toward the streamed `remain01`, and a `{n}% FAT` label. The root frame is NOT
+Active, so the player can still walk (left stick) — which is how you leave to
+stop the burn. The TAP button squishes/springs on every tap via the shared
+`Interaction` press primitive (ADR-0006).
+
+**Prompt hidden when empty (per-player).** The world `GymPrompt` ("Burn it
+off!") would otherwise show even with nothing to burn. `BodySubsClient` mirrors
+the server's `fill < minStartFill` no-op guard: it tracks the local belly `fill`
+(from `StomachUpdate`) and, from the ~5 Hz proximity loop, sets the prompt's
+`Enabled` **locally** (resolved by class under `Map.Checkpoint.GymMachine`, so it
+affects only this client and needs no prompt-name coupling). Empty → prompt
+hidden; ≥ `minStartFill` → shown. The server guard still stands regardless
+(defense in depth). ⚠ The gate SKIPS while the upgrade tree is open
+(`AppRoot.GetOpenPanel() == "Upgrades"`) — that modal disables ALL checkpoint
+prompts so the E-to-close press can't also start a gym session behind the
+overlay (`UpgradesSubsClient`); the gate must not re-enable the prompt and fight
+it. The modal restores prompts on close and the gate re-applies next tick.
 
 ## Files
-`ProfileSchema/StomachSection`, `services/StomachService` (`IsFull`),
-`GymService`, `subscriptions/BodySubs` (server body morph lerp); shared
-`config/BodyConfig` (`morph`/`tumble`/`eatGesture`); client
-`BallRollController` (tumble), `BodySubsClient`, kit `GymOverlay`. Full-belly
-bite block lives in `CakeSubs` (see `features/cake-sim.md`).
+`ProfileSchema/StomachSection`, `services/StomachService` (`IsFull`,
+`SetBelly`, `Burn`), `services/GymService` (drain-session math),
+`services/StatsService` (`BurnSpeed`/`BurnPerTap`/`InstantBurn`/`GymEfficiency`),
+`subscriptions/BodySubs` (gym orchestration + drain loop + body morph lerp);
+shared `config/BodyConfig` (`gym`/`morph`/`tumble`/`eatGesture`),
+`config/UpgradeConfig` (`burnSpeed`/`burnPerTap`/`instantBurn` gym stats — see
+`features/upgrades.md`); client `BallRollController` (tumble), `BodySubsClient`,
+`modules/AppRoot` (overlay props), kit `GymOverlay`. Full-belly bite block lives
+in `CakeSubs` (see `features/cake-sim.md`).
