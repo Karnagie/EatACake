@@ -1,0 +1,50 @@
+{
+  "name": "EatACake-Game",
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "Shared": {
+        "$path": "src/shared"
+      },
+      "Packages": {
+        "$path": "ReactLua-Packages.rbxmx"
+      }
+    },
+
+    "ServerScriptService": {
+      "Server": {
+        "$className": "Folder",
+        "ServerBootstrap": {
+          "$path": "src/server/ServerBootstrap.server.lua"
+        },
+        "Common": {
+          "$path": "src/server/common"
+        },
+        "Game": {
+          "$path": "src/server/game"
+        }
+      }
+    },
+
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "Client": {
+          "$className": "Folder",
+          "LocalBootstrap": {
+            "$path": "src/client/LocalBootstrap.client.lua"
+          },
+          "Common": {
+            "$path": "src/client/common"
+          }
+        }
+      }
+    },
+
+    "SoundService": {
+      "$properties": {
+        "RespectFilteringEnabled": true
+      }
+    }
+  }
+}
