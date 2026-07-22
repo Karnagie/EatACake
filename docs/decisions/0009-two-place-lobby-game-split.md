@@ -86,9 +86,14 @@ consistency emergent instead of hand-synced.
 - Fill `PlaceConfig.lobbyPlaceId/gamePlaceId` after publishing; teleport is
   disabled until then.
 - Author `ReplicatedStorage.Assets.LobbyEnvironment` (ADR-0007 pattern).
-- **Place-aware client**: `AppRoot` currently shows the full HUD in both places;
-  gate the cake HUD / 8-button meta menu by place. Wire the "Play"/"Return"
-  buttons to the `RequestTeleport` remote.
+- **Place-aware client** (also closes a live R8 gap): the client is fully
+  common, so the GAME place currently surfaces lobby-only controls with **no
+  handler** — the checkpoint `UpgradeStation` prompt + HUD upgrade/rebirth
+  buttons fire `BuyUpgrade`/`DoRebirth` into a server without
+  `UpgradeSubs`/`RebirthSubs` (silent dead controls). Gate the cake HUD /
+  8-button meta menu by place, and either hide the game-place upgrade/rebirth
+  controls + station prompt OR move those subs to common. Wire the
+  "Play"/"Return" buttons to the `RequestTeleport` remote.
 - Move the upgrade-station opener off the game checkpoint onto a lobby hub
   station.
 - Reward kinds whose handler is game-only (`burn`, registered by `BodySubs`)

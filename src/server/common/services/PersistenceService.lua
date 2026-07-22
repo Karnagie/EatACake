@@ -275,6 +275,7 @@ function PersistenceService.LoadProfile(player: Player): ({ [any]: any }?, boole
 
 	profileData.profiles[userId] = profile.Data
 	profileData.sessions[userId] = profile
+	profileData.released[userId] = nil -- fresh (or re-acquired) session: not released
 
 	if not profile:IsActive() then
 		-- Session ended during load (OnSessionEnd may have fired before it
@@ -316,6 +317,24 @@ function PersistenceService.Unload(userId: number, intentional: boolean?)
 	if session ~= nil then
 		if intentional and session:IsActive() then
 			profileData.releasing[userId] = true
+			profileData.released[userId] = nil
+			-- The SAFE "released" signal is OnAfterSave of the ENDING save: it fires
+			-- only AFTER the release UpdateAsync commits and the on-disk lock is
+			-- cleared (ProfileStore.luau:924). OnSessionEnd fires EARLIER, before the
+			-- write (line 725), and already clears profiles[]/sessions[] — so
+			-- IsLoaded()==false does NOT mean the lock is free. TeleportSubs must wait
+			-- on IsReleased(), not IsLoaded(). Guard on `not IsActive()` so a
+			-- mid-flight AUTOSAVE's OnAfterSave (session still active, lock not
+			-- cleared) can't false-signal the release.
+			local conn
+			conn = session.OnAfterSave:Connect(function()
+				if not session:IsActive() then
+					profileData.released[userId] = true
+					if conn then
+						conn:Disconnect()
+					end
+				end
+			end)
 		end
 		session:EndSession() -- OnSessionEnd clears PlayerProfileData (+ releasing)
 	end
@@ -324,6 +343,14 @@ end
 --API
 function PersistenceService.IsLoaded(userId: number): boolean
 	return profileData.profiles[userId] ~= nil
+end
+
+--API
+-- True once an INTENTIONAL pre-teleport release's ending save has COMMITTED
+-- (on-disk lock cleared). This — not IsLoaded — is the safe signal that the
+-- destination place can load fresh data. Used by TeleportSubs before TeleportAsync.
+function PersistenceService.IsReleased(userId: number): boolean
+	return profileData.released[userId] == true
 end
 
 return PersistenceService
