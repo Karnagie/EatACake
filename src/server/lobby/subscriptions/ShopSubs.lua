@@ -11,8 +11,9 @@
 	  failed grant -> NotProcessedYet (Roblox retries — money is never eaten).
 	• RequestGamepass (key): validate -> PromptGamePassPurchase.
 	• PromptGamePassPurchaseFinished: mark runtime ownership + resync.
-	• On join (SendShop): fetch gamepass ownership (yields, task.spawn'ed by
-	  the caller's thread), push the full catalogue snapshot.
+	• On join (SendShop): push the full catalogue snapshot. Gamepass ownership
+	  is fetched by PassOwnershipSubs (COMMON, runs in both places), which
+	  re-pushes this catalogue once ownership resolves.
 
 	ShopUpdate payload:
 	  { products = ARRAY {key,label,priceRobux,section,order,oneTime,owned},
@@ -85,45 +86,6 @@ function ShopSubs.SendShop(player: Player)
 	uShop:FireClient(player, shopPayload(player.UserId))
 end
 
---API
--- Fetch gamepass ownership from Roblox (YIELDS per pass — call from a
--- task.spawn'ed join thread), then push the snapshot.
-function ShopSubs.RefreshPassOwnership(player: Player)
-	local userId = player.UserId
-	for key, def in pairs(ShopData.gamepasses) do
-		if type(def.gamePassId) == "number" and def.gamePassId > 0 then
-			local ok, owns = pcall(function()
-				return MarketplaceService:UserOwnsGamePassAsync(userId, def.gamePassId)
-			end)
-			if player.Parent ~= Players then
-				return -- left mid-fetch; writing now would leak the runtime cache
-			end
-			if ok then
-				ShopService.SetPassOwned(userId, key, owns == true)
-			else
-				Log.Warn(SCOPE, `UserOwnsGamePassAsync failed for '{key}': {owns}`)
-			end
-		end
-	end
-	if player.Parent == Players then
-		ShopSubs.SendShop(player)
-		-- Perk attributes the client reads locally (auto-eat hold, HUD hints).
-		local owned = ShopData.passOwnership[userId]
-		local function ownsAny(...): boolean
-			if owned == nil then
-				return false
-			end
-			for _, key in ipairs({ ... }) do
-				if owned[key] then
-					return true
-				end
-			end
-			return false
-		end
-		player:SetAttribute("AutoEat", ownsAny("autoeat", "vip"))
-		player:SetAttribute("AutoGym", ownsAny("autogym", "vip"))
-	end
-end
 
 -- Returns the validated, non-empty grants list, or nil if ANY entry can't be
 -- granted. Validating the WHOLE list BEFORE granting anything is what makes
@@ -220,8 +182,9 @@ end
 -- Join-state hook: PlayerLifecycleSubs calls this after profile load + ClientReady.
 function ShopSubs.PushInitialState(player: Player)
 	ShopSubs.SendShop(player)
-	-- Gamepass ownership needs web calls — refresh + re-push async.
-	task.spawn(ShopSubs.RefreshPassOwnership, player)
+	-- Gamepass ownership is fetched by PassOwnershipSubs (COMMON — runs in both
+	-- the lobby and the game place); it re-pushes this catalogue once ownership
+	-- resolves. (Was ShopSubs.RefreshPassOwnership, which couldn't run in game.)
 end
 
 function ShopSubs.Start(data, services, subscriptions)
