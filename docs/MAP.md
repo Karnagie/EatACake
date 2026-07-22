@@ -43,11 +43,15 @@
 | shared bite math (prediction contract) | `src/shared/CakeOps.lua` |
 | shared game configs (ADR-0004) | `src/shared/config/*.lua` |
 | vendored ProfileStore (never modify) | `src/shared/lib/ProfileStore.luau` |
-| ScreenGui resolver | `src/client/data/UiData.lua` |
-| locale stub (T/Tr) | `src/client/data/LocaleData.lua` |
-| React root owner (kit UI) | `src/client/modules/UiRoot.lua` |
+| ScreenGui resolver | `src/client/common/data/UiData.lua` |
+| locale stub (T/Tr) | `src/client/common/data/LocaleData.lua` |
+| React root owner (kit UI) | `src/client/common/modules/UiRoot.lua` |
 | React packages (vendored model → `ReplicatedStorage.Packages`) | `ReactLua-Packages.rbxmx` |
-| editable scene models (place-authored → `ReplicatedStorage.Assets`, cloned by MapService) | Studio-authored (ADR-0007) |
+| editable scene models (place-authored → `ReplicatedStorage.Assets`, cloned): game `Environment`+`Checkpoint` by MapService, `LobbyEnvironment` by LobbyMapService | Studio-authored (ADR-0007) |
+| **lobby/game place split** — partitions + project files | `src/{server,client}/{common,lobby,game}/…`; `game`/`lobby`/`default`(=combined)`.project.json`; partition-aware bootstrap (ADR-0009) |
+| lobby↔game teleport (Option A handoff) | `TeleportSubs` (common), `PlaceConfig` (shared, PlaceIds), `RequestTeleport` remote (ADR-0009) |
+| gamepass ownership (perks in BOTH places) | `PassOwnershipSubs` (common) |
+| lobby hub scene builder | `LobbyMapService` + `LobbySubs` (lobby) |
 
 ## Lookup
 

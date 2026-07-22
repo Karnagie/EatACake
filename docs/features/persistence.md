@@ -41,10 +41,26 @@ Sections removed from the schema are preserved in stored data untouched.
 - `PersistenceService.LoadProfile(player) -> (profile?, isNew)` — yields;
   kicks the player on lock conflict/failure. `isNew` is true only for a
   genuinely fresh profile (never on failed reads).
-- `PersistenceService.Save(userId)` — immediate save for critical moments
-  (Robux purchases). Routine saving is automatic.
-- `PersistenceService.Unload(userId)` — final save + session end (on leave).
+- `PersistenceService.Save(userId)` — immediate save for critical moments:
+  Robux purchases AND in-game earning **milestones** (upgrade buy, cake-clear
+  reward, treasure find, gym-drain complete / instant-burn). Short game rounds
+  never reach the 300s autosave (first 150s skipped), so without milestone saves
+  a crash would lose the round. Routine saving is otherwise automatic.
+- `PersistenceService.Unload(userId, intentional?)` — final save + session end
+  (on leave). `intentional = true` marks a deliberate pre-teleport release: it
+  sets `PlayerProfileData.releasing[userId]`, which `OnSessionEnd` consumes to
+  SUPPRESS the `session-taken` kick (the player is being moved on purpose, not
+  displaced). Routine leave omits it.
 - `PersistenceService.IsLoaded(userId)`.
+
+## Cross-place handoff (lobby ↔ game)
+DataStores are universe-scoped, so both places share ONE `PlayerProfiles`
+session lock. The profile FOLLOWS the player: the source place folds playtime,
+`Save`s, `Unload(userId, true)`s and WAITS for the lock to release, THEN
+`TeleportAsync`; the destination runs the unchanged `LoadProfile` (lock already
+free → fresh data). Never `Steal=true` (P5). Owner: `TeleportSubs` (common) +
+`PlaceConfig` (PlaceIds). See ADR-0009. Verify ONLY on PUBLISHED places — Studio
+mock stores are per-VM and share no lock.
 
 ## Lifecycle
 `PlayerLifecycleSubs` wires PlayerAdded (load) and PlayerRemoving (unload).

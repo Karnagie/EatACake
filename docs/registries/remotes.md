@@ -22,6 +22,7 @@
 | `RequestGamepass` | `ShopSubs` | `features/shop.md` |
 | `RedeemCode` | `CodesSubs` | `features/promo-codes.md` |
 | `SetSetting` | `SettingsSubs` | `features/settings.md` |
+| `RequestTeleport` | `TeleportSubs` | ADR-0009 / `features/persistence.md` |
 
 ## remoteUpdates/ (server → client)
 
