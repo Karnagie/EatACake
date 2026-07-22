@@ -10,8 +10,11 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Net = require(Shared:WaitForChild("Net"))
 local Log = require(Shared:WaitForChild("Log"))
 
-local EconomySubs = require(script.Parent.EconomySubs)
-local BodySubs = require(script.Parent.BodySubs)
+-- Resolved from the subscriptions registry in Start (cross-partition safe):
+-- EconomySubs is COMMON (currency resync); BodySubs is GAME (absent in the
+-- lobby partition this sub lives in — the RefreshBody call below is guarded).
+local EconomySubs
+local BodySubs
 
 local SCOPE = "UpgradeSubs"
 
@@ -40,7 +43,9 @@ function UpgradeSubs.PushInitialState(player: Player)
 	UpgradeSubs.SendUpgrades(player)
 end
 
-function UpgradeSubs.Start(data, services)
+function UpgradeSubs.Start(data, services, subscriptions)
+	EconomySubs = subscriptions.EconomySubs
+	BodySubs = subscriptions.BodySubs
 	services_ = services
 	uUpgrades = Net.Update("UpgradesUpdate")
 
@@ -76,7 +81,9 @@ function UpgradeSubs.Start(data, services)
 		end
 		UpgradeSubs.SendUpgrades(player)
 		EconomySubs.SendCurrency(player)
-		BodySubs.RefreshBody(player) -- capacity / run speed may have changed
+		if BodySubs then
+			BodySubs.RefreshBody(player) -- capacity / run speed may have changed (game only)
+		end
 		-- Milestone save: a purchase spends calories + grants a permanent tier;
 		-- persist now so a crash before the ~300s autosave can't lose it.
 		services.PersistenceService.Save(userId)

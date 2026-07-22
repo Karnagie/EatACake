@@ -24,8 +24,10 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Net = require(Shared:WaitForChild("Net"))
 local Log = require(Shared:WaitForChild("Log"))
 
-local EconomySubs = require(script.Parent.EconomySubs)
-local RewardGrantSubs = require(script.Parent.RewardGrantSubs)
+-- Resolved from the subscriptions registry in Start — both live in the COMMON
+-- partition (static script.Parent requires break once this sub is in game/).
+local EconomySubs
+local RewardGrantSubs
 
 local SCOPE = "BodySubs"
 
@@ -92,7 +94,9 @@ function BodySubs.PushInitialState(player: Player)
 	BodySubs.SendStomach(player)
 end
 
-function BodySubs.Start(data, services)
+function BodySubs.Start(data, services, subscriptions)
+	EconomySubs = subscriptions.EconomySubs
+	RewardGrantSubs = subscriptions.RewardGrantSubs
 	services_ = services
 	bodyCfg = data.CakeConfigData.body
 	stomachCfg = bodyCfg.stomach

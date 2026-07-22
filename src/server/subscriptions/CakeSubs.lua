@@ -23,9 +23,12 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Net = require(Shared:WaitForChild("Net"))
 local Log = require(Shared:WaitForChild("Log"))
 
-local RewardGrantSubs = require(script.Parent.RewardGrantSubs)
+-- RewardGrantSubs + PetSubs live in the COMMON partition — resolved from the
+-- subscriptions registry in Start (a static require breaks once this sub is in
+-- game/). BodySubs is in the SAME game partition, so it stays a static require.
+local RewardGrantSubs
+local PetSubs
 local BodySubs = require(script.Parent.BodySubs)
-local PetSubs = require(script.Parent.PetSubs)
 
 local SCOPE = "CakeSubs"
 
@@ -55,7 +58,9 @@ function CakeSubs.PushInitialState(player: Player)
 	CakeSubs.SendSnapshot(player)
 end
 
-function CakeSubs.Start(data, services)
+function CakeSubs.Start(data, services, subscriptions)
+	RewardGrantSubs = subscriptions.RewardGrantSubs
+	PetSubs = subscriptions.PetSubs
 	services_ = services
 	state = data.CakeStateData
 	cakeCfg = data.CakeConfigData.cake

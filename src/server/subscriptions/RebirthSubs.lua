@@ -9,8 +9,12 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Net = require(Shared:WaitForChild("Net"))
 local Log = require(Shared:WaitForChild("Log"))
 
-local EconomySubs = require(script.Parent.EconomySubs)
-local BodySubs = require(script.Parent.BodySubs)
+-- EconomySubs is COMMON; BodySubs is GAME (absent in the lobby partition where
+-- rebirth lives — its SendStomach resync is guarded). Both resolved from the
+-- subscriptions registry in Start. UpgradeSubs is in the SAME lobby partition,
+-- so it stays a static require.
+local EconomySubs
+local BodySubs
 local UpgradeSubs = require(script.Parent.UpgradeSubs)
 
 local SCOPE = "RebirthSubs"
@@ -40,7 +44,9 @@ function RebirthSubs.PushInitialState(player: Player)
 	RebirthSubs.SendRebirth(player)
 end
 
-function RebirthSubs.Start(data, services)
+function RebirthSubs.Start(data, services, subscriptions)
+	EconomySubs = subscriptions.EconomySubs
+	BodySubs = subscriptions.BodySubs
 	services_ = services
 	uRebirth = Net.Update("RebirthUpdate")
 
@@ -63,8 +69,13 @@ function RebirthSubs.Start(data, services)
 		services.UpgradeService.ResetForRebirth(userId)
 		-- End any active fat-burn session first: the gym drain rewrites the belly
 		-- from its captured baseline each tick, which would otherwise re-inflate
-		-- the belly we're about to empty (BodySubs).
-		services.GymService.EndSession(userId)
+		-- the belly we're about to empty. GymService is GAME-only — in the lobby
+		-- (where rebirth lives) there's never an active session, so skip it there.
+		if services.GymService then
+			services.GymService.EndSession(userId)
+		end
+		-- StomachService is COMMON so the belly (a persisted profile section) can
+		-- be emptied from either place.
 		services.StomachService.Burn(userId, 0, 0) -- empty the belly, bank nothing
 		services.EconomyService.ResetCalories(userId)
 		local rebirths = services.ProgressService.ApplyRebirth(userId)
@@ -73,7 +84,10 @@ function RebirthSubs.Start(data, services)
 		RebirthSubs.SendRebirth(player)
 		UpgradeSubs.SendUpgrades(player)
 		EconomySubs.SendCurrency(player)
-		BodySubs.SendStomach(player)
+		-- Belly HUD only exists in the game place; skip the resync in the lobby.
+		if BodySubs then
+			BodySubs.SendStomach(player)
+		end
 	end)
 end
 

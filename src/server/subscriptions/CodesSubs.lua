@@ -13,13 +13,17 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Net = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Net"))
 local Log = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Log"))
-local RewardGrantSubs = require(script.Parent.RewardGrantSubs)
+-- Resolved from the subscriptions registry in Start (RewardGrantSubs lives in
+-- the COMMON partition; a static script.Parent require breaks once this sub
+-- moves to the lobby partition — see the lobby/game split).
+local RewardGrantSubs
 
 local SCOPE = "CodesSubs"
 
 local CodesSubs = {}
 
-function CodesSubs.Start(data, services)
+function CodesSubs.Start(data, services, subscriptions)
+	RewardGrantSubs = subscriptions.RewardGrantSubs
 	local codesData = data.CodesData
 	local CodesService = services.CodesService
 	local PersistenceService = services.PersistenceService

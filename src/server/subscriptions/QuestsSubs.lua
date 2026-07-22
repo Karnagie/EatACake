@@ -9,7 +9,10 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Net = require(Shared:WaitForChild("Net"))
 local Log = require(Shared:WaitForChild("Log"))
 
-local RewardGrantSubs = require(script.Parent.RewardGrantSubs)
+-- Resolved from the subscriptions registry in Start (RewardGrantSubs lives in
+-- the COMMON partition; a static script.Parent require breaks once this sub
+-- moves to the lobby partition — see the lobby/game split).
+local RewardGrantSubs
 
 local SCOPE = "QuestsSubs"
 
@@ -38,7 +41,8 @@ function QuestsSubs.PushInitialState(player: Player)
 	QuestsSubs.SendQuests(player)
 end
 
-function QuestsSubs.Start(data, services)
+function QuestsSubs.Start(data, services, subscriptions)
+	RewardGrantSubs = subscriptions.RewardGrantSubs
 	services_ = services
 	uQuests = Net.Update("QuestsUpdate")
 

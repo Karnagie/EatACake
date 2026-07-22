@@ -16,7 +16,10 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Net = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Net"))
 local Log = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Log"))
-local RewardGrantSubs = require(script.Parent.RewardGrantSubs)
+-- Resolved from the subscriptions registry in Start (RewardGrantSubs lives in
+-- the COMMON partition; a static script.Parent require breaks once this sub
+-- moves to the lobby partition — see the lobby/game split).
+local RewardGrantSubs
 
 local RewardsSubs = {}
 
@@ -100,7 +103,8 @@ function RewardsSubs.PushInitialState(player: Player)
 	RewardsSubs.SendTime(player)
 end
 
-function RewardsSubs.Start(data, services)
+function RewardsSubs.Start(data, services, subscriptions)
+	RewardGrantSubs = subscriptions.RewardGrantSubs
 	local dailyData = data.DailyRewardsData
 	local timeData = data.TimeRewardsData
 	DailyRewardService = services.DailyRewardService
