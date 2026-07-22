@@ -326,6 +326,17 @@ function PersistenceService.Unload(userId: number, intentional: boolean?)
 			-- on IsReleased(), not IsLoaded(). Guard on `not IsActive()` so a
 			-- mid-flight AUTOSAVE's OnAfterSave (session still active, lock not
 			-- cleared) can't false-signal the release.
+			--
+			-- RESIDUAL (bounded, accepted): OnAfterSave is a per-profile signal shared
+			-- by ALL saves. If a CONCURRENT save (e.g. a purchase's critical Save()
+			-- right before teleport) is mid-UpdateAsync when we release, its OnAfterSave
+			-- can fire AFTER the ending save synchronously cleared ActiveSessionCheck
+			-- (IsActive already false) but BEFORE the ending write commits — setting
+			-- `released` ~sub-second early. That only degrades the handoff to
+			-- ProfileStore's normal force-load on the destination (which still waits for
+			-- the real release) — never worse; the session-owner check stops any late
+			-- write from clobbering. Not cleanly closable without editing the vendored
+			-- lib (LastSavedData carries no MetaData). Verify on published places.
 			local conn
 			conn = session.OnAfterSave:Connect(function()
 				if not session:IsActive() then

@@ -82,7 +82,16 @@ function TeleportSubs.Send(player: Player): boolean
 	teleporting[player] = true
 	player:SetAttribute("Teleporting", true)
 
-	if services_.PersistenceService.IsLoaded(userId) then
+	if not services_.PersistenceService.IsLoaded(userId) then
+		-- No loaded profile to release (still joining, or already gone). Teleporting
+		-- now could race the in-flight LoadProfile for the lock — abort; the player
+		-- can retry once loaded. (Never teleport without a confirmed source release.)
+		Log.Once(SCOPE, `teleport-preload-{userId}`, `{player.Name}: RequestTeleport before profile load — ignored (retry once loaded)`)
+		player:SetAttribute("Teleporting", nil)
+		teleporting[player] = nil
+		return false
+	end
+	do
 		-- Fold leave-time bookkeeping BEFORE the release (mirrors PlayerRemoving;
 		-- EndSession is idempotent, so the later PlayerRemoving one is a no-op).
 		services_.TimeRewardService.EndSession(userId)
