@@ -51,6 +51,12 @@ function GroupRewardSubs.SendState(player: Player)
 	uGroup:FireClient(player, statePayload(player.UserId))
 end
 
+--API
+-- Join-state hook: PlayerLifecycleSubs calls this after profile load + ClientReady.
+function GroupRewardSubs.PushInitialState(player: Player)
+	GroupRewardSubs.SendState(player)
+end
+
 function GroupRewardSubs.Start(data, services)
 	local socialData = data.SocialData
 	SocialService = services.SocialService

@@ -32,6 +32,12 @@ function QuestsSubs.SendQuests(player: Player)
 	uQuests:FireClient(player, { quests = rows })
 end
 
+--API
+-- Join-state hook: PlayerLifecycleSubs calls this after profile load + ClientReady.
+function QuestsSubs.PushInitialState(player: Player)
+	QuestsSubs.SendQuests(player)
+end
+
 function QuestsSubs.Start(data, services)
 	services_ = services
 	uQuests = Net.Update("QuestsUpdate")

@@ -3,7 +3,7 @@
 ## What it does
 Loads, migrates, auto-saves and session-locks one profile per player.
 Built on vendored ProfileStore (`src/shared/lib/ProfileStore.luau`) — session
-locking, ~30s auto-save, retries and final save on shutdown are inherited.
+locking, ~300s auto-save (first ~150s after load skipped), retries and final save on shutdown are inherited.
 
 ## The schema
 Each top-level slice of the profile is one **section file** in

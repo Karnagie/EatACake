@@ -159,7 +159,7 @@ function CakeFieldService.ApplyBite(px: number, pz: number, radiusStuds: number,
 	local clampFloor = if cakeCfg.layerGate.enabled then state.activeFloorUnits else state.floorUnits
 	local removed, changed = CakeOps.ApplyBite(
 		field, grid, state.footprint, state.composition, cakeCfg.layers,
-		px, pz, radiusStuds, depthStuds, clampFloor
+		px, pz, radiusStuds, depthStuds, clampFloor, cakeCfg.sim.biteClearRefDepth
 	)
 
 	-- The chunk rips out NOW (net-dirty immediately); the crater only
@@ -210,6 +210,11 @@ function CakeFieldService.SettleStep(): number
 	local queued = state.settleQueued
 	local budget = cakeCfg.sim.settleBudget
 	local processed = 0
+	-- Clean cut (Req): the settle must NOT ooze INTO the cleared zone (cells within
+	-- sim.sliverSweepStuds of the active floor) — refilling cleared craters is what
+	-- left thin puddles. The full side keeps its sharp cut edge (an over-repose
+	-- cliff there just stops relaxing); the slope ABOVE the zone still forms the drip.
+	local clearedCeil = state.activeFloorUnits + GridUtil.StudsToUnits(cakeCfg.sim.sliverSweepStuds)
 
 	while processed < budget do
 		if queueHead > queueTail then
@@ -241,7 +246,7 @@ function CakeFieldService.SettleStep(): number
 						local j = GridUtil.Index(size, nx, nz)
 						local hj = GridUtil.ReadHeight(field, j)
 						local d = hi - hj
-						if d > reposeUnits then
+						if d > reposeUnits and hj > clearedCeil then -- guard: don't refill the cleared zone
 							local move = math.floor((d - reposeUnits) * moveFactor * layer.flowRate)
 							if move > 0 then
 								hi -= move
@@ -430,6 +435,80 @@ function CakeFieldService.ScanStats()
 	state.activeBandIndex = activeIndex
 	state.activeFloorUnits =
 		math.max(state.floorUnits, GridUtil.StudsToUnits(state.composition[activeIndex].bottom))
+
+	-- Clean cut (Req): sweep EVERY tiny leftover on the active floor down to the
+	-- floor. The SettleStep clearedCeil guard keeps the settle from refilling this
+	-- zone, so there is no sweep-vs-settle flicker (the drip forms ABOVE the zone).
+	-- Cheap (one 1 Hz scan). Deltas replicate the change to clients.
+	local floorU = state.activeFloorUnits
+	local sliverCeil = floorU + GridUtil.StudsToUnits(cakeCfg.sim.sliverSweepStuds)
+	if sliverCeil > floorU then
+		for z = 0, size - 1 do
+			for x = 0, size - 1 do
+				if GridUtil.InCake(size, footprint, x, z) then
+					local i = GridUtil.Index(size, x, z)
+					local h = GridUtil.ReadHeight(field, i)
+					if h > floorU and h <= sliverCeil then
+						GridUtil.WriteHeight(field, i, floorU)
+						markNetDirty(i)
+					end
+				end
+			end
+		end
+	end
+
+	-- Eaten-zone cleanup sweep (user req: the eaten section should be COMPLETELY
+	-- eaten — no small pieces). Snaps active-band cells that TOUCH a crater (a
+	-- neighbour near the active floor) down to the floor when the cell is either
+	-- (a) EATEN-INTO (bitten > eatenEpsilon below its band top) — cleans the ragged
+	-- rim + half-eaten crumbs + wax fragments so the bitten footprint becomes a
+	-- clean cliff — or (b) an ISOLATED full pillar/spike (>= minClearedNeighbors
+	-- crater neighbours) / a 1-cell wall (2 OPPOSITE). A FULL cell with a crater on
+	-- only ONE side is LEFT, so the clean cut edge (one side full, other floor)
+	-- survives; the loaf PERIMETER survives (out-of-cake neighbours are SUPPORT,
+	-- never a crater). Two-phase (collect, then apply) so a swept cell never changes
+	-- a later cell's neighbour test mid-scan. The SettleStep clearedCeil guard keeps
+	-- the settle from refilling the collapsed cells (no flicker). Forfeits the volume.
+	local remnant = cakeCfg.sim.remnantSweep
+	if remnant and remnant.enabled then
+		local clearedCeilU = floorU + GridUtil.StudsToUnits(remnant.clearedMarginStuds)
+		local bandTopU = GridUtil.StudsToUnits(state.composition[state.activeBandIndex].top)
+		local eatenCeilU = bandTopU - GridUtil.StudsToUnits(remnant.eatenEpsilonStuds)
+		local minCleared = remnant.minClearedNeighbors
+		local collapse = {}
+		for z = 0, size - 1 do
+			for x = 0, size - 1 do
+				if GridUtil.InCake(size, footprint, x, z) then
+					local i = GridUtil.Index(size, x, z)
+					local h = GridUtil.ReadHeight(field, i)
+					if h > floorU then
+						-- In-cake neighbour whose surface is a CRATER (near the active floor).
+						local left = x > 0 and GridUtil.InCake(size, footprint, x - 1, z)
+							and GridUtil.ReadHeight(field, i - 1) <= clearedCeilU
+						local right = x < size - 1 and GridUtil.InCake(size, footprint, x + 1, z)
+							and GridUtil.ReadHeight(field, i + 1) <= clearedCeilU
+						local back = z > 0 and GridUtil.InCake(size, footprint, x, z - 1)
+							and GridUtil.ReadHeight(field, i - size) <= clearedCeilU
+						local front = z < size - 1 and GridUtil.InCake(size, footprint, x, z + 1)
+							and GridUtil.ReadHeight(field, i + size) <= clearedCeilU
+						local cleared = (left and 1 or 0) + (right and 1 or 0) + (back and 1 or 0) + (front and 1 or 0)
+						if cleared > 0 then
+							local thinWall = (left and right) or (back and front) -- 2 OPPOSITE
+							if h <= eatenCeilU or cleared >= minCleared or thinWall then
+								table.insert(collapse, i)
+							end
+						end
+					end
+				end
+			end
+		end
+		for _, i in ipairs(collapse) do
+			if GridUtil.ReadHeight(field, i) > floorU then
+				GridUtil.WriteHeight(field, i, floorU)
+				markNetDirty(i)
+			end
+		end
+	end
 
 	return { progress = state.progress, topBandIndex = topBandIndex, sweptBand = sweptBand }
 end

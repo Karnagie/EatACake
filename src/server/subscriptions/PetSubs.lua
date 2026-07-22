@@ -56,6 +56,12 @@ function PetSubs.SendRoll(player: Player, roll)
 	uPetRoll:FireClient(player, roll)
 end
 
+--API
+-- Join-state hook: PlayerLifecycleSubs calls this after profile load + ClientReady.
+function PetSubs.PushInitialState(player: Player)
+	PetSubs.SendPets(player)
+end
+
 function PetSubs.Start(data, services)
 	services_ = services
 	uPets = Net.Update("PetsUpdate")

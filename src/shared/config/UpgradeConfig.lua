@@ -51,17 +51,18 @@ UpgradeConfig.upgrades = {
 		descKey = "upgrade-capacity-desc",
 		category = "body",
 		icon = "capacity",
-		-- Stomach volume in studs^3 of eaten cake. THE fix for "1 bite = full":
-		-- base 2600 holds ~50-160 bites (was 150 ≈ 4 bites) so a full belly is
-		-- ~50 s of eating. Grows ~4.4x so the belly keeps pace as bites get
-		-- bigger and the eating stretch stays ~40-55 s all game.
-		base = 2600,
+		-- Stomach volume in studs^3 of eaten cake. SAME-PACE ×3 for the 3× cake
+		-- (base 2600→7800): bites are ×3 bigger (biteDepth ×3), so ×3 capacity
+		-- holds the SAME NUMBER of bites (~50-160) and the eating stretch stays
+		-- ~50 s. Grows ~4.4x across the tree so the belly keeps pace as bites get
+		-- bigger. Costs unchanged (income/sec is flat).
+		base = 7800,
 		tiers = {
-			{ value = 3800, cost = 1050 },
-			{ value = 5200, cost = 3150 },
-			{ value = 7000, cost = 8400 },
-			{ value = 9000, cost = 21000 },
-			{ value = 11500, cost = 49000 },
+			{ value = 11400, cost = 1050 },
+			{ value = 15600, cost = 3150 },
+			{ value = 21000, cost = 8400 },
+			{ value = 27000, cost = 21000 },
+			{ value = 34500, cost = 49000 },
 		},
 	},
 	runSpeed = {
@@ -87,15 +88,20 @@ UpgradeConfig.upgrades = {
 		descKey = "upgrade-bite-radius-desc",
 		category = "eating",
 		icon = "biteRadius",
-		-- Crater radius in studs (base 3). Gentle growth (was capped at 12): a
-		-- ~4-stud bite max, so a single chomp never swallows the whole layer.
-		base = 3,
+		-- Bite SCOOP radius in studs (base 1.7). Smaller than before (was 3) because
+		-- the Req 2 clean bite clears its footprint to the layer FLOOR (not a shallow
+		-- dent), so a smaller scoop keeps roughly the same volume/bite and pacing
+		-- while each bite reads CLEAN (one side of the layer clears, the other stays
+		-- full). Grows the scoop (and forward reach) with upgrades. ⚠ STARTING value
+		-- — verify clear-time by feel in Studio (this + biteDepth, the clean-bite
+		-- "strength", set the pace together).
+		base = 1.7,
 		tiers = {
-			{ value = 3.3, cost = 910 },
-			{ value = 3.6, cost = 2750 },
-			{ value = 3.8, cost = 7350 },
-			{ value = 4.0, cost = 18000 },
-			{ value = 4.2, cost = 42000 },
+			{ value = 1.85, cost = 910 },
+			{ value = 2.0, cost = 2750 },
+			{ value = 2.15, cost = 7350 },
+			{ value = 2.25, cost = 18000 },
+			{ value = 2.4, cost = 42000 },
 		},
 	},
 	biteDepth = {
@@ -104,17 +110,19 @@ UpgradeConfig.upgrades = {
 		descKey = "upgrade-bite-depth-desc",
 		category = "eating",
 		icon = "biteDepth",
-		-- Crater depth in studs at the center (base 1.2). THE big "reduce final
-		-- sizes" nerf: max 1.8 (was 26!). Depth^radius^2 is what made endgame
-		-- bites gigantic and let a few chomps clear the whole cake — now a bite
-		-- is always a nibble and the layer gate keeps you eating top-down.
-		base = 1.2,
+		-- Crater depth in studs at the center. SAME-PACE ×3 for the 3× TALLER
+		-- cake (base 1.2→3.6, max 1.8→5.4): bite volume ∝ depth·radius², so ×3
+		-- depth = ×3 removed volume, exactly offsetting the ×3 edible volume so a
+		-- cake still clears in ~the same time (income stays flat via calories ÷3
+		-- in CakeConfig). Still a nibble vs the chunky ~12-16-stud layers, and the
+		-- layer gate clamps each bite to the current layer's floor. Costs unchanged.
+		base = 3.6,
 		tiers = {
-			{ value = 1.35, cost = 1200 },
-			{ value = 1.5, cost = 3500 },
-			{ value = 1.62, cost = 9450 },
-			{ value = 1.72, cost = 24000 },
-			{ value = 1.8, cost = 56000 },
+			{ value = 4.05, cost = 1200 },
+			{ value = 4.5, cost = 3500 },
+			{ value = 4.86, cost = 9450 },
+			{ value = 5.16, cost = 24000 },
+			{ value = 5.4, cost = 56000 },
 		},
 	},
 	eatSpeed = {

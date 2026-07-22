@@ -18,12 +18,15 @@ local CakeConfig = {}
 CakeConfig.grid = {
 	size = 64, -- 64x64 cells
 	cell = 1.5, -- studs per cell -> 96x96 stud field
-	-- Hard height ceiling. Raised from 70 to fit the per-player taller cake
-	-- (composition.perPlayerScale): a 4-player loaf tops out ~87 studs. u16
+	-- Hard height ceiling. Raised to 270 for the 3× TALLER cake (totalHeight ×3
+	-- + composition.perPlayerScale): a 4-player loaf tops out ~261 studs. u16
 	-- fixed-point (655 stud max) easily covers it; taller = taller collision
 	-- columns + render slabs, NOT more cells (weak-device vertex budget is
-	-- driven by cell count, which is unchanged).
-	maxHeight = 90,
+	-- driven by cell count, which is unchanged). Only the CURRENT + NEXT edible
+	-- layer are rendered as slabs now (CakeRenderer window); the bulk below is
+	-- hidden behind the textured CakeWrapper wall, so more/taller layers no
+	-- longer grow the slab vertex budget.
+	maxHeight = 270,
 	-- World placement: bottom of the cake sits at this Y; grid is centered
 	-- on origin XZ. MapService builds the platform to match.
 	origin = { x = 0, y = 2, z = 0 },
@@ -40,8 +43,42 @@ CakeConfig.sim = {
 	-- Auto-sweep (§7.6): when the volume remaining in the current top band
 	-- falls below this fraction of the band's initial volume, the tail
 	-- collapses to the band floor. Never make the player hunt crumbs.
-	autoSweepFraction = 0.1,
+	autoSweepFraction = 0.12,
 	statsScanHz = 1, -- full-field scan for progress % / auto-sweep
+	-- CLEAN CUT (Req 2): a bite clears its footprint TOWARD the active-band floor
+	-- (not a shallow paraboloid that leaves hard-to-eat crumbs), scaled by falloff
+	-- · (biteDepth / biteClearRefDepth) / hardness. At biteDepth = biteClearRefDepth
+	-- the center clears fully in ONE bite on a soft layer — so one side of a layer
+	-- clears completely while the other stays full: a clean cut edge with a soft
+	-- (dripping) rim. Bigger biteDepth widens the full-clear core (harder layers
+	-- take a few bites). Shared by CakeOps.ApplyBite (server + client prediction).
+	biteClearRefDepth = 3.6, -- studs; the biteDepth at which a bite center clears fully
+	-- Tiny leftover slivers on the active floor are swept away each stats scan
+	-- (Req 2 — the layer gate makes sub-floor bits impossible to eat, and they look
+	-- messy): any active-band cell within this many studs of the active floor
+	-- collapses to it. Small enough that meaningful partial cake is left alone.
+	sliverSweepStuds = 1.5,
+	-- Eaten-zone cleanup sweep (user req: the eaten section should be COMPLETELY
+	-- eaten — no small pieces). Each stats scan snaps partially-eaten OR isolated
+	-- active-band cells that touch a CRATER down to the active floor, so the eaten
+	-- area reads clean (no ragged rim, no leftover crumbs / wax fragments, no thin
+	-- walls). A FULL cell (still ~at the band top) with a crater on only ONE side is
+	-- LEFT — the clean cut edge (one side full, other floor) survives; the loaf
+	-- PERIMETER survives too (out-of-cake neighbours are SUPPORT, never a crater).
+	remnantSweep = {
+		enabled = true,
+		-- A neighbour within this many studs of the ACTIVE FLOOR = a crater ("cleared").
+		clearedMarginStuds = 2,
+		-- A cell bitten more than this many studs BELOW its band top = "eaten-into": if
+		-- it also touches a crater it snaps to the floor, so the whole bitten footprint
+		-- (incl. the soft rim) becomes a clean cliff, not a ragged gradient of half-
+		-- eaten cells. Small = sharper/cleaner edge.
+		eatenEpsilonStuds = 1,
+		-- A TALL isolated remnant (a full-height pillar/spike, or a 1-cell wall between
+		-- craters) is swept too: >= this many crater neighbours (of 4), or exactly 2
+		-- OPPOSITE. A solid EDGE (1 crater) / convex corner (2 ADJACENT) is preserved.
+		minClearedNeighbors = 3,
+	},
 }
 
 -- ── Networking (server -> client) ───────────────────────────────────────
@@ -80,6 +117,11 @@ CakeConfig.render = {
 	-- Bite feel: a target DROP bigger than this snaps instantly (the chunk
 	-- is ripped out); smaller moves and refills ooze at the layer's oozeSpeed.
 	snapDropStuds = 0.4,
+	-- Image textures on the LAYER slabs (layer.texture) TILE this many times across
+	-- the loaf instead of stretching ONCE (which read blurry/smeared up close).
+	-- ~4 ≈ one tile per ~24 studs, matching the wall's tiling. Baked into the slab
+	-- UVs; a value of 1 = the old stretch-once mapping.
+	layerTextureTiles = 4,
 	-- Crust = a thin HARD PALE SKIN at the TOP of every edible layer (reference:
 	-- the wax/butter slab crust), lighter than the layer body, painted into the
 	-- layer's texture. A cell shows crust while its surface is within `depth` of
@@ -118,11 +160,11 @@ CakeConfig.render = {
 		lift = 0.3, -- studs the intact wax sits above the slab surface (a clear coat)
 		dome = 0.1, -- studs each piece bulges up at its centre — small, so the
 		-- layer looks SMOOTH at rest; the pieces only read when they crack open
-		-- Coating colour = the current outermost layer, made BRIGHTER/more vivid
-		-- than the original (a glossy tasty glaze, not a dull pale wax):
-		satBoost = 1.4, -- ×saturation of the layer colour (more vivid)
-		valBoost = 1.12, -- ×brightness of the layer colour (brighter than original)
-		hideDepth = 1.5, -- studs below the layer top before the wax hides (eaten away)
+		-- Coating colour = the CURRENT outermost layer's OWN colour, only SLIGHTLY
+		-- brighter (a waxy sheen) so each layer's wax reads as THAT layer (user req 1):
+		satBoost = 1.05, -- keep ~the layer's OWN saturation (was 1.4 = too vivid/generic)
+		valBrighten = 0.22, -- brighten toward full value by this FRACTION of the headroom (1-v)
+		hideDepth = 1.5, -- studs the local wax must drop BELOW the outermost remaining layer before a piece HIDES (a HOLE eaten through — user req 3); above the underfoot squish so walking never hides it
 		edgeInset = 1.5, -- studs the wax stops short of the loaf edge (clean rim, no overhang)
 		gloss = 0.18, -- wax Reflectance
 		-- Cracking under the foot — driven by the DENT (per piece, reverting; the
@@ -132,6 +174,21 @@ CakeConfig.render = {
 		crackRadius = 3.8, -- studs around the foot whose pieces dent + crack
 		gap = 0.5, -- FRACTION each dented piece spreads toward its centroid (gap)
 		tilt = 18, -- degrees each pressed piece tips (one edge up — "наклоняются")
+	},
+	-- Outer WALL that hides the whole cake BELOW the single rendered top layer
+	-- (CakeRenderer window, Task 2 / Req 1). A plain textured Part (Block, NOT a
+	-- mesh — cheaper + the Texture path reliably tiles the image), sized to the
+	-- loaf, standing from the base up to the current top layer's bottom and
+	-- shrinking as each layer clears. Wears a RANDOM cake photo (one per cake, by
+	-- cakeIndex) on its 4 sides + top cap. Built + driven by CakeWrapper (client).
+	wrapper = {
+		textures = {
+			"rbxassetid://6116282545",
+			"rbxassetid://8235746297",
+		},
+		tileStuds = 26, -- studs per texture tile (Texture StudsPerTileU/V)
+		gloss = 0.05, -- Part.Reflectance
+		color = Color3.fromRGB(232, 205, 165), -- warm cake tint under the texture (shows if it's missing)
 	},
 	-- Eaten-through slabs are TUCKED this far under the local surface (a
 	-- FixedSize mesh can't delete faces; alpha does not render): deeper
@@ -154,6 +211,25 @@ CakeConfig.render = {
 		colorJitter = 0.10, -- ±lightness per column (deterministic noise)
 		minVisibleHeight = 0.05,
 	},
+	-- Walkable collision feel (the invisible column grid, Task 4 + Task 2 perf).
+	-- Biting a crater DROPS the columns instantly (you fall into the hole you just
+	-- bit), but cake OOZING/refilling back RISES the collision only at `riseRate`
+	-- studs/s — so refilling cake never punts the player up (the old "constant
+	-- bounce"): you stay partly BURIED in the crater and jump to get back on the
+	-- surface. A new cake / full snapshot snaps columns straight to truth (no
+	-- rate limit), so you never fall through fresh cake. The SAME riseRate caps
+	-- the server safety slab's rise (CakeCollisionService) so a wide/fast refill
+	-- can't punt a player resting on the coarse slab either; a rise bigger than
+	-- `slabSnapStuds` in one 5 Hz tick (a new cake / big reset, never a refill)
+	-- snaps.
+	-- PERF (Task 2): only the collision columns within `updateRadiusStuds` of the
+	-- LOCAL player are refreshed each frame. Eating + the settle automaton oozing
+	-- change cells across the WHOLE cake; resizing every affected CanCollide
+	-- column per frame re-indexes the physics broadphase and spiked the frame to
+	-- 60+ ms while eating (settling only when the surface stabilized). The player
+	-- only collides with nearby columns, so distant ones keep their last size
+	-- until the player approaches (the radius scan corrects them then).
+	collision = { riseRate = 6, slabSnapStuds = 8, updateRadiusStuds = 18 },
 	-- Rare-cake tints (renderer): saturated butter-gold, not washed beige.
 	goldenTint = { color = Color3.fromRGB(255, 200, 45), alpha = 0.5 },
 	rainbowTintAlpha = 0.6,
@@ -166,7 +242,12 @@ CakeConfig.render = {
 --           (math.huge = solid, never flows).
 --   flowRate: fraction of the excess moved per relaxation.
 --   hardness: time-to-eat multiplier (bite depth is divided by it).
---   calories: calories per stud^3 removed.
+--   calories: calories per stud^3 removed. RESCALED to ~⅓ of the pre-3×-cake
+--             values so the taller cake (×3 edible volume) pays the SAME total
+--             calories per cake and the same income/sec (bite volume is ×3 via
+--             biteDepth ×3 in UpgradeConfig) — the cake is bigger, not richer.
+--   texture:  OPTIONAL rbxassetid image mapped over the layer's top surface
+--             (only the CURRENT/NEXT rendered slabs; nil = flat body Color).
 --   walkSpeedMult: authoritative WalkSpeed mult while standing on it (BodySubs).
 -- Rendering (client, per-layer MeshPart):
 --   colors: top/bottom (body mesh uses a blend; crust lightens .top).
@@ -188,8 +269,9 @@ CakeConfig.layers = {
 		repose = 1.5,
 		flowRate = 0.6,
 		hardness = 0.5,
-		calories = 1.2,
+		calories = 0.4, -- was 1.2 (÷3 for the 3× cake)
 		colors = { top = Color3.fromRGB(255, 182, 220), bottom = Color3.fromRGB(246, 148, 196) },
+		texture = "rbxassetid://104319784921009", -- confetti frosting/icing
 		material = Enum.Material.SmoothPlastic,
 		transparency = 0,
 		gloss = 0.08,
@@ -206,15 +288,15 @@ CakeConfig.layers = {
 		repose = 3.0,
 		flowRate = 0.35,
 		hardness = 1.0,
-		calories = 1.0,
+		calories = 0.33, -- was 1.0 (÷3 for the 3× cake)
 		colors = { top = Color3.fromRGB(250, 198, 95), bottom = Color3.fromRGB(226, 168, 70) },
 		material = Enum.Material.Sand, -- grainy crumb pores
 		transparency = 0,
 		gloss = 0.02,
 		oozeSpeed = 2.5,
 		squishMult = 1.0,
-		jumpMult = 1.9,
-		bounce = 0.55, -- landing restitution: boing
+		jumpMult = 1.4, -- springy but not a launch (was 1.9 — toned, Task 4)
+		bounce = 0.3, -- landing restitution: a gentle boing (was 0.55 — toned)
 		sfx = "crumble",
 		shatterFx = false,
 		wobble = false,
@@ -225,8 +307,9 @@ CakeConfig.layers = {
 		repose = math.huge,
 		flowRate = 0,
 		hardness = 3.0,
-		calories = 2.0,
+		calories = 0.67, -- was 2.0 (÷3 for the 3× cake)
 		colors = { top = Color3.fromRGB(96, 58, 34), bottom = Color3.fromRGB(66, 38, 22) },
+		texture = "rbxassetid://18310304910", -- chocolate bar
 		material = Enum.Material.SmoothPlastic,
 		transparency = 0,
 		gloss = 0.15,
@@ -243,7 +326,7 @@ CakeConfig.layers = {
 		repose = 4.5,
 		flowRate = 0.2,
 		hardness = 1.5,
-		calories = 1.4,
+		calories = 0.47, -- was 1.4 (÷3 for the 3× cake)
 		colors = { top = Color3.fromRGB(238, 58, 88), bottom = Color3.fromRGB(196, 30, 62) },
 		-- Glass: wet refraction on high quality, plastic-smooth on low.
 		-- KNOWN engine tradeoff: semi-transparent Glass hides TRANSPARENT
@@ -255,8 +338,8 @@ CakeConfig.layers = {
 		gloss = 0.15,
 		oozeSpeed = 6,
 		squishMult = 1.3,
-		jumpMult = 1.25,
-		bounce = 0.3,
+		jumpMult = 1.12, -- slight spring (was 1.25 — toned, Task 4)
+		bounce = 0.16, -- soft jiggle, not a trampoline (was 0.3 — toned)
 		walkSpeedMult = 0.9,
 		sfx = "blorp",
 		shatterFx = false,
@@ -268,14 +351,14 @@ CakeConfig.layers = {
 		repose = 0.5,
 		flowRate = 0.95,
 		hardness = 0.3,
-		calories = 0.8,
+		calories = 0.27, -- was 0.8 (÷3 for the 3× cake)
 		colors = { top = Color3.fromRGB(255, 176, 224), bottom = Color3.fromRGB(158, 196, 255) },
 		material = Enum.Material.Fabric,
 		transparency = 0,
 		gloss = 0.03,
 		oozeSpeed = 9, -- visibly pours
 		squishMult = 1.2,
-		jumpMult = 1.1,
+		jumpMult = 1.05, -- light feet (was 1.1 — toned, Task 4)
 		walkSpeedMult = 1.15,
 		sfx = "pshhh",
 		shatterFx = false,
@@ -287,7 +370,7 @@ CakeConfig.layers = {
 		repose = 5.5,
 		flowRate = 0.07,
 		hardness = 2.0,
-		calories = 1.6,
+		calories = 0.53, -- was 1.6 (÷3 for the 3× cake)
 		colors = { top = Color3.fromRGB(230, 150, 42), bottom = Color3.fromRGB(190, 110, 22) },
 		material = Enum.Material.SmoothPlastic,
 		transparency = 0,
@@ -306,7 +389,7 @@ CakeConfig.layers = {
 		repose = 1.0,
 		flowRate = 0.85,
 		hardness = 0.8,
-		calories = 0.9,
+		calories = 0.3, -- was 0.9 (÷3 for the 3× cake)
 		colors = { top = Color3.fromRGB(164, 112, 64), bottom = Color3.fromRGB(132, 88, 50) },
 		material = Enum.Material.Sand,
 		transparency = 0,
@@ -315,6 +398,26 @@ CakeConfig.layers = {
 		squishMult = 1.1,
 		jumpMult = 1,
 		sfx = "shhh",
+		shatterFx = false,
+		wobble = false,
+	},
+	filling = {
+		id = "filling",
+		-- soft oozy cream/custard filling: eats easily, creeps back slowly,
+		-- pillowy underfoot. Wears a real filling photo texture (Task 3).
+		repose = 2.5,
+		flowRate = 0.4,
+		hardness = 0.7,
+		calories = 0.45, -- a mid-value layer (÷3 for the 3× cake)
+		colors = { top = Color3.fromRGB(255, 224, 150), bottom = Color3.fromRGB(238, 198, 120) },
+		texture = "rbxassetid://432607426", -- custard/cream filling
+		material = Enum.Material.SmoothPlastic,
+		transparency = 0,
+		gloss = 0.12,
+		oozeSpeed = 5,
+		squishMult = 1.4,
+		jumpMult = 1,
+		sfx = "squish",
 		shatterFx = false,
 		wobble = false,
 	},
@@ -342,23 +445,32 @@ CakeConfig.feel = {
 	surfacePollSeconds = 0.12, -- layer-under-feet refresh for jump/speed feel
 	onCakeYTolerance = 7, -- studs above/below the surface still "on the cake"
 	bounceMinImpact = 25, -- studs/s of fall speed before a layer bounces you
-	bounceMaxUp = 85, -- studs/s cap on the bounce-back velocity
+	bounceMaxUp = 60, -- studs/s cap on the bounce-back velocity (was 85 — toned)
 	crackMinImpact = 12, -- studs/s of fall speed for a landing crust crack
+	-- FLAT WHILE EATING (Task 4): while actively eating, the character must move
+	-- in a roughly STRAIGHT line — no trampoline bounce, no jump-boost. So the
+	-- landing bounce is suppressed and the per-layer jumpMult is capped to this
+	-- while eating; the toned per-layer feel below only applies when walking /
+	-- exploring (not eating).
+	noBounceWhileEating = true,
+	jumpMultCapWhileEating = 1, -- jump ≈ normal while eating (no sponge super-jump)
 }
 
 -- ── Composition rolls (GDD §5 "Cake composition") ───────────────────────
--- Every cake: frosting on top, core at the bottom, 3-4 middle layers drawn
+-- Every cake: frosting on top, core at the bottom, 10-13 middle layers drawn
 -- from the pool without immediate repeats. Thicknesses are rolled within
--- the ranges, then normalized to the rolled total height. FEWER, THICKER
--- layers: each layer is a floor you live on for a while, not a stripe.
+-- the ranges, then normalized to the rolled total height. CHUNKY layers: each
+-- layer is a floor you live on for a while, not a stripe — a ~3× TALLER cake
+-- with ~3× as many layers (the renderer only draws the current + next one, so
+-- the layer count is no longer capped by the slab vertex budget).
 CakeConfig.composition = {
-	middlePool = { "sponge", "chocolate", "jelly", "cotton", "caramel", "crumb" },
-	middleCountMin = 3,
-	middleCountMax = 4,
+	middlePool = { "sponge", "chocolate", "jelly", "cotton", "caramel", "crumb", "filling" },
+	middleCountMin = 10,
+	middleCountMax = 13,
 	frostingThickness = { 6, 8 }, -- studs
 	coreThickness = 3, -- exposed cavity floor, not edible
 	middleThickness = { 10, 16 },
-	totalHeight = { 50, 60 }, -- clamped to grid.maxHeight (×perPlayerScale first)
+	totalHeight = { 150, 180 }, -- 3× taller; clamped to grid.maxHeight (×perPlayerScale first)
 	-- Footprint: a rounded-rectangle LOAF (Drain-the-Lake scale). A LANDMARK,
 	-- not a per-player snack — the XZ size is FIXED for any population (the 64-
 	-- cell grid caps hx/hz at ~31; growing the grid would blow the render

@@ -88,6 +88,22 @@ BodyConfig.gym = {
 	-- Auto-gym (gamepass/VIP): background FULL burns when NOT in a session.
 	autoBurnInterval = 6, -- seconds between automatic burns
 	minStoredToBurn = 1, -- don't spam zero burns
+	-- Treadmill fat-burn run (user req 4): pressing the gym prompt MOUNTS the player
+	-- on the treadmill (BodySubs anchors the HRP + plays a looping run animation)
+	-- and the belly drains; when it EMPTIES they're unanchored + stepped off beside
+	-- the treadmill (MapService.GetGym*CFrame). Taps (burnPerTap) still speed the
+	-- run up; passive burnSpeed finishes it hands-free — so it always completes even
+	-- if the player does nothing (the "run until all fat is gone" spec). Since the
+	-- player is anchored ON the belt, the old "walk away to STOP" rule no longer
+	-- applies to a run (they're committed to it) — enabled=false restores the old
+	-- STANDING burn (stand at the machine, walk away to stop).
+	treadmill = {
+		enabled = true,
+		-- The run animation is played SERVER-side (replicates to everyone) from the
+		-- character's OWN Animate.run when available (rig-correct for R6/R15/layered);
+		-- this is the FALLBACK id when it isn't (R15 default run).
+		runAnimationId = "rbxassetid://913376220",
+	},
 }
 
 return BodyConfig

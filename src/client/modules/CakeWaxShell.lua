@@ -6,9 +6,14 @@
 	the whole top and rides the deforming surface. Under the foot the local
 	pieces SQUISH DOWN (they dent with the surface) and, because they dent, they
 	CRACK — each piece pulls in toward its own centre so gaps open and the CAKE
-	LAYER shows through; it heals as the dent recovers. Where the player EATS the
-	cake the surface drops and the wax there DISAPPEARS (raw cake exposed). The
-	wax never spawns or follows: only the local denting/cracking is dynamic.
+	LAYER shows through; it heals as the dent recovers. The coating tints to the
+	CURRENT top layer's own colour, a touch brighter (glazeColor, req 1). Where a
+	HOLE is eaten through the cake — a crater `hideDepth` below the outermost
+	remaining layer — the wax there DISAPPEARS, revealing the body/wall in the hole
+	(req 3); an even, hole-less drop keeps the coating and rides the surface down.
+	When a whole layer clears, the surface (maxH) drops to the next layer and the
+	wax re-coats it, retinted. The wax never spawns or follows: only the local
+	denting/cracking + this hide/reveal are dynamic.
 
 	ONE MeshPart holds the whole web (dynamic EditableMesh reserves worst-case
 	budget → build one scratch, FixedSize-clone, destroy the scratch; the clone
@@ -45,6 +50,7 @@ type Cell = {
 	restX: { number },
 	restZ: { number },
 	vc: { number }, -- grid cell index per boundary vertex (its own surface height)
+	tc: { number }, -- grid cell at each fan-TRIANGLE centre (area sample for the straddle hide)
 	cvid: number, -- CENTRE vertex (raised → each piece is a low DOME; the grooves
 	-- between domes are the always-visible "web" seams, no cake gap)
 	cx: number,
@@ -65,7 +71,15 @@ local cells: { Cell } = {}
 local built = false
 local buildFailed = false
 local building = false -- guards the async build against re-entry mid-yield
-local lastMaxH = -1 -- outermost remaining surface height (eaten reference + colour)
+-- Previous frame's OUTERMOST REMAINING layer height (studs): drives BOTH the
+-- coating tint and the HIDE threshold (a piece hides when its own surface has
+-- dropped hideDepth below this — i.e. a hole was eaten through). 1-frame lag,
+-- like the tint always had; starts 0 so nothing hides until the first real max.
+local lastMaxH = 0
+-- Cake this coating's hide-reference was last valid for; a new cake resets
+-- lastMaxH so a fresh (possibly shorter) cake doesn't read as all-holes for a
+-- lag frame (a 1-frame full-coating flash).
+local lastCakeIndex = -1
 
 --API
 function CakeWaxShell.Setup(localCakeField)
@@ -135,11 +149,14 @@ local function ensureBuilt()
 		return
 	end
 	local m = scratch :: EditableMesh
-	-- FixedSize meshes cull from CREATION-time bounds, so this thin shell is born
-	-- at the MIDDLE of the cake-top range it will ride (solo ~52 → 4-player ~89
-	-- world Y) — 0.75·maxHeight ≈ 67 — keeping the worst-case overshoot within the
-	-- proven-safe band. (0.5·maxHeight would sit ~42 studs under a 4-player top.)
-	local birthY = gridCfg.origin.y + gridCfg.maxHeight * 0.75
+	-- FixedSize meshes cull from CREATION-time bounds, so birth the shell at the
+	-- FULL cake height (like the slabs' creationY = maxHeight and CakeWrapper): the
+	-- wax rides the surface DOWNWARD as it's eaten (mesh-local y ~maxHeight at spawn
+	-- → ~0 at the core), so a full-height birth keeps every runtime vertex BELOW
+	-- the creation box — verts only ever move DOWN within bounds, the proven-safe
+	-- direction. (Was 0.75·maxHeight, which let the 3× cake's spawn surface ride
+	-- ~57 studs ABOVE the box — a cull/pop risk at the tall top.)
+	local birthY = gridCfg.origin.y + gridCfg.maxHeight
 	local boundR = ext * 1.1
 
 	-- Loaf outline (the same rounded rect as the slab, inset a touch) as a CCW
@@ -211,8 +228,15 @@ local function ensureBuilt()
 					m:SetFaceUVs(f, { uv, uv, uv })
 					m:SetFaceNormals(f, { nUp, nUp, nUp })
 				end
+				-- Grid cell at each fan-triangle centre ((centroid + two adjacent boundary
+				-- verts) / 3) — sampled per frame so a piece whose AREA spans a crater hides.
+				local tc = {}
+				for k = 1, nB do
+					local nx, nz = rx[k % nB + 1], rz[k % nB + 1]
+					tc[k] = cellAt((cx + rx[k] + nx) / 3, (cz + rz[k] + nz) / 3)
+				end
 				local ta = rng:NextNumber(0, math.pi * 2)
-				cells[#cells + 1] = { vids = vids, restX = rx, restZ = rz, vc = vc, cvid = cvid, cx = cx, cz = cz, ci = cellAt(cx, cz), tdx = math.cos(ta), tdz = math.sin(ta), dent = 0, wH = -1, wDent = -1, wHidden = false }
+				cells[#cells + 1] = { vids = vids, restX = rx, restZ = rz, vc = vc, tc = tc, cvid = cvid, cx = cx, cz = cz, ci = cellAt(cx, cz), tdx = math.cos(ta), tdz = math.sin(ta), dent = 0, wH = -1, wDent = -1, wHidden = false }
 			end
 		end
 	end)
@@ -281,11 +305,16 @@ local function surfaceBand(h: number): (number, string)
 	return top.top, top.id
 end
 
--- Bright, vivid glaze colour for a layer: its top colour with boosted
--- saturation + brightness (a tasty coating, brighter than the original).
+-- Glaze colour for a layer (user req 1): the layer's OWN top colour, only
+-- SLIGHTLY brighter — keep the hue/saturation, lift the brightness toward full
+-- value by a fraction of the remaining headroom (so it always brightens, even a
+-- near-white layer, without the old ×val clamp flattening bright layers). The
+-- wax on each layer thus clearly reads as THAT layer's colour, a touch brighter.
 local function glazeColor(id: string): Color3
 	local h, s, v = Color3.toHSV(layersCfg[id].colors.top)
-	return Color3.fromHSV(h, math.clamp(s * waxCfg.satBoost, 0, 1), math.clamp(v * waxCfg.valBoost, 0, 1))
+	local sat = math.clamp(s * waxCfg.satBoost, 0, 1)
+	local val = math.clamp(v + (1 - v) * waxCfg.valBrighten, 0, 1)
+	return Color3.fromHSV(h, sat, val)
 end
 
 --API
@@ -320,7 +349,6 @@ function CakeWaxShell.Step(dt: number, footPos: Vector3?)
 	local sink = frac.sinkDepth
 	local gap = waxCfg.gap
 	local lift = waxCfg.lift
-	local hideDepth = waxCfg.hideDepth
 	local tiltAmp = math.tan(math.rad(waxCfg.tilt))
 	local dome = waxCfg.dome
 	-- Foot in GRID space (centroids are grid-relative; origin.xz is 0 today but
@@ -328,13 +356,28 @@ function CakeWaxShell.Step(dt: number, footPos: Vector3?)
 	local fx = if footPos then footPos.X - gridCfg.origin.x else nil
 	local fz = if footPos then footPos.Z - gridCfg.origin.z else nil
 
-	-- Coating colour + the EATEN reference both follow the OUTERMOST REMAINING
-	-- layer (the tallest un-eaten piece), NOT the foot — so standing in a crater
-	-- on an exposed lower layer does NOT re-tint / un-hide the un-eaten areas,
-	-- and a fully-eaten hole (or its floor) stays uncovered. Uses last frame's
-	-- max as the reference (1-frame lag), gathers this frame's below.
+	-- Coating COLOUR follows the OUTERMOST REMAINING layer (the tallest un-eaten
+	-- piece), NOT the foot — so standing in a crater on a lower layer doesn't
+	-- re-tint the un-eaten areas. Uses last frame's max (1-frame lag).
+	-- New cake: reset the hide reference (nothing hides on the fresh cake's first
+	-- frame; it re-converges next frame like the initial build).
+	local meta = fieldModule.Meta()
+	if meta ~= nil and meta.cakeIndex ~= lastCakeIndex then
+		lastCakeIndex = meta.cakeIndex
+		lastMaxH = 0
+	end
 	local maxH = 0
-	local eatenRef = if lastMaxH > 0 then lastMaxH - hideDepth else -1
+	-- HIDE where a HOLE is eaten through the cake (user req 3): a piece hides when
+	-- its own surface has dropped `hideDepth` BELOW the outermost remaining layer
+	-- (a real crater), revealing the cake body / wall in the hole. An even, hole-
+	-- less drop (the whole layer lowered together) stays coated and rides down, so
+	-- the coating still follows the surface — it only VANISHES at holes. When a
+	-- whole layer clears, maxH drops to the next layer and the wax re-coats it,
+	-- retinted (each layer keeps its own wax colour, req 1).
+	-- (Superseded the ride-to-active-floor "coat every layer" rule, which made the
+	-- wax follow craters all the way down and never disappear — see cake-sim.md.)
+	local hideBelow = lastMaxH - waxCfg.hideDepth
+	local vhs = {} -- reused per-piece scratch: boundary-vertex surface heights
 
 	for _, c in ipairs(cells) do
 		-- Dent target from the foot (falloff); ramp/spring at the fracture rates.
@@ -353,7 +396,21 @@ function CakeWaxShell.Step(dt: number, footPos: Vector3?)
 		local dent = c.dent
 
 		local hC = fieldModule.ReadHeightStuds(c.ci)
-		local eaten = hC < eatenRef or hC < 0.5
+		-- Read the boundary-vertex surface heights (needed to ride the surface).
+		for k = 1, #c.vids do
+			vhs[k] = fieldModule.ReadHeightStuds(c.vc[k])
+		end
+		-- STRADDLE hide: sample the surface at each fan-TRIANGLE centre (c.tc) — the
+		-- piece AREA, not just its verts. A piece whose area spans a crater (even with
+		-- all its VERTS still on the rim, so it would otherwise hang a flat wax SHELF
+		-- over the eaten edge) hides as a whole, so the wax recedes cleanly from the
+		-- crater (user req: no leftover pieces at the eaten edge).
+		local minArea = hC
+		for k = 1, #c.tc do
+			local ht = fieldModule.ReadHeightStuds(c.tc[k])
+			if ht < minArea then minArea = ht end
+		end
+		local eaten = hC < hideBelow or hC < 0.5 or minArea < hideBelow
 		if not eaten and hC > maxH then
 			maxH = hC -- tallest un-eaten piece → the outermost remaining layer
 		end
@@ -384,7 +441,7 @@ function CakeWaxShell.Step(dt: number, footPos: Vector3?)
 			mesh:SetPosition(c.cvid, Vector3.new(c.cx, hC + lift + dome - sink * dent, c.cz))
 			for k = 1, #c.vids do
 				local rx0, rz0 = c.restX[k], c.restZ[k]
-				local hV = fieldModule.ReadHeightStuds(c.vc[k]) -- this vertex's own surface height
+				local hV = vhs[k] -- this vertex's own surface height (read above)
 				local yTilt = ((rx0 - c.cx) * c.tdx + (rz0 - c.cz) * c.tdz) * tiltMag
 				local x = rx0 + (c.cx - rx0) * shrink
 				local z = rz0 + (c.cz - rz0) * shrink
@@ -398,12 +455,13 @@ function CakeWaxShell.Step(dt: number, footPos: Vector3?)
 
 	-- Tint the whole coating to the current outermost remaining layer.
 	if maxH > 0 then
-		lastMaxH = maxH
 		if part ~= nil then
 			local _, id = surfaceBand(maxH)
 			part.Color = glazeColor(id)
 		end
 	end
+	-- Feed this frame's max into next frame's hide threshold + tint (1-frame lag).
+	lastMaxH = maxH
 end
 
 return CakeWaxShell

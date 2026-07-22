@@ -1105,6 +1105,34 @@ Theme.GymOverlay = {
 	CounterGradient = Theme.Button.TextGradient,
 }
 
+-- HUD hold-to-eat button (TOUCH only): a big round candy-pink button in the
+-- bottom-right thumb zone. Press & HOLD to keep eating the cake in front of you;
+-- a quick tap = one bite (features/cake-sim.md input). Same round-button recipe
+-- as the gym TAP button, on the Epic (candy-magenta) palette so it reads as the
+-- appetising "EAT" action, not the green gym one. Nominal 240 grid for the
+-- Rim/Face/Text insets (identical ratios to GymOverlay's round button).
+Theme.EatButton = {
+	Height = 220 / 1080, -- viewport-height fraction of the round button
+	Aspect = 1, -- circle
+	Position = Vector2.new(0.86, 0.66), -- bottom-right, above the default jump button (tuned in Studio)
+	OuterCorner = 1, -- circle
+	Outline = Color3.fromRGB(46, 0, 38), -- dark magenta (Epic outline hue)
+	OuterGradient = Theme.Rarity.Epic.Outer,
+	RimGradient = Theme.Rarity.Epic.Rim,
+	FaceGradient = Theme.Rarity.Epic.Face,
+	TextGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 236, 250)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 196, 240)),
+	}),
+	RimPosition = Vector2.new(15 / 240, 15 / 240),
+	RimSize = Vector2.new(210 / 240, 190 / 240),
+	FacePosition = Vector2.new(23 / 240, 23 / 240),
+	FaceSize = Vector2.new(194 / 240, 174 / 240),
+	TextPosition = Vector2.new(33 / 240, 88 / 240),
+	TextSize = Vector2.new(174 / 240, 64 / 240),
+}
+
 -- Pet reveal overlay: full-screen dim + a PetCard blown up + odds footer
 -- (Roblox policy: odds visible wherever rolls happen).
 Theme.RevealOverlay = {
@@ -1441,6 +1469,7 @@ table.freeze(Theme.AnnounceBanner)
 table.freeze(Theme.UpgradeRow)
 table.freeze(Theme.UpgradesLayout)
 table.freeze(Theme.GymOverlay)
+table.freeze(Theme.EatButton)
 table.freeze(Theme.RevealOverlay)
 table.freeze(Theme.RebirthLayout.StatPositions)
 table.freeze(Theme.RebirthLayout)

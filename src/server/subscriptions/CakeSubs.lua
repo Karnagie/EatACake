@@ -49,6 +49,12 @@ function CakeSubs.SendSnapshot(player: Player)
 	uSnapshot:FireClient(player, buf, meta)
 end
 
+--API
+-- Join-state hook: PlayerLifecycleSubs calls this after profile load + ClientReady.
+function CakeSubs.PushInitialState(player: Player)
+	CakeSubs.SendSnapshot(player)
+end
+
 function CakeSubs.Start(data, services)
 	services_ = services
 	state = data.CakeStateData
@@ -149,6 +155,9 @@ function CakeSubs.Start(data, services)
 					PetSubs.SendPets(player)
 				end
 				services.ProgressService.AddStat(userId, "cakesEaten", 1)
+				-- Milestone save: a cake-clear reward (pet roll + stat) is rare and
+				-- high-value — persist before the ~300s autosave window.
+				services.PersistenceService.Save(userId)
 			end
 		end
 		services.CakeCycleService.StartSpawning()
@@ -229,9 +238,16 @@ function CakeSubs.Start(data, services)
 			return
 		end
 
-		local removed, layer = services.CakeFieldService.ApplyBite(
-			pos.X, pos.Z, biteRadius, services.StatsService.BiteDepth(userId)
-		)
+		local biteDepth = services.StatsService.BiteDepth(userId)
+		local removed, layer = services.CakeFieldService.ApplyBite(pos.X, pos.Z, biteRadius, biteDepth)
+		-- Also eat DIRECTLY BENEATH the player (user req): the front bite alone left
+		-- the spot they stand on un-eaten (a pillar under their feet). GEOMETRY ONLY —
+		-- its volume is NOT paid as calories, so one accepted EatAt (one rate-limited
+		-- token) still credits exactly ONE bite (no double income from aiming the front
+		-- bite at a SEPARATE spot). ApplyBite dirties + settles the field itself, so the
+		-- beneath crater still clears + replicates. Server-chosen point (their own XZ),
+		-- so no reach/surface anti-cheat needed; the layer gate still clamps it.
+		services.CakeFieldService.ApplyBite(root.Position.X, root.Position.Z, biteRadius, biteDepth)
 		if removed <= 0 then
 			-- Core / already-bare cells, or the layer gate stopped the bite at
 			-- the active floor (the layer beneath stays locked until the top
@@ -354,6 +370,9 @@ function CakeSubs.Start(data, services)
 						byUserId = entry.player.UserId,
 						position = entry.position,
 					})
+					-- Milestone save: a treasure grant (gems/boost/egg) — persist so a
+					-- crash before the ~300s autosave can't lose the find.
+					services.PersistenceService.Save(entry.player.UserId)
 				else
 					Log.Warn(SCOPE, `find '{entry.find.def.id}' reward grant declined for {entry.player.Name} — reward lost (check kind handlers)`)
 				end

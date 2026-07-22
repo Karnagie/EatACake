@@ -9,7 +9,7 @@
 |---|---|---|
 | persistence | `features/persistence.md` | PersistenceService, ProfileSchema/, PlayerLifecycleSubs / — |
 | economy (calories+gems) | `features/economy.md` | EconomyService, EconomySubs / EconomySubsClient |
-| cake-sim (heightfield) | `features/cake-sim.md` + ADR-0003 | CakeFieldService, CakeCollisionService, CakeSubs / LocalCakeField, CakeRenderer, CakeWaxShell, ChunkDebris, EatGestureController, CakeSubsClient, CakeFeelSubsClient |
+| cake-sim (heightfield) | `features/cake-sim.md` + ADR-0003, ADR-0008 | CakeFieldService, CakeCollisionService, CakeSubs / LocalCakeField, CakeRenderer, CakeWaxShell, CakeWrapper, ChunkDebris, EatGestureController, CakeSubsClient, CakeFeelSubsClient |
 | cake-cycle (boss, rare, biomes) | `features/cake-cycle.md` | CakeCycleService, CakeSubs / BossView, CakeSubsClient |
 | treasures (finds) | `features/treasures.md` | TreasureService, CakeSubs / CakeSubsClient |
 | body-gym (stomach, morph, roll) | `features/body-gym.md` | StomachService, GymService, BodySubs (server morph) / BallRollController, BodySubsClient, UIKit/GymOverlay |
@@ -19,7 +19,7 @@
 | rebirth + biomes | `features/rebirth.md` | ProgressService, RebirthSubs / RebirthSubsClient |
 | quests | `features/quests.md` | QuestService, QuestsSubs / QuestsSubsClient |
 | juice (ASMR layer) | `features/juice.md` | — / SoundPool, ParticlePool, CameraShake, ComboMeter, FloatingNumbers |
-| map (factory scene) | file header `services/MapService.lua` | MapService, MapConfigData / — |
+| map (factory scene) | file header `services/MapService.lua` + ADR-0007 | MapService (clones `ReplicatedStorage.Assets` Environment+Checkpoint), MapConfigData / — |
 | reward-grants | ADR-0002 (`decisions/`) | RewardGrantSubs (kinds: calories, gems, boost, burn, egg) / — |
 | daily-rewards | `features/daily-rewards.md` | DailyRewardService, RewardsSubs / RewardsSubsClient, LocalRewardsService |
 | time-rewards | `features/time-rewards.md` | TimeRewardService, RewardsSubs / RewardsSubsClient, LocalRewardsService |
@@ -47,6 +47,7 @@
 | locale stub (T/Tr) | `src/client/data/LocaleData.lua` |
 | React root owner (kit UI) | `src/client/modules/UiRoot.lua` |
 | React packages (vendored model → `ReplicatedStorage.Packages`) | `ReactLua-Packages.rbxmx` |
+| editable scene models (place-authored → `ReplicatedStorage.Assets`, cloned by MapService) | Studio-authored (ADR-0007) |
 
 ## Lookup
 

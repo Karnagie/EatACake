@@ -34,6 +34,12 @@ function RebirthSubs.SendRebirth(player: Player)
 	uRebirth:FireClient(player, summary)
 end
 
+--API
+-- Join-state hook: PlayerLifecycleSubs calls this after profile load + ClientReady.
+function RebirthSubs.PushInitialState(player: Player)
+	RebirthSubs.SendRebirth(player)
+end
+
 function RebirthSubs.Start(data, services)
 	services_ = services
 	uRebirth = Net.Update("RebirthUpdate")

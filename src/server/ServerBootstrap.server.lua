@@ -21,30 +21,83 @@ local Log = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Log")
 local SCOPE = "Bootstrap"
 local root = script.Parent
 
-local function loadFolder(folderName: string): { [string]: any }
-	local modules = {}
-	local folder = root:FindFirstChild(folderName)
-	if not folder then
-		Log.Warn(SCOPE, `folder '{folderName}' is MISSING — nothing loaded from it`)
-		return modules
+local KIND_HINTS = { "data", "services", "modules", "subscriptions" }
+
+-- A "partition" is a container holding at least one KIND folder. Template
+-- default = ONE flat partition: root (the Server folder) directly holds
+-- data/services/subscriptions. The two-place split instead maps root's children
+-- to Common + Lobby|Game folders, EACH a partition with the same kind folders;
+-- the loader MERGES them, so which features a place runs is decided purely by
+-- which partition folders its project.json maps — this bootstrap stays
+-- byte-identical in both places.
+local function collectPartitions(): { Instance }
+	for _, kind in ipairs(KIND_HINTS) do
+		if root:FindFirstChild(kind) then
+			return { root } -- flat layout (single place / template default)
+		end
 	end
-	local names = {}
-	for _, obj in ipairs(folder:GetChildren()) do
-		if obj:IsA("ModuleScript") then
-			local ok, mod = pcall(require, obj)
-			if not ok then
-				Log.Warn(SCOPE, `{folderName}/{obj.Name}: require FAILED — {mod}`)
-			else
-				modules[obj.Name] = mod
-				table.insert(names, obj.Name)
+	local parts = {}
+	for _, child in ipairs(root:GetChildren()) do
+		if child:IsA("Folder") then
+			for _, kind in ipairs(KIND_HINTS) do
+				if child:FindFirstChild(kind) then
+					table.insert(parts, child)
+					break
+				end
 			end
 		end
 	end
+	table.sort(parts, function(a, b)
+		return a.Name < b.Name
+	end)
+	return parts
+end
+
+local partitions = collectPartitions()
+if #partitions == 0 then
+	Log.Warn(SCOPE, "no partitions found (no data/services/subscriptions folder under Server) — NOTHING will load")
+else
+	local names = {}
+	for _, p in ipairs(partitions) do
+		table.insert(names, if p == root then "<flat>" else p.Name)
+	end
+	Log.Info(SCOPE, `partitions ({#partitions}): {table.concat(names, ", ")}`)
+end
+
+-- Merge one kind folder (e.g. "subscriptions") across every partition into one
+-- name-keyed table. A duplicate module name across partitions WARNS (R8) and is
+-- ignored (first-loaded wins) — rename to fix.
+local function loadFolder(kind: string): { [string]: any }
+	local modules = {}
+	for _, partition in ipairs(partitions) do
+		local folder = partition:FindFirstChild(kind)
+		if folder then
+			local prefix = if partition == root then "" else `{partition.Name}/`
+			for _, obj in ipairs(folder:GetChildren()) do
+				if obj:IsA("ModuleScript") then
+					if modules[obj.Name] ~= nil then
+						Log.Warn(SCOPE, `{kind}/{obj.Name}: DUPLICATE across partitions — '{partition.Name}' ignored (first-loaded wins); rename to fix`)
+					else
+						local ok, mod = pcall(require, obj)
+						if not ok then
+							Log.Warn(SCOPE, `{prefix}{kind}/{obj.Name}: require FAILED — {mod}`)
+						else
+							modules[obj.Name] = mod
+						end
+					end
+				end
+			end
+		end
+	end
+	local names = {}
+	for name in pairs(modules) do
+		table.insert(names, name)
+	end
 	table.sort(names)
 	if #names == 0 then
-		Log.Warn(SCOPE, `{folderName}: folder exists but contains NO modules`)
+		Log.Warn(SCOPE, `{kind}: NO modules loaded (checked {#partitions} partition(s))`)
 	else
-		Log.Info(SCOPE, `{folderName}: {#names} module(s) — {table.concat(names, ", ")}`)
+		Log.Info(SCOPE, `{kind}: {#names} module(s) — {table.concat(names, ", ")}`)
 	end
 	return modules
 end
@@ -105,7 +158,7 @@ forEachSorted(subscriptions, function(name, mod)
 		Log.Warn(SCOPE, `subscriptions/{name} has NO Start(data, services) — it will NEVER run`)
 		return
 	end
-	local ok, err = pcall(mod.Start, data, services)
+	local ok, err = pcall(mod.Start, data, services, subscriptions)
 	if ok then
 		subsStarted += 1
 		Log.Info(SCOPE, `subscriptions/{name}.Start ok`)

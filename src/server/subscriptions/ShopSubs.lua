@@ -213,6 +213,14 @@ local function processReceipt(receiptInfo)
 	return Enum.ProductPurchaseDecision.PurchaseGranted
 end
 
+--API
+-- Join-state hook: PlayerLifecycleSubs calls this after profile load + ClientReady.
+function ShopSubs.PushInitialState(player: Player)
+	ShopSubs.SendShop(player)
+	-- Gamepass ownership needs web calls — refresh + re-push async.
+	task.spawn(ShopSubs.RefreshPassOwnership, player)
+end
+
 function ShopSubs.Start(data, services)
 	ShopService = services.ShopService
 	PersistenceService = services.PersistenceService

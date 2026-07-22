@@ -59,7 +59,7 @@ CakeStateData.netDirty = {} :: { [number]: boolean }
 CakeStateData.netDirtyList = {} :: { number }
 CakeStateData.repairCursor = 0
 
--- Collision: 8x8 invisible parts owned by CakeCollisionService.
+-- Collision: net.collisionGrid² invisible safety-net parts (16x16) owned by CakeCollisionService.
 CakeStateData.collisionParts = {} :: { BasePart }
 
 -- Treasures of the current cake: array of

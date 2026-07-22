@@ -2,7 +2,9 @@
 	CakeSubsClient — the cake domain on the client (R4):
 	  * CakeSnapshot/CakeDelta -> LocalCakeField mirror, renderer refresh
 	  * CakeCycleUpdate -> boss view, HUD cycle state, announcements
-	  * input: tap/HOLD to eat the cake DIRECTLY IN FRONT of you (aim by
+	  * input: PC = hold the mouse ANYWHERE; TOUCH = the dedicated on-screen EAT
+	    button only (AppRoot EatButton, NOT any finger — the joystick never eats,
+	    Task 3). Either way you eat the cake DIRECTLY IN FRONT of you (aim by
 	    turning/walking — no pointer/pixel aiming); auto-repeat at the eat-rate
 	    stat; local bite prediction + full bite juice (§7.3) + the eat gesture
 	    (EatGestureController) fire instantly, the server delta reconciles after
@@ -12,8 +14,9 @@
 	  * walk-crunch + step cracks, treasure FX (landing cracks + the
 	    fresh-cake ceremony live in CakeFeelSubsClient)
 
-	Hold ownership: on touch, the ORIGINATING finger owns the hold, so a second
-	finger (jump button, camera drag) neither starts a rival hold nor cancels it.
+	Touch eating is driven ONLY by the dedicated EAT button (AppRoot EatButton →
+	onEatDown/onEatUp), never by a raw finger — so the movement joystick and
+	camera drag can't trigger eating (Task 3). PC still holds the mouse anywhere.
 ]]
 
 local Players = game:GetService("Players")
@@ -34,6 +37,7 @@ function CakeSubsClient.Start(data, modules)
 	local LocalCakeField = modules.LocalCakeField
 	local CakeRenderer = modules.CakeRenderer
 	local CakeWaxShell = modules.CakeWaxShell
+	local CakeWrapper = modules.CakeWrapper -- textured outer wall hiding the ungenerated bulk (Task 2)
 	local SoundPool = modules.SoundPool
 	local ParticlePool = modules.ParticlePool
 	local CameraShake = modules.CameraShake
@@ -43,17 +47,18 @@ function CakeSubsClient.Start(data, modules)
 	local LocalStatsService = modules.LocalStatsService
 	local ChunkDebris = modules.ChunkDebris
 	local AppRoot = modules.AppRoot
+	local LocalEatState = modules.LocalEatState -- flat-while-eating gate (Task 4)
 
 	local player = Players.LocalPlayer
 	local rEatAt = Net.Remote("EatAt")
 
 	CakeRenderer.Setup(LocalCakeField)
 	CakeWaxShell.Setup(LocalCakeField)
+	CakeWrapper.Setup(LocalCakeField)
 
 	local eating = false
 	local lastBiteAt = 0
 	local cyclePhase = "spawning"
-	local trackedTouch: InputObject? = nil -- the finger that owns the eat-hold
 	local profileLive = false -- first StomachUpdate = server accepts our bites
 	local isFull = false -- belly at capacity: eating is blocked (server + here)
 	local lastFullCueAt = 0
@@ -82,6 +87,7 @@ function CakeSubsClient.Start(data, modules)
 			return
 		end
 		LocalCakeField.ApplySnapshot(buf, meta)
+		CakeWrapper.OnSnapshot() -- pick this cake's wall texture (before the renderer rebuild yields)
 		CakeRenderer.OnSnapshot()
 		-- OnSnapshot can YIELD (lazy mesh-pool build). If a newer snapshot
 		-- was applied while we yielded, ITS handler owns phase/HUD state —
@@ -325,33 +331,48 @@ function CakeSubsClient.Start(data, modules)
 	end
 
 	-- ── Input: hold to eat ──────────────────────────────────────────────
-	-- Hold anywhere to keep eating the cake IN FRONT of you (aim by turning /
-	-- walking, not by tapping a spot). Touch tracks the ORIGINATING finger so
-	-- a second finger (jump button, camera drag) neither starts a rival hold
-	-- nor cancels this one.
+	-- TOUCH: eating comes ONLY from the dedicated EAT button (below) — never a
+	-- raw finger, so the movement joystick / camera drag can't eat (Task 3). The
+	-- button's press primitive is finger-aware (refcounts touches), so onEatUp
+	-- fires only when the LAST finger lifts, including a drag-off release — no
+	-- stuck-on eating, no need to correlate a single finger here.
+	AppRoot.SetCallbacks({
+		onEatDown = function()
+			eating = true
+			-- A tap can begin and end within one frame; fire ONE bite right now so
+			-- a tap always lands ≥1 bite, then let the Heartbeat auto-repeat the
+			-- hold at the eat-rate cadence.
+			lastBiteAt = os.clock()
+			doBite()
+		end,
+		onEatUp = function()
+			eating = false
+		end,
+	})
+	-- PC: hold the mouse ANYWHERE (no joystick to clash with). Aim by turning /
+	-- walking, not by tapping a spot.
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if gameProcessed then
 			return
 		end
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
 			eating = true
-		elseif input.UserInputType == Enum.UserInputType.Touch and trackedTouch == nil then
-			trackedTouch = input
-			eating = true
 		end
 	end)
 	UserInputService.InputEnded:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			eating = false
-		elseif input == trackedTouch then
-			trackedTouch = nil
 			eating = false
 		end
 	end)
 
 	RunService.Heartbeat:Connect(function()
 		-- Auto-Eat pass (server sets the attribute): always chewing.
-		if eating or player:GetAttribute("AutoEat") == true then
+		local activelyEating = eating or player:GetAttribute("AutoEat") == true
+		-- Flat-while-eating gate (Task 4) = ACTIVE hold/tap only, NOT Auto-Eat —
+		-- so an Auto-Eat pass owner keeps the (toned) per-layer bounce/jump feel
+		-- while just running around; they only go flat when they actively hold EAT.
+		LocalEatState.Set(eating)
+		if activelyEating then
 			local now = os.clock()
 			if now - lastBiteAt >= 1 / math.max(0.5, LocalStatsService.EatRate()) then
 				lastBiteAt = now
@@ -368,17 +389,32 @@ function CakeSubsClient.Start(data, modules)
 	-- ── Render step ─────────────────────────────────────────────────────
 	local lastCrunchAt = 0
 	RunService.RenderStepped:Connect(function(dt)
-		local footPos = nil
+		local footPos = nil -- CLOSE to the surface: cosmetic squish/wax
+		local overCakePos = nil -- over the loaf at ANY depth: collision-scan centre
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if root then
 			local surfacePoint = LocalCakeField.SurfacePoint(root.Position.X, root.Position.Z)
-			if surfacePoint and math.abs(root.Position.Y - surfacePoint.Y) < 7 then
-				footPos = surfacePoint
+			if surfacePoint then
+				-- Over the loaf → drive the collision scan (even when BURIED, so a
+				-- sunk player's columns keep rising back — Task 2 review fix).
+				overCakePos = surfacePoint
+				-- Only the near-surface case gets the cosmetic underfoot squish/wax.
+				if math.abs(root.Position.Y - surfacePoint.Y) < CakeConfig.feel.onCakeYTolerance then
+					footPos = surfacePoint
+				end
 			end
 		end
-		CakeRenderer.Step(dt, footPos)
+		CakeRenderer.Step(dt, footPos, overCakePos)
 		CakeWaxShell.Step(dt, footPos) -- always-visible wax coating that cracks underfoot
+		-- Textured outer wall hiding the cake below the current + next rendered
+		-- layers — but only in editable mode; the parts fallback draws the whole cake
+		-- as keycap columns, which the wall would just occlude.
+		if CakeRenderer.Impl() == "editable" then
+			CakeWrapper.Step(dt)
+		else
+			CakeWrapper.Hide()
+		end
 		EatGestureController.Step(dt) -- advance the local flying eat pieces
 		SoundPool.PushSlumpEnergy(LocalCakeField.DrainAvalanche())
 		SoundPool.Step(dt)

@@ -9,10 +9,19 @@ burn fat; it **replaces the old floor gym zone**. Press **F** or the HUD
 gym is seconds away at your eating height).
 
 ## Geometry & height (server, MapService)
-- ONE platform per server (like the cake). Built once in `MapService.Build`
-  from `MapConfigData.checkpoint`; parts live under `workspace.Map.Checkpoint`
-  (`CheckpointPlate`, 4×`CheckpointLeg`, `GymMachine` + its `GymPrompt`,
-  `UpgradeStationBody` + `UpgradeStationScreen` + the `UpgradeStation` prompt).
+- ONE platform per server (like the cake). **CLONED** once in `MapService.Build`
+  from the editable `ReplicatedStorage.Assets.Checkpoint` template (place-authored,
+  ADR-0007) into `workspace.Map.Checkpoint`. **Named-part contract** (edit the
+  look/size, KEEP these names — code resolves + POSITIONS them by name as the
+  plate tracks the cake): `CheckpointPlate`, 4× `CheckpointLeg`, `GymMachine` +
+  its `GymPrompt`, `UpgradeStationBody` + `UpgradeStationScreen` + the
+  `UpgradeStation` prompt. Plate/machine/computer/screen may be a single BasePart
+  **or a Model** (positioned via `PivotTo`, sized via `GetExtentsSize` — a resized
+  authored model still aligns); LEGS stay single BaseParts (they telescope, Y
+  code-driven). Ranges/names in `MapConfigData.checkpoint`.
+  If the template is missing, `GenerateAssets` self-heals the default look (won't
+  persist — save the place); a missing `CheckpointPlate`/`GymMachine` warns (R8)
+  and the checkpoint degrades.
 - **Upgrade station** (the "computer"): a terminal on the plate's cake-side +Z
   corner (clear of the centre landing + the walk-back path). Its `UpgradeStation`
   ProximityPrompt opens the upgrades hex-tree — handled CLIENT-side
@@ -29,6 +38,17 @@ gym is seconds away at your eating height).
 - `MapService.NearGym(pos)` — gym-start range check now uses the (moving)
   machine's current position vs `checkpoint.maxUseDistanceStuds` (16 ≥ prompt's
   MaxActivationDistance 10).
+- **Authored VISUALS ride the plate**: `SetCheckpointHeight` moves the machine /
+  station with `PivotTo`, which rigidly moves the Part AND its descendant parts —
+  so a user can author the machine LOOK as child parts of the collider (e.g. the
+  **treadmill** Model under the invisible `GymMachine` Part) and it rides the
+  plate with the collider. (`.CFrame =` would NOT move children — use `PivotTo`.)
+- `MapService.GetGymMountCFrame()` — where to STAND on the treadmill belt during a
+  fat-burn run (user req 4): the machine XZ + `checkpoint.treadmillStandHeight`
+  above the plate top, facing along the belt (`treadmillFaceYaw`). BodySubs anchors
+  the HRP here + plays the run animation (see `features/body-gym.md`).
+- `MapService.GetGymDismountCFrame()` — step-off spot beside the treadmill after a
+  completed run (`treadmillDismountBack` toward the plate centre, facing the cake).
 
 ## Driven by (CakeSubs)
 - **New cake**: `SetCheckpointHeight(origin.y + composition[#].top)` (full
@@ -69,7 +89,8 @@ gym is seconds away at your eating height).
 `MapConfigData.checkpoint` (was `MapConfigData.gym`): `edgeGap, plateDepth,
 plateWidth, plateThickness, legSize, legInset, minLegHeight, machineSize,
 standHeight, promptName ("GymPrompt"), promptRange (prompt
-MaxActivationDistance), maxUseDistanceStuds, plate/leg/machine colors`. Gym
+MaxActivationDistance), maxUseDistanceStuds, plate/leg/machine colors,
+treadmillStandHeight/FaceYaw/DismountBack/DismountHeight (treadmill mount, req 4)`. Gym
 reachability is all here — keep `promptRange ≥ landing→machine distance` and
 `maxUseDistanceStuds ≥ promptRange` (see the config comment). Gym SESSION tuning
 stays in `BodyConfig.gym` (duration/taps/bonus).

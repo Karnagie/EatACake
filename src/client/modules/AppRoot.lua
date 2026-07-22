@@ -23,11 +23,17 @@
 	Callbacks: onClaimDaily(day), onClaimTime(index), onToggleSetting(id, v),
 	onShopActivated(rowId), onRedeem(code), onBuyUpgrade(id),
 	onEquipPet(petId, equip), onDoRebirth(), onClaimQuest(id), onGymTap(),
-	onDismissReveal().
+	onDismissReveal(), onEatDown(input), onEatUp(input), onReturnCheckpoint().
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+
+-- Touch-only HUD: the hold-to-eat button shows on phones/tablets (no physical
+-- keyboard). PC eats via mouse-hold anywhere (CakeSubsClient), so it needs no
+-- button. TouchEnabled+KeyboardEnabled (hybrid laptop) reads as PC.
+local IS_TOUCH = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
 local React = require(ReplicatedStorage.Packages.React)
 local UIKit = require(ReplicatedStorage.Shared.UIKit)
@@ -373,6 +379,13 @@ local function App()
 	-- for boss fights (HP/timer) and the new-cake countdown / reward flash.
 	local cakePhase = if state.cake ~= nil then (state.cake.phase or "eating") else "eating"
 	local cakeVisible = cakePhase ~= "eating"
+	-- Touch hold-to-eat button: shown only while there's cake to eat (eating /
+	-- boss phases), never while the gym overlay or a panel is up (you're not
+	-- eating then, and it would sit under/beside them). Touch devices only.
+	local eatButtonVisible = IS_TOUCH
+		and (cakePhase == "eating" or cakePhase == "boss")
+		and not gymActive
+		and state.openPanel == nil
 	local stomach = state.stomach
 	local capacity = stomach and math.max(1, stomach.capacity or 1) or 1
 	local bellyFill = stomach and math.clamp((stomach.fill or 0) / capacity, 0, 1) or 0
@@ -539,6 +552,25 @@ local function App()
 					end
 				end,
 			}),
+		}),
+		-- Touch hold-to-eat button (bottom-right thumb zone). Press-and-hold to
+		-- keep eating the cake in front of you; a tap = one bite. Replaces the
+		-- old "touch anywhere = eat" so the joystick never eats (Task 3).
+		EatButton = React.createElement(Components.EatButton, {
+			name = "EatButton",
+			visible = eatButtonVisible,
+			buttonText = locale.T("eat-button"),
+			zIndex = 3,
+			onPressStart = function(input)
+				if callbacks.onEatDown then
+					callbacks.onEatDown(input)
+				end
+			end,
+			onPressEnd = function(input)
+				if callbacks.onEatUp then
+					callbacks.onEatUp(input)
+				end
+			end,
 		}),
 		Combo = React.createElement(Components.ComboBadge, {
 			name = "Combo",

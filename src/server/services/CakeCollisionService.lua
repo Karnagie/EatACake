@@ -1,11 +1,19 @@
 --[[
-	CakeCollisionService — coarse walkable collision for the cake (GDD §4.6).
+	CakeCollisionService — coarse SAFETY-NET collision for the cake (GDD §4.6).
 
-	An 8x8 grid of invisible anchored Parts (64 total); each one's height is
-	the average of its block of heightfield cells, refreshed at net.collisionHz
-	by CakeSubs. The surface is nearly flat by construction (angle of repose),
-	so this is enough to stand, walk and sink into scree. Never built from
-	EditableMesh — runtime collision regen is what kills mobile.
+	A grid of invisible anchored Parts (net.collisionGrid², refreshed at
+	net.collisionHz by CakeSubs). PRECISE walking collision is the client
+	renderer's fine 32×32 columns (CakeRenderer); these coarse slabs only exist
+	so a player is never left with NO floor (join before the client columns
+	build, a client whose renderer failed, etc.). Never built from EditableMesh
+	— runtime collision regen is what kills mobile.
+
+	Each slab sits at the MINIMUM height of its in-cake block (Task 4), NOT the
+	average: min-of-4×4 ≤ every fine 2×2 client column in that block, so the
+	slab can NEVER poke above the fine columns and block a player from descending
+	into a fresh crater (the old average left them floating waist-deep above bites
+	/ juddering as the two grids disagreed). The player always rests on the fine
+	columns; these just catch a fall when those columns aren't there yet.
 
 	Parts are utility (invisible), not view objects — R5 does not apply.
 ]]
@@ -26,7 +34,7 @@ function CakeCollisionService.Init(data)
 end
 
 --API
--- Creates the 8x8 collision parts once (idempotent). Called from
+-- Creates the collision safety-net parts once (net.collisionGrid², idempotent). Called from
 -- CakeSubs.Start after the map exists.
 function CakeCollisionService.BuildParts()
 	if #state.collisionParts > 0 then
@@ -76,16 +84,20 @@ function CakeCollisionService.UpdateHeights()
 	local n = cakeCfg.net.collisionGrid
 	local cellsPerBlock = size / n
 	local blockStuds = size * grid.cell / n
+	local col = cakeCfg.render.collision -- shared rise-rate cap (Task 4)
 
 	local idx = 0
 	for bz = 0, n - 1 do
 		for bx = 0, n - 1 do
 			idx += 1
-			local sum, count = 0, 0
+			local minUnits, count = math.huge, 0
 			for z = bz * cellsPerBlock, (bz + 1) * cellsPerBlock - 1 do
 				for x = bx * cellsPerBlock, (bx + 1) * cellsPerBlock - 1 do
 					if GridUtil.InCake(size, state.footprint, x, z) then
-						sum += GridUtil.ReadHeight(field, GridUtil.Index(size, x, z))
+						local h = GridUtil.ReadHeight(field, GridUtil.Index(size, x, z))
+						if h < minUnits then
+							minUnits = h
+						end
 						count += 1
 					end
 				end
@@ -97,7 +109,22 @@ function CakeCollisionService.UpdateHeights()
 				part.Size = Vector3.new(blockStuds, 1, blockStuds)
 				part.CFrame = CFrame.new(part.Position.X, grid.origin.y - 0.5, part.Position.Z)
 			else
-				local hStuds = GridUtil.UnitsToStuds(sum / count)
+				-- MIN of the block (see header): stays at/under every fine client
+				-- column so it never blocks a descent into a crater.
+				local targetHStuds = GridUtil.UnitsToStuds(minUnits)
+				-- Rate-limit the RISE to match the client columns (Task 4): a
+				-- wide/fast refill mustn't punt a player who happens to rest on this
+				-- coarse slab (the client fine columns are held low by the same cap,
+				-- so an un-capped slab would poke above and shove). Drops snap (fall
+				-- into craters / join fall-catch); a huge jump (new cake) snaps.
+				local curHStuds = part.Position.Y + part.Size.Y / 2 - grid.origin.y
+				local hStuds
+				local rise = targetHStuds - curHStuds
+				if rise <= 0 or rise > col.slabSnapStuds then
+					hStuds = targetHStuds
+				else
+					hStuds = math.min(targetHStuds, curHStuds + col.riseRate / cakeCfg.net.collisionHz)
+				end
 				local height = math.max(1, hStuds)
 				part.Size = Vector3.new(blockStuds, height, blockStuds)
 				part.CFrame = CFrame.new(part.Position.X, grid.origin.y + hStuds - height / 2, part.Position.Z)

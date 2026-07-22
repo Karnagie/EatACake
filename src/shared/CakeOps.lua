@@ -28,9 +28,13 @@ function CakeOps.LayerAtStuds(composition, layersCfg, hStuds: number)
 end
 
 --API
--- Removes a bite crater centered at world (px, pz).
--- Δ per cell = depth * (1 - (d/R)^2) / hardness(layer at that cell).
--- Heights never go below floorUnits (the core cavity floor).
+-- Removes a bite centered at world (px, pz). Req 2 CLEAN CUT: each cell in the
+-- radius is cleared TOWARD floorUnits by a fraction that is 1 at the center
+-- (scoops fully to the layer floor) and tapers to 0 at the rim, eased by the
+-- layer hardness and the bite strength (depthStuds / clearRefDepth). So one side
+-- of a layer clears completely while the other stays full — a clean cut edge —
+-- rather than a shallow paraboloid dent that strands hard-to-eat crumbs. Heights
+-- never go below floorUnits (the active-band / core floor).
 -- Returns:
 --   removed  — volume in studs^3 (already includes cell area)
 --   changed  — array of 0-based cell indices whose height changed
@@ -44,7 +48,8 @@ function CakeOps.ApplyBite(
 	pz: number,
 	radiusStuds: number,
 	depthStuds: number,
-	floorUnits: number
+	floorUnits: number,
+	clearRefDepth: number
 ): (number, { number })
 	local size = gridCfg.size
 	local cell = gridCfg.cell
@@ -63,12 +68,16 @@ function CakeOps.ApplyBite(
 					local i = GridUtil.Index(size, x, z)
 					local h = GridUtil.ReadHeight(field, i)
 					if h > floorUnits then
-						local falloff = 1 - distSq / (radiusStuds * radiusStuds)
+						local falloff = 1 - distSq / (radiusStuds * radiusStuds) -- 1 center → 0 rim
 						local layer = CakeOps.LayerAtStuds(composition, layersCfg, GridUtil.UnitsToStuds(h))
 						if layer.hardness ~= math.huge then
-							local deltaUnits = math.floor(
-								depthStuds * falloff / layer.hardness * GridUtil.UNITS_PER_STUD
-							)
+							-- Clear the cell TOWARD the floor (clean cut), not a shallow
+							-- paraboloid: strength = biteDepth/clearRefDepth (1 at base →
+							-- center scoops fully); clearFrac tapers to 0 at the rim and is
+							-- eased by hardness (chocolate takes a few bites).
+							local strength = if clearRefDepth > 0 then depthStuds / clearRefDepth else 1
+							local clearFrac = math.clamp(falloff * strength / layer.hardness, 0, 1)
+							local deltaUnits = math.floor((h - floorUnits) * clearFrac)
 							if deltaUnits > 0 then
 								local newH = math.max(floorUnits, h - deltaUnits)
 								if newH ~= h then

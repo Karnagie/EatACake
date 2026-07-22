@@ -1,29 +1,43 @@
 --[[
-	MapService — builds the candy room (floor, walls with candy props, cake
-	platform, CHECKPOINT platform, spawn, candle landmarks) from MapConfigData
-	at boot; recolors per biome.
+	MapService — the static candy scene (floor, walls with candy props, cake
+	tray, ceiling, candle landmarks) + the CHECKPOINT platform (gym machine +
+	upgrade station), built by CLONING editable templates from
+	`ReplicatedStorage.Assets` (R5) — NOT procedurally spawned.
 
-	The map is CODE-BUILT (no Studio-authored scene in this project yet) —
-	one-time construction (Build is called from CakeSubs.Start, before the
-	first cake), not a runtime hot path. Studded surfaces use the native
-	Studs SurfaceType (the reference "chocolate LEGO wall" look).
+	EDITABLE ASSETS (features/map): the scene lives as two models under
+	`ReplicatedStorage.Assets` — `Environment` (the whole static room, at world
+	positions) and `Checkpoint` (named parts). Edit / replace them in Studio to
+	improve the look; MapService just clones them at boot. Because they are
+	PLACE-AUTHORED (not Rojo-synced), the user edits them in Studio and SAVES the
+	place to keep changes.
+	Self-heal: if a template is MISSING, MapService GENERATES the default look
+	into `ReplicatedStorage.Assets` on boot (the old code-built geometry, kept ONLY
+	as the generator) so the game always runs — but a runtime-generated model does
+	NOT persist; author + save to keep edits. Every missing/failed resolve warns
+	(R8) and degrades.
 
-	CHECKPOINT (fat extraction, features/checkpoint.md): a platform on 4 legs
-	beside the loaf whose TOP tracks the current top-layer height. It carries the
-	gym machine + a ProximityPrompt named MapConfigData.checkpoint.promptName
-	(BodySubs connects the trigger, R4) AND an upgrade-station "computer" whose
-	ProximityPrompt (checkpoint.upgradePromptName) opens the upgrades hex-tree
-	client-side (UpgradesSubsClient). CakeSubs drives its height via
-	SetCheckpointHeight and teleports players onto it (GetCheckpointCFrame) on the
-	ReturnToCheckpoint remote. This service owns the parts (part refs are cached
-	locals, the code-built-map pattern) but never subscribes to events.
+	CHECKPOINT is dynamic (features/checkpoint.md): SetCheckpointHeight positions
+	the NAMED parts (CheckpointPlate, CheckpointLeg×4, GymMachine[+GymPrompt],
+	UpgradeStationBody[+UpgradeStation prompt], UpgradeStationScreen) to track the
+	current top cake layer. KEEP the names; each may be a single BasePart OR a
+	MODEL (code positions via PivotTo + sizes via GetExtentsSize, so a resized /
+	multi-part authored model still aligns). POSITION is code-driven for all of
+	them (they ride the moving plate); LEGS also telescope (their Y is code-driven,
+	their X/Z cross-section is kept — keep legs as single BaseParts). CakeSubs
+	drives the height and teleports players onto it. This service owns the cloned
+	parts (cached locals) but never subscribes to events.
+	(The templates live in ReplicatedStorage.Assets AND are cloned into
+	workspace.Map, so the scene replicates ~twice — negligible for the default
+	simple-part scene; if authored assets get heavy, strip them post-clone or move
+	to ServerStorage.)
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Lighting = game:GetService("Lighting")
 local Log = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Log"))
 
 local MapService = {}
+
+local ASSETS_FOLDER = "Assets" -- ReplicatedStorage.Assets (place-authored, editable)
 
 local mapCfg -- MapConfigData
 local gridCfg -- CakeConfigData.cake.grid
@@ -38,14 +52,18 @@ local accentWallParts: { BasePart } = {}
 local beamParts: { BasePart } = {}
 local ceilingPart: BasePart?
 
--- Checkpoint platform (built once, moved by SetCheckpointHeight).
+-- Checkpoint platform (cloned once, moved by SetCheckpointHeight). PVInstance
+-- (BasePart OR Model) so a user can author a nicer plate/machine/computer AS A
+-- MODEL — code positions via PivotTo + sizes via GetExtentsSize, never
+-- `.CFrame`/`.Position` (which THROW on a Model). Legs stay single BaseParts
+-- (they telescope: Y is code-driven).
 local checkpointFolder: Folder?
-local checkpointPlate: BasePart?
+local checkpointPlate: PVInstance?
 local checkpointLegs: { BasePart } = {}
-local checkpointMachine: BasePart?
-local checkpointStationBody: BasePart? -- upgrade "computer" body (rides the plate)
-local checkpointStationScreen: BasePart? -- its glowing screen
-local checkpointCenter: Vector3? -- XZ center of the plate (Y unused)
+local checkpointMachine: PVInstance?
+local checkpointStationBody: PVInstance? -- upgrade "computer" body (rides the plate)
+local checkpointStationScreen: PVInstance? -- its glowing screen
+local checkpointCenter: Vector3? -- XZ center of the plate (Y unused), from config
 local checkpointTopY: number? -- current world Y of the plate's top surface
 local cakeSpawnPart: BasePart? -- CakeSpawn pad; Y rides the cake top (SetCheckpointHeight)
 
@@ -54,6 +72,12 @@ function MapService.Init(data)
 	gridCfg = data.CakeConfigData.cake.grid
 	footprintCfg = data.CakeConfigData.cake.composition.footprint
 end
+
+-- ── Geometry generators (the DEFAULT look; used to author the assets) ────────
+-- These build the same scene the game shipped with. They are NOT the runtime
+-- path (Build clones from ReplicatedStorage.Assets); they exist only to populate
+-- the editable templates the first time (GenerateAssets), so the user has a
+-- starting point to replace in Studio.
 
 local function makePart(props: { [string]: any }): Part
 	local part = Instance.new("Part")
@@ -276,27 +300,10 @@ local PROP_BUILDERS = {
 	propCandyWrap,
 }
 
---API
--- Builds the whole scene once (idempotent). Called from CakeSubs.Start.
-function MapService.Build()
-	if mapFolder then
-		return
-	end
-	-- The place file ships a default Baseplate + SpawnLocation — remove
-	-- them (the candy room replaces both; players must spawn ON the cake).
-	local stray = workspace:FindFirstChild("Baseplate")
-	if stray then
-		stray:Destroy()
-	end
-	local straySpawn = workspace:FindFirstChild("SpawnLocation")
-	if straySpawn then
-		straySpawn:Destroy()
-	end
-
-	local folder = Instance.new("Folder")
-	folder.Name = "Map"
-	mapFolder = folder
-
+-- Builds the static room (floor, conveyor, cake tray, walls + candy props,
+-- ceiling, candle landmarks) into `folder`. World positions (relative to the
+-- cake origin). The DEFAULT look — edit the authored copy in Studio instead.
+local function buildEnvironment(folder: Instance)
 	local origin = gridCfg.origin
 	local biome = mapCfg.biomes.factory
 	local room = mapCfg.room
@@ -311,9 +318,9 @@ function MapService.Build()
 		Parent = folder,
 	})
 	floorP.TopSurface = Enum.SurfaceType.Studs
-	floorPart = floorP
+	floorP:SetAttribute("BiomeRole", "floor")
 
-	conveyorPart = makePart({
+	local conveyor = makePart({
 		Name = "Conveyor",
 		Size = Vector3.new(mapCfg.conveyor.length, mapCfg.conveyor.height, mapCfg.conveyor.width),
 		CFrame = CFrame.new(origin.x, mapCfg.conveyor.height / 2, origin.z),
@@ -321,9 +328,10 @@ function MapService.Build()
 		Material = Enum.Material.SmoothPlastic,
 		Parent = folder,
 	})
-	conveyorPart.TopSurface = Enum.SurfaceType.Studs
+	conveyor.TopSurface = Enum.SurfaceType.Studs
+	conveyor:SetAttribute("BiomeRole", "conveyor")
 
-	platformPart = makePart({
+	makePart({
 		Name = "CakePlate",
 		Size = Vector3.new(mapCfg.platform.length, mapCfg.platform.height, mapCfg.platform.width),
 		CFrame = CFrame.new(origin.x, origin.y - mapCfg.platform.height / 2, origin.z),
@@ -331,12 +339,9 @@ function MapService.Build()
 		Material = Enum.Material.SmoothPlastic,
 		Reflectance = 0.05,
 		Parent = folder,
-	})
+	}):SetAttribute("BiomeRole", "platform")
 
 	-- ── Walls: 3 chocolate + 1 pink accent, studded, with X-braces ──────
-	table.clear(wallParts)
-	table.clear(accentWallParts)
-	table.clear(beamParts)
 	local walls = {
 		{ center = Vector3.new(origin.x, room.wallHeight / 2, origin.z - half - room.wallThickness / 2), normal = Vector3.zAxis, accent = true },
 		{ center = Vector3.new(origin.x, room.wallHeight / 2, origin.z + half + room.wallThickness / 2), normal = -Vector3.zAxis, accent = false },
@@ -356,7 +361,8 @@ function MapService.Build()
 			Parent = folder,
 		})
 		studAllSurfaces(part)
-		table.insert(if wall.accent then accentWallParts else wallParts, part)
+		-- Biome recolor resolves accent by attribute (survives renaming).
+		part:SetAttribute("BiomeRole", if wall.accent then "accentWall" else "wall")
 
 		-- X-braces on chocolate walls (reference structure).
 		if not wall.accent then
@@ -374,7 +380,7 @@ function MapService.Build()
 					CanCollide = false,
 					Parent = folder,
 				})
-				table.insert(beamParts, brace)
+				brace:SetAttribute("BiomeRole", "beam")
 			end
 		end
 
@@ -403,7 +409,7 @@ function MapService.Build()
 		Parent = folder,
 	})
 	ceiling.BottomSurface = Enum.SurfaceType.Studs
-	ceilingPart = ceiling
+	ceiling:SetAttribute("BiomeRole", "ceiling")
 
 	-- Candle landmarks: peppermint-striped towers (§6.3).
 	for k, candle in ipairs(mapCfg.candles) do
@@ -418,7 +424,6 @@ function MapService.Build()
 			Reflectance = 0.04,
 			Parent = folder,
 		})
-		-- Red spiral stripes: a few thin rings up the candle.
 		for s = 1, 4 do
 			makePart({
 				Name = "CandleStripe",
@@ -446,55 +451,50 @@ function MapService.Build()
 		light.Range = 24
 		light.Parent = flame
 	end
+end
 
-	-- Checkpoint platform (§8 gym): a platform on 4 legs beside the loaf whose
-	-- TOP tracks the current top-layer height (SetCheckpointHeight, driven by
-	-- CakeSubs). The gym machine + prompt ride it; players teleport onto it
-	-- (GetCheckpointCFrame). Built once here, then positioned per cake.
+-- Builds the checkpoint parts (plate, 4 legs, gym machine + prompt, upgrade
+-- station body + screen + prompt) into `folder`, at reference positions
+-- (SetCheckpointHeight repositions them per cake). Named so the runtime resolves
+-- them; edit the authored copy's LOOK in Studio but KEEP the names.
+local function buildCheckpoint(folder: Instance)
+	local origin = gridCfg.origin
 	local cp = mapCfg.checkpoint
 	local loafEdgeX = footprintCfg.hx * gridCfg.cell -- +X straight edge of the loaf
 	local plateCenterX = origin.x + loafEdgeX + cp.edgeGap + cp.plateDepth / 2
 	local plateCenterZ = origin.z
-	checkpointCenter = Vector3.new(plateCenterX, 0, plateCenterZ)
 
-	local cpFolder = Instance.new("Folder")
-	cpFolder.Name = "Checkpoint"
-	checkpointFolder = cpFolder
-
-	checkpointPlate = makePart({
+	local plate = makePart({
 		Name = "CheckpointPlate",
 		Size = Vector3.new(cp.plateDepth, cp.plateThickness, cp.plateWidth),
 		CFrame = CFrame.new(plateCenterX, 0, plateCenterZ),
 		Color = cp.plateColor,
 		Material = Enum.Material.SmoothPlastic,
 		Reflectance = 0.04,
-		Parent = cpFolder,
+		Parent = folder,
 	})
-	checkpointPlate.TopSurface = Enum.SurfaceType.Studs
+	plate.TopSurface = Enum.SurfaceType.Studs
 
-	-- 4 legs at the plate corners (positioned/resized by SetCheckpointHeight).
-	table.clear(checkpointLegs)
 	for _ = 1, 4 do
-		table.insert(checkpointLegs, makePart({
+		makePart({
 			Name = "CheckpointLeg",
 			Size = Vector3.new(cp.legSize, cp.minLegHeight, cp.legSize),
 			CFrame = CFrame.new(plateCenterX, 0, plateCenterZ),
 			Color = cp.legColor,
 			Material = Enum.Material.SmoothPlastic,
-			Parent = cpFolder,
-		}))
+			Parent = folder,
+		})
 	end
 
-	-- Gym machine near the OUTER edge (leaves the cake-side clear to walk back).
-	checkpointMachine = makePart({
+	local machine = makePart({
 		Name = "GymMachine",
 		Size = cp.machineSize,
 		CFrame = CFrame.new(plateCenterX, 0, plateCenterZ),
 		Color = cp.machineColor,
 		Material = Enum.Material.SmoothPlastic,
-		Parent = cpFolder,
+		Parent = folder,
 	})
-	studAllSurfaces(checkpointMachine)
+	studAllSurfaces(machine)
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.Name = cp.promptName
 	prompt.ActionText = "Burn it off!"
@@ -502,33 +502,30 @@ function MapService.Build()
 	prompt.HoldDuration = 0
 	prompt.MaxActivationDistance = cp.promptRange
 	prompt.RequiresLineOfSight = false
-	prompt.Parent = checkpointMachine
+	prompt.Parent = machine
 
-	-- Upgrade station "computer": a terminal on the cake-side corner of the plate
-	-- whose ProximityPrompt opens the upgrades hex-tree (client handles the open —
-	-- features/upgrades.md). Positioned/ridden by SetCheckpointHeight.
-	checkpointStationBody = makePart({
+	local stationBody = makePart({
 		Name = "UpgradeStationBody",
 		Size = cp.stationSize,
 		CFrame = CFrame.new(plateCenterX, 0, plateCenterZ),
 		Color = cp.stationBodyColor,
 		Material = Enum.Material.SmoothPlastic,
-		Parent = cpFolder,
+		Parent = folder,
 	})
-	studAllSurfaces(checkpointStationBody)
-	checkpointStationScreen = makePart({
+	studAllSurfaces(stationBody)
+	local screen = makePart({
 		Name = "UpgradeStationScreen",
 		Size = cp.stationScreenSize,
 		CFrame = CFrame.new(plateCenterX, 0, plateCenterZ),
 		Color = cp.stationScreenColor,
 		Material = Enum.Material.Neon,
-		Parent = cpFolder,
+		Parent = folder,
 	})
 	local screenLight = Instance.new("PointLight")
 	screenLight.Color = cp.stationScreenColor
 	screenLight.Range = 12
 	screenLight.Brightness = 1.2
-	screenLight.Parent = checkpointStationScreen
+	screenLight.Parent = screen
 	local upgradePrompt = Instance.new("ProximityPrompt")
 	upgradePrompt.Name = cp.upgradePromptName
 	upgradePrompt.ActionText = "Upgrades"
@@ -536,19 +533,198 @@ function MapService.Build()
 	upgradePrompt.HoldDuration = 0
 	upgradePrompt.MaxActivationDistance = cp.upgradePromptRange
 	upgradePrompt.RequiresLineOfSight = false
-	upgradePrompt.Parent = checkpointStationBody
+	upgradePrompt.Parent = stationBody
+end
 
-	cpFolder.Parent = folder
+--API
+-- Ensures ReplicatedStorage.Assets holds `Environment` + `Checkpoint` templates,
+-- generating the DEFAULT look for any that is missing. Idempotent. Run it once
+-- in Studio (Edit) and SAVE the place to author editable starting models; the
+-- runtime also calls it as a self-heal so the game never boots empty.
+-- A usable template is a Folder/Model container that actually holds parts —
+-- treat a missing OR malformed (empty / a bare Part named "Environment") node as
+-- absent so GenerateAssets rebuilds it (existence ≠ validity).
+local function validTemplate(node: Instance?): boolean
+	return node ~= nil
+		and (node:IsA("Folder") or node:IsA("Model"))
+		and node:FindFirstChildWhichIsA("BasePart", true) ~= nil
+end
+
+function MapService.GenerateAssets(): Folder
+	local assets = ReplicatedStorage:FindFirstChild(ASSETS_FOLDER)
+	if assets == nil or not (assets:IsA("Folder") or assets:IsA("Model")) then
+		if assets then
+			assets:Destroy() -- a bad non-container named "Assets"
+		end
+		assets = Instance.new("Folder")
+		assets.Name = ASSETS_FOLDER
+		assets.Parent = ReplicatedStorage
+	end
+	if not validTemplate(assets:FindFirstChild("Environment")) then
+		local old = assets:FindFirstChild("Environment")
+		if old then
+			old:Destroy()
+		end
+		local env = Instance.new("Folder")
+		env.Name = "Environment"
+		buildEnvironment(env)
+		env.Parent = assets
+		Log.Sum("Map", "generated default Environment template into ReplicatedStorage.Assets (edit + save to keep)")
+	end
+	if not validTemplate(assets:FindFirstChild("Checkpoint")) then
+		local old = assets:FindFirstChild("Checkpoint")
+		if old then
+			old:Destroy()
+		end
+		local cp = Instance.new("Folder")
+		cp.Name = "Checkpoint"
+		buildCheckpoint(cp)
+		cp.Parent = assets
+		Log.Sum("Map", "generated default Checkpoint template into ReplicatedStorage.Assets (edit + save to keep)")
+	end
+	return assets :: Folder
+end
+
+-- ── Resolve cloned parts by name (R8: warn on anything missing) ─────────────
+
+-- Resolve a named node as a POSITIONABLE (BasePart or Model — both PVInstance).
+-- A named node that is neither is rejected (nil), so the caller warns.
+local function resolvePV(folder: Instance, name: string): PVInstance?
+	local node = folder:FindFirstChild(name)
+	if node and node:IsA("PVInstance") then
+		return node
+	end
+	return nil
+end
+
+-- Bounding size of a positionable (works for a Model too).
+local function pvSize(pv: PVInstance): Vector3
+	if pv:IsA("BasePart") then
+		return pv.Size
+	end
+	return (pv :: Model):GetExtentsSize()
+end
+
+-- Biome recolor is OPT-IN via the `BiomeRole` attribute (the generated defaults
+-- set it: floor/conveyor/platform/ceiling/wall/accentWall/beam). A part the user
+-- re-authored WITHOUT the attribute keeps its own colour — ApplyBiome never
+-- touches it. So editing a model's LOOK sticks; only role-tagged parts skin per
+-- biome. (Geometry/mesh/material edits always flow through the clone.)
+local function resolveEnvironment(folder: Folder)
+	table.clear(wallParts)
+	table.clear(accentWallParts)
+	table.clear(beamParts)
+	floorPart, conveyorPart, platformPart, ceilingPart = nil, nil, nil, nil
+	for _, child in ipairs(folder:GetDescendants()) do
+		if child:IsA("BasePart") then
+			local role = child:GetAttribute("BiomeRole")
+			if role == "floor" then
+				floorPart = child
+			elseif role == "conveyor" then
+				conveyorPart = child
+			elseif role == "platform" then
+				platformPart = child
+			elseif role == "ceiling" then
+				ceilingPart = child
+			elseif role == "accentWall" then
+				table.insert(accentWallParts, child)
+			elseif role == "wall" then
+				table.insert(wallParts, child)
+			elseif role == "beam" then
+				table.insert(beamParts, child)
+			end
+		end
+	end
+	-- R8: a non-nil but fully-unresolved Environment (empty / all roles stripped)
+	-- would leave players in a floorless scene with no other signal.
+	if floorPart == nil and #wallParts == 0 and #accentWallParts == 0 then
+		Log.Warn(
+			"Map",
+			"Assets.Environment resolved NO role-tagged parts (floor/walls) — biome recolor off + a possibly floorless scene (see the asset contract in features/map)"
+		)
+	end
+end
+
+local function resolveCheckpoint(folder: Folder)
+	table.clear(checkpointLegs)
+	checkpointPlate = resolvePV(folder, "CheckpointPlate")
+	checkpointMachine = resolvePV(folder, "GymMachine")
+	checkpointStationBody = resolvePV(folder, "UpgradeStationBody")
+	checkpointStationScreen = resolvePV(folder, "UpgradeStationScreen")
+	for _, child in ipairs(folder:GetChildren()) do
+		if child:IsA("BasePart") and child.Name == "CheckpointLeg" then
+			table.insert(checkpointLegs, child)
+		end
+	end
+	if checkpointPlate == nil then
+		Log.Warn("Map", "Assets.Checkpoint 'CheckpointPlate' missing or not a Part/Model — checkpoint height/teleport DISABLED (keep the named parts, see features/checkpoint.md)")
+	end
+	if checkpointMachine == nil then
+		Log.Warn("Map", "Assets.Checkpoint 'GymMachine' missing or not a Part/Model — the gym is unreachable (keep the named parts)")
+	end
+end
+
+--API
+-- Builds the whole scene once (idempotent) by CLONING the editable templates
+-- from ReplicatedStorage.Assets. Called from CakeSubs.Start.
+function MapService.Build()
+	if mapFolder then
+		return
+	end
+	-- The place file ships a default Baseplate + SpawnLocation — remove them
+	-- (the candy room replaces both; players must spawn ON the cake).
+	local stray = workspace:FindFirstChild("Baseplate")
+	if stray then
+		stray:Destroy()
+	end
+	local straySpawn = workspace:FindFirstChild("SpawnLocation")
+	if straySpawn then
+		straySpawn:Destroy()
+	end
+
+	-- Self-heal: author-missing templates get the default look (won't persist —
+	-- edit + save the place to keep). Everything below CLONES from Assets (R5).
+	local assets = MapService.GenerateAssets()
+
+	local envTemplate = assets:FindFirstChild("Environment")
+	local folder: Instance
+	if envTemplate then
+		folder = envTemplate:Clone()
+		folder.Name = "Map"
+	else
+		Log.Warn("Map", "Assets.Environment missing after GenerateAssets — empty Map folder (scene will be bare)")
+		folder = Instance.new("Folder")
+		folder.Name = "Map"
+	end
+	-- NOTE: `mapFolder` (the build guard) is set only AFTER `folder.Parent =
+	-- workspace` below — a throw mid-assembly must NOT leave an orphan that the
+	-- guard then treats as "already built" (blocking a retry).
+	resolveEnvironment(folder :: Folder)
+
+	-- Checkpoint clone (into the Map). checkpointCenter comes from CONFIG (the
+	-- template's authored positions are overwritten by SetCheckpointHeight).
+	local origin = gridCfg.origin
+	local cp = mapCfg.checkpoint
+	local loafEdgeX = footprintCfg.hx * gridCfg.cell
+	checkpointCenter = Vector3.new(origin.x + loafEdgeX + cp.edgeGap + cp.plateDepth / 2, 0, origin.z)
+
+	local cpTemplate = assets:FindFirstChild("Checkpoint")
+	if cpTemplate then
+		local cpFolder = cpTemplate:Clone()
+		cpFolder.Name = "Checkpoint"
+		cpFolder.Parent = folder
+		checkpointFolder = cpFolder :: Folder
+		resolveCheckpoint(checkpointFolder)
+	else
+		Log.Warn("Map", "Assets.Checkpoint missing after GenerateAssets — no gym/upgrade platform")
+	end
 
 	-- Initial placement (spawnNewCake corrects it to the real top layer per cake).
 	MapService.SetCheckpointHeight(origin.y + gridCfg.maxHeight * 0.6)
 
-	-- Spawn: directly on the cake (§12.1) — invisible, non-colliding pad
-	-- above the frosting; players drop onto the crust. Its Y RIDES the current
-	-- cake top via SetCheckpointHeight (below) so the drop stays a small
-	-- crust-crack, NOT a fall from `maxHeight` (which is now sized for the tall
-	-- 4-player loaf — a fixed maxHeight pad would drop solo players ~40 studs).
-	-- Initial Y matches the initial checkpoint height; the first cake corrects it.
+	-- Spawn: directly on the cake (§12.1) — invisible, non-colliding pad above
+	-- the frosting; players drop onto the crust. FUNCTIONAL (not art) so it stays
+	-- code-created. Its Y RIDES the current cake top via SetCheckpointHeight.
 	local spawn = Instance.new("SpawnLocation")
 	spawn.Name = "CakeSpawn"
 	spawn.Size = Vector3.new(14, 1, 14)
@@ -562,24 +738,17 @@ function MapService.Build()
 	cakeSpawnPart = spawn
 
 	folder.Parent = workspace
+	mapFolder = folder :: Folder -- built + parented: NOW the guard may short-circuit
 
-	Lighting.Brightness = biome.brightness
-	Lighting.Ambient = biome.ambient
-	Lighting.OutdoorAmbient = biome.ambient
-	Lighting.EnvironmentDiffuseScale = 1
-	-- Low specular: at 1.0 the frosting mirror-reflects the dark chocolate
-	-- room at grazing angles and the whole cake top reads BROWN.
-	Lighting.EnvironmentSpecularScale = 0.1
-	Lighting.ClockTime = 14
+	-- Lighting is NOT configured from code (user preference) — set it up in Studio.
 
-	Log.Sum(
-		"Map",
-		`candy room built — floor, plate, 4 walls (+props x{mapCfg.room.propsPerWall * 4}), {#mapCfg.candles} candles, checkpoint platform (gym + upgrade station), cake spawn`
-	)
+	Log.Sum("Map", `candy room CLONED from ReplicatedStorage.Assets — {#wallParts + #accentWallParts} walls, checkpoint platform (gym + upgrade station), cake spawn`)
 end
 
 --API
--- Recolors the scene for a biome (called on cake spawn).
+-- Recolors the scene for a biome (called on cake spawn). Best-effort on the
+-- resolved named parts; parts the user re-authored without the names/roles keep
+-- their own colors (nil-safe).
 function MapService.ApplyBiome(biomeId: string)
 	local biome = mapCfg.biomes[biomeId]
 	if not biome then
@@ -607,45 +776,47 @@ function MapService.ApplyBiome(biomeId: string)
 	if ceilingPart then
 		ceilingPart.Color = biome.ceilingColor
 	end
-	Lighting.Brightness = biome.brightness
-	Lighting.Ambient = biome.ambient
-	Lighting.OutdoorAmbient = biome.ambient
+	-- Lighting is NOT configured from code (user preference) — biome recolor
+	-- touches only the scene part colors now.
 end
 
 --API
 -- Positions the checkpoint so its plate TOP sits at world Y `topY`: the legs
--- resize down to the floor (y = 0) and the gym machine rides the plate top.
--- Called by CakeSubs on each new cake and whenever the top layer steps down.
+-- resize down to the floor (y = 0) and the gym machine / computer ride the plate
+-- top. Called by CakeSubs on each new cake and whenever the top layer steps down.
+-- POSITION is code-driven for all parts (they track the cake) via PivotTo (a
+-- user's Model is fine); the machine/computer/plate use their AUTHORED size so a
+-- resized model still aligns; legs telescope (Y code-driven, X/Z kept).
 function MapService.SetCheckpointHeight(topY: number)
 	if checkpointPlate == nil or checkpointCenter == nil then
-		Log.Warn("Map", "SetCheckpointHeight before the checkpoint was built — ignored")
-		return
+		return -- no authored plate (resolveCheckpoint warned) — degrade silently
 	end
 	local cp = mapCfg.checkpoint
+	local plate = checkpointPlate :: PVInstance
+	local plateSize = pvSize(plate)
 	-- Never let the plate sit so low the legs vanish (near-bare cake / core).
-	topY = math.max(topY, cp.minLegHeight + cp.plateThickness)
+	topY = math.max(topY, cp.minLegHeight + plateSize.Y)
 	-- Skip redundant moves (the 1 Hz scan re-asserts the same height between
-	-- layer changes — no point re-replicating 5 anchored parts every second).
+	-- layer changes — no point re-replicating anchored parts every second).
 	if checkpointTopY ~= nil and math.abs(checkpointTopY - topY) < 0.01 then
 		return
 	end
 	checkpointTopY = topY
 	local cx, cz = checkpointCenter.X, checkpointCenter.Z
-	local plateBottomY = topY - cp.plateThickness
-	checkpointPlate.CFrame = CFrame.new(cx, topY - cp.plateThickness / 2, cz)
+	local plateBottomY = topY - plateSize.Y
+	plate:PivotTo(CFrame.new(cx, topY - plateSize.Y / 2, cz))
 
-	-- The cake spawn pad rides the SAME cake top (topY = the current top-layer
-	-- surface, updated per cake + per layer step) so a (re)spawn is a small drop
-	-- onto the crust, not a fall from the tall-cake ceiling (maxHeight, now sized
-	-- for the 4-player loaf).
+	-- The cake spawn pad rides the SAME cake top so a (re)spawn is a small drop
+	-- onto the crust, not a fall from the tall-cake ceiling.
 	if cakeSpawnPart then
 		cakeSpawnPart.CFrame =
 			CFrame.new(cakeSpawnPart.Position.X, topY + mapCfg.spawnHeightAboveCake, cakeSpawnPart.Position.Z)
 	end
 
-	-- Legs stand on the floor (y = 0) up to the plate bottom.
-	local legHalfDepth = cp.plateDepth / 2 - cp.legInset - cp.legSize / 2
-	local legHalfWidth = cp.plateWidth / 2 - cp.legInset - cp.legSize / 2
+	-- Legs stand on the floor (y = 0) up to the plate bottom (Y telescopes; the
+	-- authored cross-section X/Z is kept). Corner inset off the AUTHORED plate.
+	local legHalfDepth = plateSize.X / 2 - cp.legInset - cp.legSize / 2
+	local legHalfWidth = plateSize.Z / 2 - cp.legInset - cp.legSize / 2
 	local legHeight = math.max(cp.minLegHeight, plateBottomY)
 	local corners = {
 		Vector3.new(-legHalfDepth, 0, -legHalfWidth),
@@ -656,26 +827,34 @@ function MapService.SetCheckpointHeight(topY: number)
 	for k, leg in ipairs(checkpointLegs) do
 		local corner = corners[k]
 		if corner then
-			leg.Size = Vector3.new(cp.legSize, legHeight, cp.legSize)
+			leg.Size = Vector3.new(leg.Size.X, legHeight, leg.Size.Z)
 			leg.CFrame = CFrame.new(cx + corner.X, legHeight / 2, cz + corner.Z)
 		end
 	end
 
 	if checkpointMachine then
-		local machineX = cx + cp.plateDepth / 2 - cp.machineSize.X / 2 - 1
-		checkpointMachine.CFrame = CFrame.new(machineX, topY + cp.machineSize.Y / 2, cz)
+		local m = checkpointMachine :: PVInstance
+		local mSize = pvSize(m)
+		local machineX = cx + plateSize.X / 2 - mSize.X / 2 - 1
+		-- PivotTo moves the collider AND its descendant parts (the authored treadmill
+		-- visual), so the whole machine rides the plate together (user req 4 mount).
+		m:PivotTo(CFrame.new(machineX, topY + mSize.Y / 2, cz))
 	end
 
 	if checkpointStationBody then
 		-- Cake-side (−X) edge, +Z corner: keeps the centre landing and the −X
-		-- walk-back path to the loaf clear. The screen sits on top facing the plate
-		-- centre (where a returning player arrives).
-		local sx = cx - cp.plateDepth / 2 + cp.stationSize.X / 2 + 1
-		local sz = cz + cp.plateWidth / 2 - cp.stationSize.Z / 2 - 1.5
-		checkpointStationBody.CFrame = CFrame.new(sx, topY + cp.stationSize.Y / 2, sz)
+		-- walk-back path to the loaf clear. The screen sits on top facing the
+		-- plate centre (where a returning player arrives).
+		local body = checkpointStationBody :: PVInstance
+		local sSize = pvSize(body)
+		local sx = cx - plateSize.X / 2 + sSize.X / 2 + 1
+		local sz = cz + plateSize.Z / 2 - sSize.Z / 2 - 1.5
+		body:PivotTo(CFrame.new(sx, topY + sSize.Y / 2, sz)) -- descendants (computer visual) ride via PivotTo
 		if checkpointStationScreen then
-			local screenPos = Vector3.new(sx, topY + cp.stationSize.Y - cp.stationScreenSize.Y / 2 + 0.4, sz)
-			checkpointStationScreen.CFrame = CFrame.lookAt(screenPos, Vector3.new(cx, screenPos.Y, cz))
+			local screen = checkpointStationScreen :: PVInstance
+			local scSize = pvSize(screen)
+			local screenPos = Vector3.new(sx, topY + sSize.Y - scSize.Y / 2 + 0.4, sz)
+			screen:PivotTo(CFrame.lookAt(screenPos, Vector3.new(cx, screenPos.Y, cz)))
 		end
 	end
 end
@@ -687,8 +866,6 @@ function MapService.GetCheckpointCFrame(): CFrame?
 	if checkpointCenter == nil or checkpointTopY == nil then
 		return nil
 	end
-	-- Land at the plate center (within the gym prompt's range so it's active on
-	-- arrival) facing the cake (walk forward, -X, to step back onto the loaf).
 	local pos = Vector3.new(
 		checkpointCenter.X,
 		checkpointTopY + mapCfg.checkpoint.standHeight,
@@ -698,17 +875,18 @@ function MapService.GetCheckpointCFrame(): CFrame?
 end
 
 --API
--- True if a world position sits over the checkpoint plate's XZ footprint —
--- CakeSubs uses it to re-seat a player standing on the platform when it jumps
--- UP to a fresh cake (the anchored plate leaves them behind otherwise).
+-- True if a world position sits over the checkpoint plate's XZ footprint. Uses
+-- the plate's AUTHORED size so this server re-seat zone matches the client's
+-- proximity check (BodySubsClient reads the plate's real Size too).
 function MapService.IsOverCheckpoint(position: Vector3): boolean
 	if checkpointCenter == nil then
 		return false
 	end
 	local cp = mapCfg.checkpoint
+	local plateSize = if checkpointPlate then pvSize(checkpointPlate) else Vector3.new(cp.plateDepth, cp.plateThickness, cp.plateWidth)
 	local dx = math.abs(position.X - checkpointCenter.X)
 	local dz = math.abs(position.Z - checkpointCenter.Z)
-	return dx <= cp.plateDepth / 2 and dz <= cp.plateWidth / 2
+	return dx <= plateSize.X / 2 and dz <= plateSize.Z / 2
 end
 
 --API
@@ -718,7 +896,37 @@ function MapService.NearGym(position: Vector3): boolean
 	if checkpointMachine == nil then
 		return false
 	end
-	return (position - checkpointMachine.Position).Magnitude <= mapCfg.checkpoint.maxUseDistanceStuds
+	-- GetPivot (not .Position) so a Model machine works too.
+	return (position - checkpointMachine:GetPivot().Position).Magnitude <= mapCfg.checkpoint.maxUseDistanceStuds
+end
+
+--API
+-- Where to STAND on the treadmill (GymMachine) during a fat-burn run (user req 4):
+-- centred on the machine's XZ, feet on the belt (checkpointTopY + config height),
+-- facing along the belt (config yaw). nil until the checkpoint is built +
+-- positioned (BodySubs falls back to the standing burn).
+function MapService.GetGymMountCFrame(): CFrame?
+	if checkpointMachine == nil or checkpointTopY == nil then
+		return nil
+	end
+	local cp = mapCfg.checkpoint
+	local pivot = checkpointMachine:GetPivot().Position
+	local pos = Vector3.new(pivot.X, checkpointTopY + cp.treadmillStandHeight, pivot.Z)
+	return CFrame.new(pos) * CFrame.Angles(0, math.rad(cp.treadmillFaceYaw), 0)
+end
+
+--API
+-- Step-off spot beside the treadmill after a completed run (user req 4): a few
+-- studs toward the plate centre (−X, off the belt), facing the cake so a forward
+-- step returns to the loaf. nil until built + positioned.
+function MapService.GetGymDismountCFrame(): CFrame?
+	if checkpointMachine == nil or checkpointTopY == nil then
+		return nil
+	end
+	local cp = mapCfg.checkpoint
+	local pivot = checkpointMachine:GetPivot().Position
+	local pos = Vector3.new(pivot.X - cp.treadmillDismountBack, checkpointTopY + cp.treadmillDismountHeight, pivot.Z)
+	return CFrame.lookAt(pos, pos - Vector3.xAxis)
 end
 
 return MapService

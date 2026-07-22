@@ -142,7 +142,7 @@ function LocalCakeField.PredictBite(px: number, pz: number, radiusStuds: number,
 	end
 	local removed, changed = CakeOps.ApplyBite(
 		field, gridCfg, meta.footprint, meta.composition, layersCfg,
-		px, pz, radiusStuds, depthStuds, floorUnits
+		px, pz, radiusStuds, depthStuds, floorUnits, CakeConfig.sim.biteClearRefDepth
 	)
 	for _, i in ipairs(changed) do
 		markChanged(i)

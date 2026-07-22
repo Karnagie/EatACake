@@ -37,6 +37,12 @@ function SettingsSubs.SendSettings(player: Player)
 	uSettings:FireClient(player, { settings = profile.core.settings })
 end
 
+--API
+-- Join-state hook: PlayerLifecycleSubs calls this after profile load + ClientReady.
+function SettingsSubs.PushInitialState(player: Player)
+	SettingsSubs.SendSettings(player)
+end
+
 function SettingsSubs.Start(data, services)
 	profileData = data.PlayerProfileData
 	uSettings = Net.Update("SettingsUpdate")

@@ -93,6 +93,13 @@ function RewardsSubs.SendTime(player: Player)
 	end
 end
 
+--API
+-- Join-state hook: PlayerLifecycleSubs calls this after profile load + ClientReady.
+function RewardsSubs.PushInitialState(player: Player)
+	RewardsSubs.SendDaily(player)
+	RewardsSubs.SendTime(player)
+end
+
 function RewardsSubs.Start(data, services)
 	local dailyData = data.DailyRewardsData
 	local timeData = data.TimeRewardsData
@@ -157,7 +164,7 @@ function RewardsSubs.Start(data, services)
 	end)
 
 	-- Playtime flush loop: fold live session time into the profile so
-	-- ProfileStore's ~30s auto-save persists a near-current `today`.
+	-- ProfileStore's ~300s auto-save persists a near-current `today`.
 	task.spawn(function()
 		while true do
 			task.wait(timeData.flushInterval)

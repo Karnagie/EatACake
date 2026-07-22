@@ -50,9 +50,11 @@ Runtime: `PlayerRuntimeData.gymSessions/lastAutoBurn/lastMorphFill`.
   HumanoidRootPart (physics/collision/camera) is never touched, so WalkSpeed &
   jump are unchanged. Same replicated `StomachFill`, zero network.
 - WalkSpeed is server-authoritative: `BodySubs.RefreshBody` = runSpeed stat
-  × fill penalty × caramel slow (1 Hz surface check). NOTE: the scaled body's
-  HRP collision also scales — it walks fine on flat ground but can catch on the
-  cake's craters (jump to unstick).
+  × fill penalty × caramel slow (1 Hz surface check). NOTE: the collision rework
+  (Task 4, `features/cake-sim.md`) makes eating move in a roughly straight line
+  — one walkable surface (server safety slabs sit BELOW the fine client columns),
+  rate-limited column rise (refilling cake doesn't punt you up — jump to climb
+  out), and no bounce/jump-boost while eating.
 
 ## Gotchas (rig — verified in Studio)
 - **AnimationConstraint avatars**: modern/layered-clothing avatars use
@@ -111,10 +113,32 @@ is no calorie exploit). The stepHz drain loop calls `GymService.Advance` →
 + SendCurrency + SendStomach) → `{event="progress"}`; on `burned01 ≥ 1` it ends
 the session with `{event="result", banked}`.
 
-**Stepping away STOPS it** (the user's rule): the drain loop re-checks
-`NearGym` each tick; leaving (or losing the character) ends the session
-(`{event="stopped"}`, no payout — the drained belly is kept) and closes the
-overlay client-side.
+**Treadmill run (user req)**: the `GymMachine` is a **treadmill** (an invisible
+collider Part carrying the authored treadmill Model; both ride the plate via
+`PivotTo`). On `PromptTriggered` (a real session, not the instant-final tier),
+BodySubs **mounts** the player on the belt: teleports the HRP to
+`MapService.GetGymMountCFrame()`, **anchors** it in place, and plays a looping
+**run animation** SERVER-side on the Animator (replicates to everyone; the
+character's own `Animate.run` when present, else
+`BodyConfig.gym.treadmill.runAnimationId`). The belly drains as usual — passive
+`burnSpeed` finishes it hands-free, taps still speed it up. On `burned01 ≥ 1`
+BodySubs **unmounts** (stops the anim, restores the anchor, teleports the player
+beside the treadmill via `MapService.GetGymDismountCFrame()`) and fires
+`{event="result"}`. Mount geometry lives in `MapConfigData.checkpoint`
+(`treadmillStandHeight`/`FaceYaw`/`DismountBack`/`DismountHeight`, relative to the
+plate top, Studio-verified). `treadmill.enabled=false` restores the old STANDING
+burn.
+**Committed run / walk-away**: a treadmill run is COMMITTED — the player is
+ANCHORED on the belt, so the old "walk away to stop" rule (the user's earlier
+rule) is SUPERSEDED for a run; it ends only when the belly empties (or death /
+rebirth / an instant burn, which all release the mount). The walk-away stop
+still applies to the STANDING fallback (`treadmill.enabled=false` or a failed
+mount): that path re-checks `NearGym` each tick and ends on leaving
+(`{event="stopped"}`, no payout, the drained belly is kept). **Robust release**:
+a per-tick safety net unmounts any player who is still mounted but has NO session
+(so an external ender like **rebirth** `GymService.EndSession` can never leave
+them stuck anchored), firing `{event="stopped"}` to close the overlay;
+`CharacterRemoving` (death/reset) and `PlayerRemoving` also clear the mount.
 
 **Full burns** (`burnAll`, EndSession-first so a live session can't re-inflate
 the belly): Auto-Gym pass burns the whole belly every 6 s (`{event="auto"}`);
@@ -145,7 +169,10 @@ it. The modal restores prompts on close and the gate re-applies next tick.
 `ProfileSchema/StomachSection`, `services/StomachService` (`IsFull`,
 `SetBelly`, `Burn`), `services/GymService` (drain-session math),
 `services/StatsService` (`BurnSpeed`/`BurnPerTap`/`InstantBurn`/`GymEfficiency`),
-`subscriptions/BodySubs` (gym orchestration + drain loop + body morph lerp);
+`subscriptions/BodySubs` (gym orchestration + drain loop + treadmill
+mount/anchor/run + body morph lerp), `services/MapService`
+(`GetGymMountCFrame`/`GetGymDismountCFrame`), `data/MapConfigData`
+(`checkpoint.treadmill*`);
 shared `config/BodyConfig` (`gym`/`morph`/`tumble`/`eatGesture`),
 `config/UpgradeConfig` (`burnSpeed`/`burnPerTap`/`instantBurn` gym stats — see
 `features/upgrades.md`); client `BallRollController` (tumble), `BodySubsClient`,

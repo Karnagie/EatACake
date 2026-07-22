@@ -85,7 +85,11 @@ Interaction.ZeroFill = ZERO_FILL
 --API
 -- Returns (scaleRef, handlers). Spread `handlers` onto the TextButton props and
 -- render `Interaction.pressLayer(scaleRef, ...)` as a child.
--- config: { enabled=true, onActivated=fn?, hoverScale?, pressScale?, feel? }
+-- config: { enabled=true, onActivated=fn?, onPressStart=fn(input)?,
+--           onPressEnd=fn(input)?, hoverScale?, pressScale?, feel? }
+-- onActivated fires on a click/tap (release); onPressStart/onPressEnd fire on
+-- press-down / release for HOLD buttons (a tap fires both). `input` is the
+-- Touch InputObject (nil for mouse) — lets a caller correlate the finger.
 function Interaction.usePressable(config)
 	config = config or {}
 	local feel = config.feel or Theme.Feel
@@ -96,15 +100,31 @@ function Interaction.usePressable(config)
 	local scaleRef = React.useRef(nil)
 	local flags = React.useRef(nil)
 	if flags.current == nil then
-		flags.current = { hover = false, press = false }
+		-- `pressed` is finger-aware: the button is held while the mouse is down
+		-- OR any Touch that began on it is still down (a refcount set). This makes
+		-- HOLD buttons multi-touch-correct — a second finger tapping the same
+		-- button can't cancel the first finger's hold, and a drag-off release is
+		-- caught when the LAST finger lifts (GuiObject delivers its InputEnded).
+		flags.current = { hover = false, mouseDown = false, touches = {} }
 	end
 	-- Latest activation callback without rebuilding handlers each render.
 	local activatedRef = React.useRef(nil)
 	activatedRef.current = config.onActivated
+	-- Optional HOLD callbacks: onPressStart fires when the FIRST press lands,
+	-- onPressEnd when the LAST one releases (a TAP fires both). Read through refs
+	-- so handlers stay stable across the HUD's bite-rate re-renders.
+	local pressStartRef = React.useRef(nil)
+	pressStartRef.current = config.onPressStart
+	local pressEndRef = React.useRef(nil)
+	pressEndRef.current = config.onPressEnd
 
 	local handlers = React.useMemo(function()
 		if not enabled then
 			return {}
+		end
+
+		local function isPressed(): boolean
+			return flags.current.mouseDown or next(flags.current.touches) ~= nil
 		end
 
 		local function retarget()
@@ -113,7 +133,7 @@ function Interaction.usePressable(config)
 				return
 			end
 			local target, info
-			if flags.current.press then
+			if isPressed() then
 				target, info = pressScale, feel.PressTween
 			elseif flags.current.hover then
 				target, info = hoverScale, feel.PressTween
@@ -123,34 +143,55 @@ function Interaction.usePressable(config)
 			TweenService:Create(scale, info, { Scale = target }):Play()
 		end
 
+		-- Call after mutating mouseDown / touches. Drives the squish tween and,
+		-- on the AGGREGATE press edge (first-down / last-up), the optional HOLD
+		-- callbacks — so multi-touch and drag-off release resolve correctly.
+		-- `input` is the Touch InputObject (nil for mouse) that caused the edge.
+		local function updatePress(wasPressed: boolean, input)
+			retarget()
+			local nowPressed = isPressed()
+			if nowPressed == wasPressed then
+				return
+			end
+			local cb = if nowPressed then pressStartRef.current else pressEndRef.current
+			if cb then
+				cb(input)
+			end
+		end
+
 		return {
 			[React.Event.MouseEnter] = function()
 				flags.current.hover = true
 				retarget()
 			end,
 			[React.Event.MouseLeave] = function()
+				local was = isPressed()
 				flags.current.hover = false
-				flags.current.press = false
-				retarget()
+				flags.current.mouseDown = false -- pointer left: drop a mouse hold
+				updatePress(was, nil)
 			end,
 			[React.Event.MouseButton1Down] = function()
-				flags.current.press = true
-				retarget()
+				local was = isPressed()
+				flags.current.mouseDown = true
+				updatePress(was, nil)
 			end,
 			[React.Event.MouseButton1Up] = function()
-				flags.current.press = false
-				retarget()
+				local was = isPressed()
+				flags.current.mouseDown = false
+				updatePress(was, nil)
 			end,
 			[React.Event.InputBegan] = function(_, input)
 				if input.UserInputType == Enum.UserInputType.Touch then
-					flags.current.press = true
-					retarget()
+					local was = isPressed()
+					flags.current.touches[input] = true
+					updatePress(was, input)
 				end
 			end,
 			[React.Event.InputEnded] = function(_, input)
 				if input.UserInputType == Enum.UserInputType.Touch then
-					flags.current.press = false
-					retarget()
+					local was = isPressed()
+					flags.current.touches[input] = nil
+					updatePress(was, input)
 				end
 			end,
 			[React.Event.MouseButton1Click] = function()
@@ -169,11 +210,18 @@ function Interaction.usePressable(config)
 		if enabled then
 			return
 		end
+		local wasPressed = flags.current.mouseDown or next(flags.current.touches) ~= nil
 		flags.current.hover = false
-		flags.current.press = false
+		flags.current.mouseDown = false
+		table.clear(flags.current.touches)
 		local scale = scaleRef.current
 		if scale then
 			TweenService:Create(scale, feel.ReleaseTween, { Scale = 1 }):Play()
+		end
+		-- A HOLD button disabled/hidden mid-press must release its hold too
+		-- (else eating would stick on after the eat button hides).
+		if wasPressed and pressEndRef.current then
+			pressEndRef.current(nil)
 		end
 	end, { enabled })
 

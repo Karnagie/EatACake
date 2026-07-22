@@ -36,6 +36,7 @@ function CakeFeelSubsClient.Start(data, modules)
 	local SoundPool = modules.SoundPool
 	local ParticlePool = modules.ParticlePool
 	local CameraShake = modules.CameraShake
+	local LocalEatState = modules.LocalEatState -- flat-while-eating gate (Task 4)
 
 	local feelCfg = CakeConfig.feel
 	local gridCfg = CakeConfig.grid
@@ -46,6 +47,7 @@ function CakeFeelSubsClient.Start(data, modules)
 	local baseJumpPower = 50
 	local baseJumpHeight = 7.2
 	local appliedLayerId: string? = nil
+	local appliedEating = false -- last eating state the jump was applied for (Task 4)
 	local lastFallSpeed = 0 -- studs/s downward, tracked pre-landing
 	local pollAccum = 0
 	local crustFresh = false -- first crack of a fresh cake = the ceremony
@@ -73,6 +75,11 @@ function CakeFeelSubsClient.Start(data, modules)
 			return
 		end
 		local mult = (layer and layer.jumpMult) or 1
+		-- Flat while eating (Task 4): cap the jump to ~normal so a sponge/jelly
+		-- super-jump doesn't launch you mid-eat (straight-line movement).
+		if LocalEatState.Get() then
+			mult = math.min(mult, feelCfg.jumpMultCapWhileEating)
+		end
 		if humanoid.UseJumpPower then
 			humanoid.JumpPower = baseJumpPower * mult
 		else
@@ -108,8 +115,10 @@ function CakeFeelSubsClient.Start(data, modules)
 				ParticlePool.Burst(point + Vector3.new(0, 0.5, 0), color, JuiceConfig.particles.shardsPerCrack // 2)
 			end
 		end
-		-- Trampoline layers: throw the character back up.
-		if layer.bounce and impact >= feelCfg.bounceMinImpact and root ~= nil then
+		-- Trampoline layers: throw the character back up. SUPPRESSED while eating
+		-- (Task 4) — no bounce mid-eat so movement stays a straight line.
+		local eatingNow = feelCfg.noBounceWhileEating and LocalEatState.Get()
+		if layer.bounce and impact >= feelCfg.bounceMinImpact and root ~= nil and not eatingNow then
 			local v = root.AssemblyLinearVelocity
 			local up = math.min(impact * layer.bounce, feelCfg.bounceMaxUp)
 			root.AssemblyLinearVelocity = Vector3.new(v.X, up, v.Z)
@@ -143,6 +152,7 @@ function CakeFeelSubsClient.Start(data, modules)
 		baseJumpPower = h.JumpPower
 		baseJumpHeight = h.JumpHeight
 		appliedLayerId = nil
+		appliedEating = false -- fresh character: re-apply the jump on the first poll
 		lastFallSpeed = 0
 		h.StateChanged:Connect(function(_, new)
 			if new == Enum.HumanoidStateType.Landed then
@@ -179,8 +189,13 @@ function CakeFeelSubsClient.Start(data, modules)
 		pollAccum = 0
 		local layer = layerUnderFeet()
 		local id = layer and layer.id or nil
-		if id ~= appliedLayerId then
+		-- Re-apply jump on a layer change OR when eating starts/stops (the eating
+		-- gate caps the jump — Task 4), so stepping onto sponge mid-eat stays flat
+		-- and releasing the EAT button restores the spring.
+		local nowEating = LocalEatState.Get()
+		if id ~= appliedLayerId or nowEating ~= appliedEating then
 			appliedLayerId = id
+			appliedEating = nowEating
 			applyJump(layer)
 		end
 	end)

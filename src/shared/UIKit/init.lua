@@ -44,6 +44,7 @@ local Components = {
 	HexNode = require(ComponentsFolder.HexNode),
 	HexTreeOverlay = require(ComponentsFolder.HexTreeOverlay),
 	GymOverlay = require(ComponentsFolder.GymOverlay),
+	EatButton = require(ComponentsFolder.EatButton),
 	PetRevealOverlay = require(ComponentsFolder.PetRevealOverlay),
 	RebirthPanel = require(ComponentsFolder.RebirthPanel),
 	QuestRow = require(ComponentsFolder.QuestRow),

@@ -1,6 +1,13 @@
 --[[
-	MapConfigData — candy-room map tuning (R1). MapService builds from
-	these numbers at boot; biome palettes recolor per cake (GDD §9).
+	MapConfigData — candy-room map tuning (R1).
+
+	Since ADR-0007 the static scene is CLONED from editable place-authored models
+	in `ReplicatedStorage.Assets` (Environment + Checkpoint), NOT built from these
+	numbers at runtime. These numbers now serve two roles: they SEED the default
+	look (`MapService.GenerateAssets` — the fallback generator the user replaces in
+	Studio), and the `checkpoint` + `biomes` blocks still drive RUNTIME logic
+	(SetCheckpointHeight placement + reach math; per-biome recolor of role-tagged
+	parts). Visual props/colours are otherwise authored in the place now.
 
 	Reference look: an indoor candy world — studded chocolate walls with
 	X-braces and one pink accent wall, dessert props (gumballs, lollipops,
@@ -20,7 +27,14 @@ MapConfigData.spawnHeightAboveCake = 8 -- fall onto the frosting (§7.1 crust cr
 -- The room: four decorated walls around the play area.
 MapConfigData.room = {
 	size = 340, -- inner width (walls at ±170)
-	wallHeight = 110,
+	-- Tall enough to clear the 3× cake: a 4-player loaf tops out ~261 studs
+	-- (grid.origin.y 2 + composition height), so the walls + ceiling (at
+	-- wallHeight+1) must sit above it or players eating the top clip through the
+	-- ceiling / spawn above the room. (The scene is CLONED from place-authored
+	-- ReplicatedStorage.Assets — if the room is already authored at the old
+	-- height, raise its walls/ceiling in Studio too; this only reseeds the
+	-- default generator, ADR-0007.)
+	wallHeight = 300,
 	wallThickness = 6,
 	braceThickness = 2.5, -- diagonal X-braces on chocolate walls
 	propsPerWall = 20,
@@ -76,6 +90,17 @@ MapConfigData.checkpoint = {
 	stationScreenSize = Vector3.new(4.4, 3.2, 0.5),
 	upgradePromptName = "UpgradeStation",
 	upgradePromptRange = 10, -- ProximityPrompt.MaxActivationDistance (open range)
+	-- Treadmill (fat removal, user req 4): the GymMachine's authored Model IS a
+	-- treadmill; pressing the gym prompt MOUNTS the player on the belt (anchored +
+	-- a run animation, BodySubs) and, when the belly empties, DISMOUNTS them beside
+	-- it. The machine (collider) + its authored visual RIDE the plate top (moved
+	-- rigidly in SetCheckpointHeight), so this mount geometry is relative to the
+	-- current PLATE TOP. Tune in Studio to line the feet up with the belt / clear
+	-- the step-off of the machine.
+	treadmillStandHeight = 6.2, -- HRP Y above the plate top while standing on the belt (Studio-verified: feet on the deck)
+	treadmillFaceYaw = 0, -- degrees, facing along the belt (0 = −Z; set to the belt's long axis)
+	treadmillDismountBack = 5, -- studs toward the plate centre (−X) for the step-off spot
+	treadmillDismountHeight = 3.5, -- HRP Y above the plate top at the dismount spot
 	-- Candy scaffold palette (static — it's structure, not a biome surface).
 	plateColor = Color3.fromRGB(240, 130, 190),
 	legColor = Color3.fromRGB(150, 92, 60),

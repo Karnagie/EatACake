@@ -86,6 +86,12 @@ function BodySubs.SendStomach(player: Player)
 	BodySubs.RefreshBody(player)
 end
 
+--API
+-- Join-state hook: PlayerLifecycleSubs calls this after profile load + ClientReady.
+function BodySubs.PushInitialState(player: Player)
+	BodySubs.SendStomach(player)
+end
+
 function BodySubs.Start(data, services)
 	services_ = services
 	bodyCfg = data.CakeConfigData.body
@@ -97,6 +103,99 @@ function BodySubs.Start(data, services)
 
 	local gymCfg = bodyCfg.gym
 	local stepTick = 1 / math.max(1, gymCfg.stepHz)
+
+	-- ── Treadmill run (user req 4) ──────────────────────────────────────────
+	-- Players currently MOUNTED on the treadmill during a fat-burn run: the
+	-- anchored HRP + its prior Anchored flag (so we release it exactly) + the
+	-- server-played run AnimationTrack (stopped on dismount). Wiring state (like
+	-- caramelMult); cleared on dismount / character-removing / leave.
+	local gymMount: { [Player]: { hrp: BasePart, prevAnchored: boolean, runTrack: AnimationTrack? } } = {}
+
+	-- Play the run animation on the character's Animator, SERVER-side so it
+	-- replicates to every client. Prefers the character's OWN run animation
+	-- (rig-correct for R6/R15/layered avatars); falls back to the config id.
+	local function playRunAnim(character: Model): AnimationTrack?
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+		if animator == nil then
+			Log.Once(SCOPE, "treadmill-no-animator", "treadmill run: character has no Animator — mount still anchors, but no run pose")
+			return nil
+		end
+		local animId = gymCfg.treadmill.runAnimationId
+		local animate = character:FindFirstChild("Animate")
+		local runHolder = animate and animate:FindFirstChild("run")
+		local runAnim = runHolder and runHolder:FindFirstChildWhichIsA("Animation")
+		if runAnim and runAnim.AnimationId ~= "" then
+			animId = runAnim.AnimationId -- the rig's own run anim
+		end
+		local anim = Instance.new("Animation")
+		anim.AnimationId = animId
+		local ok, track = pcall(function()
+			return (animator :: Animator):LoadAnimation(anim)
+		end)
+		anim:Destroy()
+		if not ok or track == nil then
+			Log.Warn(SCOPE, `treadmill run animation failed to load ({animId}) — no run pose`)
+			return nil
+		end
+		track.Priority = Enum.AnimationPriority.Action -- override the idle/fall the default Animate plays while anchored
+		track.Looped = true
+		track:Play(0.2)
+		return track
+	end
+
+	-- Mount the player on the treadmill belt: teleport onto it, ANCHOR the HRP
+	-- (locked in place — they run without moving) and play the run animation.
+	-- Returns false if the character or the mount point isn't ready — the caller
+	-- then leaves the session as a plain STANDING burn (graceful degrade).
+	local function mountTreadmill(player: Player): boolean
+		if not gymCfg.treadmill.enabled then
+			return false
+		end
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		local mountCF = services.MapService.GetGymMountCFrame()
+		if character == nil or root == nil or mountCF == nil then
+			-- R8: never degrade silently — say why the treadmill mount fell back to a
+			-- standing burn (checkpoint not positioned yet, or no character/HRP).
+			local why = if mountCF == nil then "no mount point (checkpoint not positioned — see features/checkpoint.md)" else "no character/HumanoidRootPart"
+			Log.Once(SCOPE, `treadmill-mount-{player.UserId}`, `{player.Name}: treadmill mount skipped ({why}) — running a standing burn`)
+			return false
+		end
+		local track = playRunAnim(character)
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+		root.CFrame = mountCF
+		local prevAnchored = root.Anchored
+		root.Anchored = true
+		gymMount[player] = { hrp = root, prevAnchored = prevAnchored, runTrack = track }
+		return true
+	end
+
+	-- Release the player from the treadmill: stop the run animation, restore the
+	-- HRP anchor and (on a completed run) step them off beside the treadmill.
+	-- Idempotent — safe to call whenever a session ends, mounted or not.
+	local function unmountTreadmill(player: Player, stepOff: boolean)
+		local mount = gymMount[player]
+		if mount == nil then
+			return
+		end
+		gymMount[player] = nil
+		if mount.runTrack then
+			mount.runTrack:Stop(0.2)
+		end
+		local hrp = mount.hrp
+		if hrp and hrp.Parent then
+			hrp.Anchored = mount.prevAnchored
+			if stepOff then
+				local off = services.MapService.GetGymDismountCFrame()
+				if off then
+					hrp.AssemblyLinearVelocity = Vector3.zero
+					hrp.CFrame = off
+				end
+			end
+		end
+	end
 
 	-- Applies a GymService step/instant result: subtracts the drain's OWN delta
 	-- from the current belly (so a mid-session bite survives — see GymService),
@@ -123,6 +222,7 @@ function BodySubs.Start(data, services)
 		-- Supersede any manual drain session so its baseline can't re-inflate the
 		-- belly we're emptying here (the drain rewrites fill from startFill/tick).
 		services.GymService.EndSession(userId)
+		unmountTreadmill(player, true) -- if they were mid-run on the treadmill, step them off
 		local banked = services.StomachService.Burn(userId, services.StatsService.GymEfficiency(userId), 1)
 		if banked == nil then
 			-- Both callers pre-check GetState, so this is defensive — but R8:
@@ -173,8 +273,17 @@ function BodySubs.Start(data, services)
 			-- instant-burn maxed (final tier) — whole belly gone on press, no session.
 			services.GymService.EndSession(userId)
 			uGym:FireClient(player, { event = "instant", banked = start.bankedTotal })
+			-- Milestone save: instant-burn banked the belly on press — persist now.
+			if start.bankedTotal and start.bankedTotal > 0 then
+				services.PersistenceService.Save(userId)
+			end
 		else
-			uGym:FireClient(player, { event = "started" })
+			-- Mount the player on the treadmill (anchored + run animation, user req
+			-- 4). If it can't mount (no mount point yet) the session still runs as a
+			-- plain STANDING burn — the drain loop's non-mounted branch keeps the
+			-- walk-away-to-stop behaviour.
+			local mounted = mountTreadmill(player)
+			uGym:FireClient(player, { event = "started", treadmill = mounted or nil })
 			uGym:FireClient(player, { event = "progress", remain01 = 1 - start.burned01 })
 		end
 	end)
@@ -275,12 +384,29 @@ function BodySubs.Start(data, services)
 				if not services.PersistenceService.IsLoaded(userId) then
 					continue -- profile unloaded (leaving/session-taken): skip gym work
 				end
+				-- Safety net: release a player still MOUNTED after the session ended via a
+				-- path that didn't unmount (rebirth, external burn) so they can never be
+				-- left ANCHORED with no run. Idempotent (no-op if not mounted).
+				if gymMount[player] ~= nil and not services.GymService.HasSession(userId) then
+					unmountTreadmill(player, true)
+					uGym:FireClient(player, { event = "stopped" }) -- close the overlay + stop the run (session ended externally, e.g. rebirth)
+				end
 				if services.GymService.HasSession(userId) then
-					-- STOP if the player stepped away from the machine (user rule:
-					-- "walk away and it all stops"). Keeps the drained belly as-is.
+					-- Treadmill run (user req 4): while MOUNTED the player is ANCHORED on
+					-- the belt, so there is NO walk-away stop — the run is committed and ends
+					-- when the belly empties. Re-assert the mount CFrame so a (rare) plate
+					-- step-down carries them along. Only a STANDING burn (treadmill off /
+					-- mount failed) still stops when the player leaves the machine.
+					local mount = gymMount[player]
 					local character = player.Character
 					local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
-					if not root or not services.MapService.NearGym(root.Position) then
+					if mount then
+						local mountCF = services.MapService.GetGymMountCFrame()
+						if mount.hrp and mount.hrp.Parent and mountCF then
+							mount.hrp.CFrame = mountCF
+						end
+					end
+					if not mount and (not root or not services.MapService.NearGym(root.Position)) then
 						services.GymService.EndSession(userId)
 						uGym:FireClient(player, { event = "stopped" })
 					else
@@ -294,7 +420,11 @@ function BodySubs.Start(data, services)
 							creditResult(player, result)
 							if result.complete then
 								services.GymService.EndSession(userId)
+								unmountTreadmill(player, true) -- step off beside the treadmill (no-op if standing)
 								uGym:FireClient(player, { event = "result", banked = result.bankedTotal })
+								-- Milestone save: a completed gym drain banks the belly's
+								-- calories — persist before the ~300s autosave window.
+								services.PersistenceService.Save(userId)
 							else
 								uGym:FireClient(player, { event = "progress", remain01 = 1 - result.burned01 })
 							end
@@ -361,6 +491,19 @@ function BodySubs.Start(data, services)
 		player.CharacterAdded:Connect(function()
 			task.defer(BodySubs.RefreshBody, player)
 		end)
+		-- Death / reset mid-run: abort the treadmill session (the anchored HRP is
+		-- about to be destroyed; the fresh character spawns unanchored). Close the
+		-- overlay + stop the run animation with a "stopped" event (no payout — the
+		-- already-drained belly is kept). Also ends a plain standing session.
+		player.CharacterRemoving:Connect(function()
+			if gymMount[player] ~= nil or services.GymService.HasSession(player.UserId) then
+				gymMount[player] = nil
+				services.GymService.EndSession(player.UserId)
+				if uGym then
+					uGym:FireClient(player, { event = "stopped" })
+				end
+			end
+		end)
 	end
 	Players.PlayerAdded:Connect(watchCharacter)
 	for _, player in ipairs(Players:GetPlayers()) do
@@ -368,6 +511,7 @@ function BodySubs.Start(data, services)
 	end
 	Players.PlayerRemoving:Connect(function(player)
 		caramelMult[player] = nil
+		gymMount[player] = nil -- drop any treadmill-run wiring state (the character is gone)
 	end)
 end
 

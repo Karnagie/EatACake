@@ -29,6 +29,12 @@ function EconomySubs.SendCurrency(player: Player)
 	end
 end
 
+--API
+-- Join-state hook: PlayerLifecycleSubs calls this after profile load + ClientReady.
+function EconomySubs.PushInitialState(player: Player)
+	EconomySubs.SendCurrency(player)
+end
+
 function EconomySubs.Start(data, services)
 	EconomyService = services.EconomyService
 	uCurrency = Net.Update("CurrencyUpdate")

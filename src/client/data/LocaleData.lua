@@ -106,6 +106,8 @@ LocaleData.strings = {
 	["hex-tip-max"] = "Maxed out!",
 	["hex-tip-locked"] = "Buy the previous tier first.",
 	["hex-close"] = "Close [E]",
+	-- eat input (touch hold-to-eat HUD button, features/cake-sim.md)
+	["eat-button"] = "EAT",
 	-- gym (fat-burn overlay)
 	["gym-tap"] = "TAP!",
 	["gym-fat-left"] = "{n}% FAT",

@@ -2,7 +2,8 @@
 	PersistenceService — schema-driven player profile persistence (R2: logic only).
 
 	Built on ProfileStore (vendored: src/shared/lib/ProfileStore.luau), which
-	provides session locking, periodic auto-save (~30s), retries and a final
+	provides session locking, periodic auto-save (~300s; first ~150s after a
+	profile loads are skipped), retries and a final
 	save on server shutdown — none of that is reimplemented here.
 
 	What THIS service does on top:
@@ -260,9 +261,14 @@ function PersistenceService.LoadProfile(player: Player): ({ [any]: any }?, boole
 	profile.OnSessionEnd:Connect(function()
 		profileData.profiles[userId] = nil
 		profileData.sessions[userId] = nil
+		-- Intentional release (pre-teleport lobby<->game handoff): the player is
+		-- being moved to another place ON PURPOSE — consume the flag and DON'T
+		-- kick. A genuine displacement by another server never sets this.
+		local intentional = profileData.releasing[userId]
+		profileData.releasing[userId] = nil
 		-- Don't kick on server shutdown (ProfileStore ends sessions itself;
 		-- "loaded on another server" would be a false message).
-		if not ProfileStore.IsClosing and player.Parent == Players then
+		if not ProfileStore.IsClosing and not intentional and player.Parent == Players then
 			player:Kick(configData.messages["session-taken"])
 		end
 	end)
@@ -299,10 +305,19 @@ end
 --API
 -- Ends the session (final save included) and clears the runtime cache.
 -- Call exactly once when the player leaves.
-function PersistenceService.Unload(userId: number)
+--
+-- `intentional` = true marks a DELIBERATE release — the pre-teleport handoff to
+-- another place in the same universe. It flags PlayerProfileData.releasing so
+-- OnSessionEnd suppresses the "session-taken" kick (the player is being moved
+-- on purpose). Routine leave (PlayerRemoving) omits it. The flag is only set
+-- while the session is still active, so OnSessionEnd is guaranteed to consume it.
+function PersistenceService.Unload(userId: number, intentional: boolean?)
 	local session = profileData.sessions[userId]
 	if session ~= nil then
-		session:EndSession() -- OnSessionEnd clears PlayerProfileData
+		if intentional and session:IsActive() then
+			profileData.releasing[userId] = true
+		end
+		session:EndSession() -- OnSessionEnd clears PlayerProfileData (+ releasing)
 	end
 end
 

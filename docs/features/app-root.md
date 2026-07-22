@@ -10,8 +10,10 @@ mid-screen, not a full-height column). CakeBar (top
 center, phase-aware — **hidden during normal eating**, shown only for
 boss/spawn/reward), BellyBar (bottom center, glutton state), ComboBadge,
 AnnounceBanner, TO CHECKPOINT button (bottom-center, shown only when away from
-the checkpoint — see `features/checkpoint.md`). Panels toggled by ONE
-`openPanel` (zIndex 50):
+the checkpoint — see `features/checkpoint.md`), EAT button (`EatButton`, bottom-
+right thumb zone, **TOUCH devices only** — hold to eat / tap for one bite; shown
+in eating/boss phases, hidden while a panel or the gym overlay is up; see
+`features/cake-sim.md` input). Panels toggled by ONE `openPanel` (zIndex 50):
 Pets (PetsInspectPanel), Upgrades, Rebirth, Quests, Shop, Daily, Time,
 Codes, Settings. Overlays: GymOverlay (40), PetRevealOverlay (90).
 
@@ -28,7 +30,8 @@ Codes, Settings. Overlays: GymOverlay (40), PetRevealOverlay (90).
 - Actions OUT: `AppRoot.SetCallbacks({...})` (merges): onClaimDaily,
   onClaimTime, onToggleSetting, onShopActivated, onRedeem, onBuyUpgrade,
   onEquipPet(petId, equip), onDoRebirth, onClaimQuest, onGymTap,
-  onDismissReveal. Wire to remotes in the feature's subs (R4).
+  onDismissReveal, onReturnCheckpoint, onEatDown/onEatUp (EAT button hold —
+  CakeSubsClient drives `eating`). Wire to remotes in the feature's subs (R4).
 - Feature subs NEVER call `UiRoot.Render` — `AppSubsClient` mounts once.
 
 ## View-models (R7)
@@ -56,5 +59,7 @@ pushAnnounce `task.delay`), Clear via `false`.
 `modules/AppRoot.lua`, `modules/UiRoot.lua`, `subscriptions/AppSubsClient.lua`;
 `subscriptions/BodySubsClient.lua` (feeds `checkpointFar`); kit components:
 `HudMenuButton` (bare icon+label menu button), BellyBar, CakeBar (+`visible`),
-ComboBadge, AnnounceBanner, UpgradeRow/UpgradesPanel, GymOverlay,
-PetRevealOverlay, RebirthPanel, QuestRow/QuestsPanel, StatRow (extracted).
+ComboBadge, AnnounceBanner, UpgradeRow/UpgradesPanel, GymOverlay, EatButton
+(touch hold-to-eat, `Theme.EatButton`), PetRevealOverlay, RebirthPanel,
+QuestRow/QuestsPanel, StatRow (extracted). Shared press/hold feel: `Interaction`
+(`usePressable` now also exposes `onPressStart`/`onPressEnd` HOLD callbacks).

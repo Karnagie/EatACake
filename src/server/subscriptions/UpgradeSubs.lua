@@ -34,6 +34,12 @@ function UpgradeSubs.SendUpgrades(player: Player)
 	uUpgrades:FireClient(player, { levels = levels })
 end
 
+--API
+-- Join-state hook: PlayerLifecycleSubs calls this after profile load + ClientReady.
+function UpgradeSubs.PushInitialState(player: Player)
+	UpgradeSubs.SendUpgrades(player)
+end
+
 function UpgradeSubs.Start(data, services)
 	services_ = services
 	uUpgrades = Net.Update("UpgradesUpdate")
@@ -71,6 +77,9 @@ function UpgradeSubs.Start(data, services)
 		UpgradeSubs.SendUpgrades(player)
 		EconomySubs.SendCurrency(player)
 		BodySubs.RefreshBody(player) -- capacity / run speed may have changed
+		-- Milestone save: a purchase spends calories + grants a permanent tier;
+		-- persist now so a crash before the ~300s autosave can't lose it.
+		services.PersistenceService.Save(userId)
 	end)
 end
 

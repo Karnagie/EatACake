@@ -1,13 +1,18 @@
 --[[
 	CakeRenderer — the cake's client visual (GDD §4.5).
 
-	Primary path: ONE MeshPart PER SIM LAYER. Every composition band becomes
-	a dedicated EditableMesh slab (heightfield clamped to the band) so each
-	layer carries its OWN Material / Transparency / Reflectance — translucent
-	marmalade, grainy sponge, glossy caramel. The CRUST is a thin PALE WAX
-	FILM look of the always-visible CakeWaxShell web on top (below). Each
-	multi-band slab renders a SOLID body Color (NO per-band texture); only the
-	single-slab palette FALLBACK paints an EditableImage (height palette/cell).
+	Primary path: render the CURRENT + NEXT edible band as EditableMesh slabs (2
+	slabs — assignWindowBands/windowFor), not every layer. The layer gate forbids
+	eating below the active band's floor, so the band below is a flat floor seen
+	through craters and everything under IT is never exposed — that ungenerated
+	bulk is hidden by the textured CakeWrapper wall (a plain Part, not a mesh).
+	This caps the slab vertex budget at TWO regardless of how many / how tall the
+	layers are. The window slides DOWN as each layer finishes (rewindow, driven by
+	the layer-gate activeBandIndex). Each slab is the heightfield clamped to its
+	band and carries its OWN Material / Transparency / Reflectance and an OPTIONAL
+	image texture (layer.texture — frosting/chocolate/filling); a layer without a
+	texture renders a SOLID body Color, with the CakeWaxShell web on top. The parts
+	FALLBACK (no EditableMesh) draws the whole cake as the keycap column grid.
 
 	CRUNCHY BUTTER (reference: the "Crunchy Butter" ASMR games — a thin hard wax
 	crust over soft butter). This file owns the SOFT SQUISH: the mesh dents
@@ -67,6 +72,10 @@ local renderCfg = CakeConfig.render
 local layersCfg = CakeConfig.layers
 local crustCfg = renderCfg.crust
 local fractureCfg = renderCfg.fracture
+-- Slab UVs tile the layer textures this many times across the loaf (sharper than
+-- stretching once; Req 2). 1 = old stretch-once. Baked into the scratch UVs, so
+-- single (palette) mode must NOT use a per-cell image (it would tile wrongly).
+local LAYER_TEX_TILES = renderCfg.layerTextureTiles or 1
 
 local SIZE = gridCfg.size
 local VSIZE = SIZE + 1
@@ -75,7 +84,9 @@ local EPS = 0.02 -- studs: "the band still exists here" threshold
 -- The loaf footprint is FIXED per game (config), so mesh faces, ring layout
 -- and the vertex host set can be built once.
 local FOOTPRINT = CakeConfig.composition.footprint
--- core + middles + frosting; the pool grows lazily and never past this.
+-- Safety ceiling on the slab pool. The renderer now only ever renders the
+-- CURRENT + NEXT edible band (2 slabs — assignWindowBands), so the pool grows to
+-- 2 and this cap just backstops a bug. The bulk below is the CakeWrapper wall.
 local MAX_LAYER_MESHES = 8
 
 -- A cell hosts mesh faces iff its 3x3 neighborhood touches the footprint —
@@ -95,7 +106,7 @@ end
 
 local fieldModule -- LocalCakeField, injected
 local impl -- "editable" | "parts" | nil (setup failed)
-local updateCollisionColumns -- forward decl (defined with the column grid)
+local updateCollisionNearPlayer -- forward decl: radius-limited collision update (Task 4 feel + Task 2 perf)
 -- Declared HERE (before editableRebuild closes over it) — a later `local`
 -- would silently make the rebuild write a global (the upvalue trap).
 local visualColumns = false -- keycap fallback look vs invisible colliders
@@ -211,6 +222,9 @@ type Band = {
 local pool: { PoolEntry } = {}
 local bands: { Band } = {}
 local singleMode = false
+-- Which activeBandIndex the current 2-slab window reflects (layer gate). The
+-- window slides down when this diverges from LocalCakeField.ActiveBandIndex().
+local renderedActiveIndex = 0
 
 local worldX: { number } = {} -- local-space x per vertex (mesh space)
 local worldZ: { number } = {}
@@ -515,10 +529,11 @@ local function ensurePool(want: number): number
 		local em = scratch :: EditableMesh
 		for _, vi in ipairs(hostedVertList) do
 			vertIds[vi] = em:AddVertex(Vector3.new(worldX[vi], creationY[vi], worldZ[vi]))
-			-- STATIC planar UVs: layer textures map XZ over the grid.
+			-- STATIC planar UVs (map XZ over the grid), TILED LAYER_TEX_TILES× so layer
+				-- textures read SHARP instead of stretched-once (Req 2).
 			local vx = (vi - 1) % VSIZE
 			local vz = (vi - 1) // VSIZE
-			uvIds[vi] = em:AddUV(Vector2.new(vx / SIZE, vz / SIZE))
+			uvIds[vi] = em:AddUV(Vector2.new(vx / SIZE * LAYER_TEX_TILES, vz / SIZE * LAYER_TEX_TILES))
 			normalIds[vi] = em:AddNormal(Vector3.yAxis)
 		end
 		for _, ci in ipairs(hostedCellList) do
@@ -763,17 +778,32 @@ local function fractureOffsetAt(vi: number, fx: number, fz: number, radius: numb
 	return -fractureCfg.sinkDepth * depthMult * w * w -- round soft dent
 end
 
--- Derives the band list from the sim composition, grows the pool (lazily,
--- may YIELD, may fall short of the composition) and dresses the parts.
--- Returns desired transparencies (applied AFTER geometry is written — no
--- flash of stale slabs), or nil when not even one slab exists.
-local function assignBands(meta): { number }?
+-- The rendered window: the active (top edible) band + the one directly BELOW it,
+-- bottom-up — so both the CURRENT and the NEXT layer are visible (the next layer
+-- shows through craters cleared to the active floor). The textured CakeWrapper
+-- wall covers the cake below the NEXT band. Near the core there is only one band.
+local function windowFor(activeIndex: number, topCount: number): { number }
+	activeIndex = math.clamp(activeIndex, 1, math.max(1, topCount))
+	if activeIndex <= 1 then
+		return { 1 }
+	end
+	return { activeIndex - 1, activeIndex }
+end
+
+-- Assigns pooled slabs to ONLY the windowed sim bands (`windowIdx`, bottom-up)
+-- and dresses the parts. The perf win: 2 slabs instead of N, so more / taller
+-- layers no longer grow the vertex budget. coverTops/coverBottoms stay built
+-- from the FULL composition (the eaten-through tuck needs every band's top).
+-- Grows the pool lazily on the FIRST call (may YIELD; later window shifts reuse
+-- it — no yield). Returns desired transparencies (applied AFTER geometry is
+-- written — no flash of stale slabs), or nil when not even one slab exists.
+local function assignWindowBands(meta, windowIdx: { number }): { number }?
 	table.clear(bands)
 	table.clear(wobbleBandIndices)
 	table.clear(crustState)
 	-- Surface-cover lookup for the eaten-through tuck: translucent layers
 	-- (jelly) hide tucked sheets below their BOTTOM, opaque ones just under
-	-- the surface.
+	-- the surface. Built from ALL bands, not just the windowed ones.
 	table.clear(coverTops)
 	table.clear(coverBottoms)
 	for k, simBand in ipairs(meta.composition) do
@@ -784,7 +814,7 @@ local function assignBands(meta): { number }?
 		end
 	end
 	local topStuds = meta.composition[#meta.composition].top
-	local want = #meta.composition
+	local want = #windowIdx
 	local have = ensurePool(want)
 	if have == 0 then
 		return nil
@@ -792,26 +822,26 @@ local function assignBands(meta): { number }?
 	singleMode = have < want
 	local transparencies = {}
 	if singleMode then
-		-- Budget ladder step 2: ONE slab renders the whole cake through the
-		-- height palette texture. Layers keep their colors/crust stripes and
-		-- per-layer ooze; per-layer material/transparency/wobble are off.
-		Log.Once("CakeRenderer", "single-mode", `budget allows {have}/{want} slabs — single palette mesh mode (no per-layer materials)`)
+		-- Budget ladder step 2: ONE flat-colored slab renders the WHOLE cake (the
+		-- tiled layer UVs rule out a per-cell palette image). It seals the sides
+		-- down to the floor, so the CakeWrapper behind it is occluded — no double wall.
+		Log.Once("CakeRenderer", "single-mode", `budget allows {have}/{want} slabs — single flat-color mesh mode (no per-layer materials)`)
 		bands[1] = { layerId = "palette", bottom = 0, top = topStuds, poolIdx = 1, sink = renderCfg.hideSink.base, single = true }
 		local pe = pool[1]
 		local part = pe.part
 		part.Name = "CakeLayer1_palette"
 		part.Material = Enum.Material.SmoothPlastic
 		part.Reflectance = 0.1
-		if ensureImage(pe) ~= nil then
-			part.Color = WHITE
-			part.TextureContent = Content.fromObject(pe.image :: EditableImage)
-		else
-			part.TextureContent = Content.none
-			part.Color = tinted(layersCfg.frosting.colors.top, meta.rareKind, topStuds, topStuds)
-		end
+		-- Flat tinted color, NOT a per-cell palette image: the slab UVs are now
+		-- TILED for the layer textures (LAYER_TEX_TILES), which would repeat a
+		-- palette image wrongly. Single mode is a rare weak-device fallback, so a
+		-- flat slab is an acceptable further degradation.
+		part.TextureContent = Content.none
+		part.Color = tinted(layersCfg.frosting.colors.top, meta.rareKind, topStuds, topStuds)
 		transparencies[1] = 0
 	else
-		for bi, simBand in ipairs(meta.composition) do
+		for wi, simIdx in ipairs(windowIdx) do
+			local simBand = meta.composition[simIdx]
 			local layerDef = layersCfg[simBand.id]
 			local hMid = (simBand.bottom + simBand.top) * 0.5
 			local bodyColor = tinted(layerDef.colors.bottom:Lerp(layerDef.colors.top, 0.55), meta.rareKind, hMid, topStuds)
@@ -819,31 +849,39 @@ local function assignBands(meta): { number }?
 				layerId = simBand.id,
 				bottom = simBand.bottom,
 				top = simBand.top,
-				poolIdx = bi,
-				sink = renderCfg.hideSink.base + renderCfg.hideSink.perBand * bi,
+				poolIdx = wi,
+				sink = renderCfg.hideSink.base + renderCfg.hideSink.perBand * simIdx,
 				bodyColor = bodyColor,
 			}
-			bands[bi] = band
-			local pe = pool[bi]
+			bands[wi] = band
+			local pe = pool[wi]
 			local part = pe.part
-			part.Name = `CakeLayer{bi}_{simBand.id}`
+			part.Name = `CakeLayer{wi}_{simBand.id}`
 			part.Material = layerDef.material or Enum.Material.SmoothPlastic
 			part.Reflectance = layerDef.gloss or 0
-			transparencies[bi] = layerDef.transparency or 0
-			-- SOLID body color, no per-band texture. The pale crust look is the
-			-- always-visible CakeWaxShell riding ON TOP (features/cake-sim.md), so a
-			-- multi-band slab's EditableImage would only ever hold a UNIFORM bodyColor
-			-- fill (paintBandImage/updateCellPixels both write bodyColor everywhere) —
-			-- visually identical to part.Color. Painting it cost a 384² buffer fill +
-			-- WritePixelsBuffer upload PER band on every rebuild (the new-cake frame
-			-- spike) and a DrawRectangle per eaten cell PER band on every bite
-			-- (eating-time churn / GC pressure), for ZERO visual gain. Flat Color
-			-- instead: no paint, no upload, no EditableImage budget (helps mobile).
-			-- The palette fallback (single mode, above) still needs its texture.
-			part.TextureContent = Content.none
-			part.Color = bodyColor
+			-- The ACTIVE (topmost windowed) band keeps its real transparency —
+			-- see-through jelly shows the opaque band rendered directly below it. A
+			-- LOWER window band is the solid FLOOR with NOTHING rendered behind it
+			-- (only the perimeter CakeWrapper), so force it OPAQUE: a translucent
+			-- lower band (jelly under the active layer) would otherwise reveal the
+			-- ungenerated hollow interior through the crater floor.
+			transparencies[wi] = if wi == #windowIdx then (layerDef.transparency or 0) else 0
+			-- Task 3: a textured layer (frosting/chocolate/filling) shows its photo
+			-- mapped over the top surface (the slab's planar XZ UVs, TILED
+			-- LAYER_TEX_TILES× so it reads sharp — Req); others keep the flat body Color
+			-- as before. Affordable: only 2 slabs, a static texture REFERENCE (no
+			-- per-cell EditableImage paint — the mobile trap that got per-band cut).
+			-- ⚠ Tiling UVs + Content.fromUri on a FixedSize mesh is the same path the
+			-- WALL abandoned (it showed no texture) — VERIFY it displays in Studio.
+			if layerDef.texture then
+				part.TextureContent = Content.fromUri(layerDef.texture)
+				part.Color = WHITE
+			else
+				part.TextureContent = Content.none
+				part.Color = bodyColor
+			end
 			if layerDef.wobble then
-				table.insert(wobbleBandIndices, bi)
+				table.insert(wobbleBandIndices, wi)
 			end
 		end
 	end
@@ -855,31 +893,11 @@ local function assignBands(meta): { number }?
 	return transparencies
 end
 
-local function editableRebuild()
-	buildPalette()
-	local meta = fieldModule.Meta()
-	if not meta then
-		return
-	end
-	local startedAt = os.clock()
-	local transparencies = assignBands(meta) -- may yield (mesh creation)
-	if transparencies == nil then
-		-- Budget ladder step 3: no EditableMesh at all — the collision
-		-- columns become the visible keycap grid.
-		impl = "parts"
-		visualColumns = true
-		Log.Warn("CakeRenderer", "no EditableMesh budget — falling back to visible part grid")
-		return
-	end
-	for _, vi in ipairs(hostedVertList) do
-		local vx = (vi - 1) % VSIZE
-		local vz = (vi - 1) // VSIZE
-		targetH[vi] = vertexTarget(vx, vz)
-		displayH[vi] = targetH[vi]
-		oozeRate[vi] = oozeSpeedAt(targetH[vi])
-	end
-	-- TWO passes per band: heights first, then writes — normals read
-	-- NEIGHBOR heights; a single interleaved pass bakes sideways normals.
+-- Two-pass slab write for the current `bands` (heights first, then writes —
+-- normals read NEIGHBOR heights; a single interleaved pass bakes sideways
+-- normals), then paint + transparencies + squish restore. Shared by a full
+-- rebuild and a lightweight window shift.
+local function writeBandsGeometry(transparencies: { number })
 	for _, band in ipairs(bands) do
 		local pe = pool[band.poolIdx]
 		local newY = table.create(VSIZE * VSIZE, 0)
@@ -913,20 +931,85 @@ local function editableRebuild()
 	table.clear(squishBandIdx)
 	table.clear(ringDirty)
 	table.clear(movedVerts)
-	Log.Info("CakeRenderer", `bands rebuilt — {#bands} slabs ({#meta.composition} layers{if singleMode then ", palette mode" else ""}) in {math.floor((os.clock() - startedAt) * 1000)} ms`)
 end
 
-local function editableStep(dt: number, footPos: Vector3?)
+local function editableRebuild()
+	buildPalette()
+	local meta = fieldModule.Meta()
+	if not meta then
+		return
+	end
+	local startedAt = os.clock()
+	local activeIndex = fieldModule.ActiveBandIndex()
+	-- may yield on the FIRST call (mesh-pool creation)
+	local transparencies = assignWindowBands(meta, windowFor(activeIndex, #meta.composition))
+	if transparencies == nil then
+		-- Budget ladder step 3: no EditableMesh at all — the collision
+		-- columns become the visible keycap grid.
+		impl = "parts"
+		visualColumns = true
+		Log.Warn("CakeRenderer", "no EditableMesh budget — falling back to visible part grid")
+		return
+	end
+	for _, vi in ipairs(hostedVertList) do
+		local vx = (vi - 1) % VSIZE
+		local vz = (vi - 1) // VSIZE
+		targetH[vi] = vertexTarget(vx, vz)
+		displayH[vi] = targetH[vi]
+		oozeRate[vi] = oozeSpeedAt(targetH[vi])
+	end
+	writeBandsGeometry(transparencies)
+	renderedActiveIndex = activeIndex
+	Log.Info("CakeRenderer", `bands rebuilt — {#bands} slabs (window @active #{activeIndex} of {#meta.composition} layers{if singleMode then ", palette mode" else ""}) in {math.floor((os.clock() - startedAt) * 1000)} ms`)
+end
+
+-- Layer gate advanced (a layer finished): slide the rendered window DOWN one
+-- band. Re-dresses the 2 pooled slabs and re-clamps them to the LIVE surface —
+-- no mesh creation, no surface re-init (displayH is the live oozing surface),
+-- so it's cheap and fires only once per layer. Called from editableStep when
+-- LocalCakeField.ActiveBandIndex() diverges from renderedActiveIndex.
+local function rewindow(activeIndex: number)
+	local meta = fieldModule.Meta()
+	if not meta then
+		return
+	end
+	local transparencies = assignWindowBands(meta, windowFor(activeIndex, #meta.composition))
+	if transparencies == nil then
+		-- Unreachable once the pool exists (#pool ≥ 2 → ensurePool never returns 0),
+		-- but never fail silently (R8): keep the current slabs, warn once.
+		Log.Once("CakeRenderer", "rewindow-nobudget", `rewindow to active #{activeIndex} got no slab budget — keeping the current window`)
+		return
+	end
+	writeBandsGeometry(transparencies)
+	renderedActiveIndex = activeIndex
+	local idx = math.clamp(activeIndex, 1, #meta.composition)
+	Log.Info("CakeRenderer", `layer window -> active #{activeIndex} '{meta.composition[idx].id}'`)
+end
+
+local function editableStep(dt: number, footPos: Vector3?, overCakePos: Vector3?)
 	if #bands == 0 then
 		return
+	end
+	-- Layer gate advanced (a layer finished, activeBandIndex dropped) → slide the
+	-- rendered 2-slab window DOWN. Cheap (2-slab re-dress, no mesh creation);
+	-- fires once per layer. Skipped in single-palette mode (one slab = whole cake).
+	if not singleMode then
+		local activeIndex = fieldModule.ActiveBandIndex()
+		if activeIndex >= 1 and activeIndex ~= renderedActiveIndex then
+			rewindow(activeIndex)
+		end
 	end
 	-- 1. Changed cells -> corner vertices get fresh targets + texture block
 	-- updates; the invisible collision columns snap to server truth on the
 	-- same drained list.
 	local drained = fieldModule.DrainChanged()
-	if #drained > 0 then
-		updateCollisionColumns(drained)
-	end
+	-- Collision follows the player (radius-limited, Task 2 perf) — resizing every
+	-- oozing column across the cake spiked physics. The mesh below still uses
+	-- `drained` to update the VISUAL surface everywhere (cheap Luau, no physics).
+	-- Centred on `overCakePos` (the player's XZ over the loaf at ANY depth), NOT
+	-- `footPos` (which is nil when BURIED, ΔY≥tolerance) — otherwise a buried
+	-- player's columns would freeze and never rise back (Task 2 review fix).
+	updateCollisionNearPlayer(dt, overCakePos)
 	for _, i in ipairs(drained) do
 		updateCellPixels(i)
 		local cx, cz = GridUtil.Coords(SIZE, i)
@@ -1256,20 +1339,46 @@ local function writeColumn(ci: number)
 	end
 end
 
--- Editable mode: collision columns snap straight to server truth (no lerp
--- — you must be able to fall into the hole you just bit).
-updateCollisionColumns = function(changedCells: { number })
-	local touched: { [number]: boolean } = {}
-	for _, i in ipairs(changedCells) do
-		local x, z = GridUtil.Coords(SIZE, i)
-		touched[colIndex(x // cellsPerCol, z // cellsPerCol)] = true
+-- Editable mode: refresh ONLY the collision columns within
+-- `collision.updateRadiusStuds` of the local player each frame (Task 2 perf).
+-- Eating + the settle automaton ooze change cells across the WHOLE cake;
+-- resizing every affected CanCollide column per frame re-indexes the physics
+-- broadphase and spiked the frame to 60+ ms. The player only collides with
+-- nearby columns, so distant ones keep their last size until the player nears
+-- them (this scan corrects them then). Per column: a DROP snaps (fall into the
+-- hole you just bit); a RISE is rate-limited (cake oozing back doesn't punt you
+-- up — stay buried, jump to climb out, Task 4).
+updateCollisionNearPlayer = function(dt: number, footPos: Vector3?)
+	if footPos == nil then
+		return -- off the cake: leave the columns as-is (nothing stands on them)
 	end
-	for ci in pairs(touched) do
-		local cx = (ci - 1) % PN
-		local cz = (ci - 1) // PN
-		colTargetH[ci] = colTarget(cx, cz)
-		colDisplayH[ci] = colTargetH[ci]
-		writeColumn(ci)
+	local r = renderCfg.collision.updateRadiusStuds
+	local fcx = (footPos.X - gridCfg.origin.x) / colStuds + PN / 2 - 0.5
+	local fcz = (footPos.Z - gridCfg.origin.z) / colStuds + PN / 2 - 0.5
+	local cr = math.ceil(r / colStuds)
+	local rise = renderCfg.collision.riseRate * dt
+	local x0 = math.max(0, math.floor(fcx) - cr)
+	local x1 = math.min(PN - 1, math.floor(fcx) + cr)
+	local z0 = math.max(0, math.floor(fcz) - cr)
+	local z1 = math.min(PN - 1, math.floor(fcz) + cr)
+	for cz = z0, z1 do
+		for cx = x0, x1 do
+			local ci = colIndex(cx, cz)
+			local target = colTarget(cx, cz)
+			local cur = colDisplayH[ci]
+			local newH
+			if target <= cur or cur + rise >= target then
+				newH = target -- DROP snaps; a rise reaching target this frame lands
+			else
+				newH = cur + rise -- rate-limited rise
+			end
+			-- Only resize the part (physics broadphase) when it moved meaningfully.
+			if math.abs(newH - cur) > 0.02 then
+				colTargetH[ci] = target
+				colDisplayH[ci] = newH
+				writeColumn(ci)
+			end
+		end
 	end
 end
 
@@ -1397,15 +1506,19 @@ function CakeRenderer.OnSnapshot()
 end
 
 --API
--- Per-frame update. footPos = local character's ground point on the cake
--- (nil when off the cake) for the squish effect.
-function CakeRenderer.Step(dt: number, footPos: Vector3?)
+-- Per-frame update.
+--   footPos     = ground point when CLOSE to the surface (ΔY < tolerance) — the
+--                 cosmetic squish/wax; nil when off/above/buried.
+--   overCakePos = the player's surface point whenever they're over the loaf at
+--                 ANY depth (nil only off the footprint) — the collision-scan
+--                 centre, so a BURIED player's columns still rise back (Task 2).
+function CakeRenderer.Step(dt: number, footPos: Vector3?, overCakePos: Vector3?)
 	clock += dt
 	if impl == "editable" then
 		if rebuilding then
 			return -- mid-rebuild: mirror keeps accumulating, rebuild snaps all
 		end
-		editableStep(dt, footPos)
+		editableStep(dt, footPos, overCakePos)
 	elseif impl == "parts" then
 		partsStep(dt, footPos)
 	end

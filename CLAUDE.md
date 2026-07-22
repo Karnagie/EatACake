@@ -102,7 +102,7 @@ Modules are initialized in alphabetical order. Missing folders are skipped.
 ## Persistence (schema-driven) — PERMANENT RULES
 
 Player data is handled by `PersistenceService` on top of vendored
-**ProfileStore** (session locking, auto-save every ~30s, retries, final save
+**ProfileStore** (session locking, auto-save every ~300s (first ~150s after load skipped), retries, final save
 on shutdown — all inherited, never reimplemented). Full doc:
 `docs/features/persistence.md`, ADR-0001.
 

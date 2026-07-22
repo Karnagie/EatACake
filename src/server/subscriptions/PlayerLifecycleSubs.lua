@@ -9,7 +9,10 @@
 	are silently LOST — pushing right after LoadProfile alone can drop the
 	first sync on fast loads (especially with the Studio mock store).
 
-	Feature onboarding: add the feature's join push to pushInitialState below.
+	Feature onboarding: each domain sub defines PushInitialState(player); this
+	module DISCOVERS them from the merged subscriptions table (no hardcoded
+	sibling requires — a sub absent in this place is simply skipped, which is
+	what lets the SAME file run in the lobby and the game place).
 ]]
 
 local Players = game:GetService("Players")
@@ -17,44 +20,52 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Net = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Net"))
 local Log = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Log"))
 
-local EconomySubs = require(script.Parent.EconomySubs)
-local RewardsSubs = require(script.Parent.RewardsSubs)
-local ShopSubs = require(script.Parent.ShopSubs)
-local GroupRewardSubs = require(script.Parent.GroupRewardSubs)
-local SettingsSubs = require(script.Parent.SettingsSubs)
-local CakeSubs = require(script.Parent.CakeSubs)
-local BodySubs = require(script.Parent.BodySubs)
-local UpgradeSubs = require(script.Parent.UpgradeSubs)
-local PetSubs = require(script.Parent.PetSubs)
-local RebirthSubs = require(script.Parent.RebirthSubs)
-local QuestsSubs = require(script.Parent.QuestsSubs)
-
 local SCOPE = "Lifecycle"
 
 local PlayerLifecycleSubs = {}
 
-function PlayerLifecycleSubs.Start(data, services)
+function PlayerLifecycleSubs.Start(data, services, subscriptions)
 	-- Wiring state (not game data): which sync gates each player has passed.
 	local profileLoaded: { [Player]: boolean } = {}
 	local clientReady: { [Player]: boolean } = {}
 
+	-- Discover every subscription that defines PushInitialState(player) from the
+	-- merged subscriptions table the bootstrap passes in. No hardcoded sibling
+	-- requires (which would nil-error in a place that doesn't load that sub) —
+	-- this is what lets the SAME file run in the lobby and the game place. Each
+	-- hook is captured once (the table is fully populated before any Start runs).
+	local pushHooks: { { name: string, fn: (Player) -> () } } = {}
+	do
+		local names = {}
+		for name in pairs(subscriptions or {}) do
+			table.insert(names, name)
+		end
+		table.sort(names) -- deterministic order for reproducible logs
+		for _, name in ipairs(names) do
+			local mod = subscriptions[name]
+			if type(mod) == "table" and type(mod.PushInitialState) == "function" then
+				table.insert(pushHooks, { name = name, fn = mod.PushInitialState })
+			end
+		end
+		local hookNames = {}
+		for _, h in ipairs(pushHooks) do
+			table.insert(hookNames, h.name)
+		end
+		Log.Info(SCOPE, `initial-state hooks ({#pushHooks}): {table.concat(hookNames, ", ")}`)
+	end
+
 	local function pushInitialState(player: Player)
-		-- FEATURE HOOKS: push initial per-domain state to the client.
-		EconomySubs.SendCurrency(player)
-		SettingsSubs.SendSettings(player)
-		RewardsSubs.SendDaily(player)
-		RewardsSubs.SendTime(player)
-		ShopSubs.SendShop(player)
-		GroupRewardSubs.SendState(player)
-		CakeSubs.SendSnapshot(player)
-		BodySubs.SendStomach(player)
-		UpgradeSubs.SendUpgrades(player)
-		PetSubs.SendPets(player)
-		RebirthSubs.SendRebirth(player)
-		QuestsSubs.SendQuests(player)
-		Log.Info(SCOPE, `initial state pushed to {player.Name} (currency, settings, daily, time, shop, group, cake, stomach, upgrades, pets, rebirth, quests)`)
-		-- Gamepass ownership needs web calls — refresh + re-push async.
-		task.spawn(ShopSubs.RefreshPassOwnership, player)
+		local pushed = {}
+		for _, hook in ipairs(pushHooks) do
+			-- One domain failing must not drop the others (R8: log, don't die).
+			local ok, err = pcall(hook.fn, player)
+			if ok then
+				table.insert(pushed, hook.name)
+			else
+				Log.Warn(SCOPE, `{hook.name}.PushInitialState({player.Name}) FAILED — {err}`)
+			end
+		end
+		Log.Info(SCOPE, `initial state pushed to {player.Name} — {#pushed}/{#pushHooks} domain(s): {table.concat(pushed, ", ")}`)
 	end
 
 	local function onPlayerAdded(player: Player)
@@ -105,7 +116,7 @@ function PlayerLifecycleSubs.Start(data, services)
 	end)
 
 	-- Deliberately absent (handled inside ProfileStore — see ADR-0001):
-	-- * autosave loop  — auto-saves every ~30 seconds per profile
+	-- * autosave loop  — auto-saves every ~300s (first ~150s after a profile loads are skipped)
 	-- * BindToClose    — final save on server shutdown
 	-- * retry logic    — DataStore call retries
 end
