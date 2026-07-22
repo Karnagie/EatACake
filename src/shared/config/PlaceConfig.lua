@@ -16,9 +16,10 @@
 
 local PlaceConfig = {}
 
--- TODO(publish): set to the published PlaceIds (Asset Manager / the place URL).
-PlaceConfig.lobbyPlaceId = 0
-PlaceConfig.gamePlaceId = 0
+-- Universe 10515688913 ("EatACake_DontPublish"). The lobby is the START place
+-- (players land there). The game place is created in Studio at publish time.
+PlaceConfig.lobbyPlaceId = 80059832045175 -- existing START place (the lobby)
+PlaceConfig.gamePlaceId = 0 -- TODO(publish): set to the NEW game place's id
 
 export type Place = "lobby" | "game" | "unknown"
 
