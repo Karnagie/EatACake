@@ -19,6 +19,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local React = require(ReplicatedStorage.Packages.React)
 local Theme = require(script.Parent.Parent.Theme)
+local Interaction = require(script.Parent.Parent.Interaction)
 local OutlinedText = require(script.Parent.OutlinedText)
 local PetCard = require(script.Parent.PetCard)
 
@@ -124,6 +125,8 @@ local function PetRevealOverlay(props)
 			Card = React.createElement(PetCard, {
 				petName = shownName,
 				rarity = shownRarity,
+				-- art only once the spin LANDS: showing the prize mid-spin spoils it
+				iconName = if landed then reveal.iconName else nil,
 				zIndex = zIndex + 1,
 			}),
 		}),
@@ -141,6 +144,7 @@ local function PetRevealOverlay(props)
 			Selectable = landed,
 			ZIndex = zIndex + 9,
 			[React.Event.MouseButton1Click] = function()
+				Interaction.Cue("press")
 				if landed and props.onDismiss then
 					props.onDismiss()
 				end

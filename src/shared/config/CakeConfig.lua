@@ -261,7 +261,7 @@ CakeConfig.render = {
 -- Feel (client, CakeFeelSubsClient):
 --   jumpMult: jump power mult while standing on the layer.
 --   bounce: landing restitution 0..1 (trampoline layers).
--- sfx: key into JuiceConfig.sounds for bite/slump sounds.
+-- sfx: key into AudioConfig.sounds for this layer's bite sound.
 CakeConfig.layers = {
 	frosting = {
 		id = "frosting",

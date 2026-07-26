@@ -7,7 +7,7 @@ paths, GDD §16.10). Tuning ONLY in `Shared/config/JuiceConfig`.
 ## Pieces
 | Module | Owns |
 |---|---|
-| `SoundPool` | 16 pooled 2D Sounds, pitch ±10%, combo pitch ramp; granular slump LOOP whose volume follows avalanche energy (§7.4 — the signature sound) |
+| `SoundPool` | ALL sound — see `features/audio.md` (this doc no longer owns it) |
 | `ParticlePool` | 12 pooled emitter-parts, `:Emit()` bursts, ≤200 active budget window |
 | `CameraShake` | trauma-based impulse shake, applied post-Camera render step |
 | `ComboMeter` | x1→x10, +1/2s continuous, reset >1.5s pause. FX-ONLY (never calories) |
@@ -24,8 +24,10 @@ payout: whoosh + coin burst + green floating number. Stomach gain: floating
 `CakeRenderer` (§7.2, display-only).
 
 ## Gotcha
-Sound ids are rbxasset built-ins (guaranteed placeholders) — replace with
-uploaded ASMR samples in `JuiceConfig.sounds` before release; keys stay.
+Sound left this feature: samples, the key map, pitch/pool tuning and the slump
+response all live in `AudioConfig` + `features/audio.md`. `JuiceConfig` now
+holds only the non-audio numbers (particles, camera, combo, squish, chunks,
+walk cadence). Layer `sfx` keys index `AudioConfig.sounds`.
 
 ## Files
 `src/client/modules/` (five modules above), consumed by `CakeSubsClient` /

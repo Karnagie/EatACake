@@ -17,6 +17,7 @@ local TeleportControlSubsClient = {}
 function TeleportControlSubsClient.Start(data, modules)
 	local control_data = data.PlayerControlData
 	local control_service = modules.PlayerControlService
+	local SoundPool = modules.SoundPool
 	if control_data == nil or control_service == nil or type(control_service.SetLocked) ~= "function" then
 		Log.Warn(SCOPE, "PlayerControlData/PlayerControlService missing -- teleport movement freeze skipped")
 		return
@@ -30,8 +31,16 @@ function TeleportControlSubsClient.Start(data, modules)
 	end
 
 	local player = Players.LocalPlayer
+	local locked = false
 	local function sync()
-		control_service.SetLocked(reason, player:GetAttribute(attribute_name) == true)
+		local now_locked = player:GetAttribute(attribute_name) == true
+		-- Rising edge only: the handoff whoosh belongs to the moment controls
+		-- freeze, and TeleportSubs may re-write the attribute during retries.
+		if now_locked and not locked and SoundPool then
+			SoundPool.Play("matchStart")
+		end
+		locked = now_locked
+		control_service.SetLocked(reason, now_locked)
 	end
 
 	player:GetAttributeChangedSignal(attribute_name):Connect(sync)

@@ -149,6 +149,7 @@ function LocalPetsService.BuildPanelProps(petsState, selectedId: string?)
 			id = entry.petId,
 			name = name,
 			rarity = rarityStyle,
+			iconName = if def ~= nil then def.icon else nil,
 		})
 
 		if entry.equipped == true then
@@ -161,6 +162,7 @@ function LocalPetsService.BuildPanelProps(petsState, selectedId: string?)
 				id = entry.petId,
 				name = name,
 				rarity = rarityStyle,
+				iconName = if def ~= nil then def.icon else nil,
 				copies = entry.copies or 1,
 				stats = buildStatRows(def, entry.copies),
 			}
@@ -200,6 +202,7 @@ function LocalPetsService.BuildReveal(roll)
 	return {
 		petName = petDisplayName(def, roll.petId),
 		rarity = RARITY_STYLE[rarityId] or "Common",
+		iconName = if def ~= nil then def.icon else nil,
 		subText = subText,
 	}
 end

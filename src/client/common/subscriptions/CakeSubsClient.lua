@@ -79,6 +79,7 @@ function CakeSubsClient.Start(data, modules)
 	local eating = false
 	local lastBiteAt = 0
 	local cyclePhase = "spawning"
+	local lastCuedPhase = cyclePhase -- phase-ENTRY cues fire once per transition
 	local profileLive = false -- first StomachUpdate = server accepts our bites
 	local isFull = false -- belly at capacity: eating is blocked (server + here)
 	local lastFullCueAt = 0
@@ -138,6 +139,12 @@ function CakeSubsClient.Start(data, modules)
 			return
 		end
 		cyclePhase = payload.phase or cyclePhase
+		if cyclePhase ~= lastCuedPhase then
+			lastCuedPhase = cyclePhase
+			if cyclePhase == "spawning" then
+				SoundPool.Play("newCake") -- the next cake is on its way in
+			end
+		end
 		-- Layer gate: keep the prediction/lock floor in sync between snapshots.
 		if type(payload.activeBandIndex) == "number" then
 			LocalCakeField.SetActiveBand(payload.activeBandIndex)
@@ -145,7 +152,7 @@ function CakeSubsClient.Start(data, modules)
 		if cyclePhase == "boss" then
 			if not BossView.IsShown() then
 				BossView.Show()
-				SoundPool.Play("fanfare", { pitchMult = 0.8 })
+				SoundPool.Play("bossAppear")
 			end
 			if payload.boss then
 				BossView.SetHp(payload.boss.hp, payload.boss.maxHp)
@@ -153,6 +160,8 @@ function CakeSubsClient.Start(data, modules)
 		else
 			if BossView.IsShown() then
 				BossView.Hide()
+				-- A boss fight can be LOST — the win sting must not score a defeat.
+				SoundPool.Play(if payload.announce == "match-lost" then "bossLost" else "bossDefeat")
 				ParticlePool.Burst(
 					Vector3.new(CakeConfig.grid.origin.x, CakeConfig.grid.origin.y + 8, CakeConfig.grid.origin.z),
 					Color3.fromRGB(255, 120, 160),
@@ -161,9 +170,9 @@ function CakeSubsClient.Start(data, modules)
 			end
 		end
 		if payload.announce == "cake-cleared" then
-			SoundPool.Play("fanfare")
+			SoundPool.Play("cakeCleared")
 		elseif payload.announce and string.find(payload.announce, "rare-cake", 1, true) then
-			SoundPool.Play("fanfare", { pitchMult = 1.2 })
+			SoundPool.Play("rareCake")
 		end
 		if type(payload.announce) == "string" then
 			pushAnnounce(payload.announce)
@@ -189,7 +198,11 @@ function CakeSubsClient.Start(data, modules)
 			local fill = tonumber(payload.fill)
 			local capacity = tonumber(payload.capacity)
 			if fill and capacity and capacity > 0 then
-				isFull = fill >= capacity
+				local nowFull = fill >= capacity
+				if nowFull and not isFull then
+					SoundPool.Play("gulp") -- topped out: one swallow, not one per bite
+				end
+				isFull = nowFull
 			end
 		end
 	end)
@@ -201,12 +214,12 @@ function CakeSubsClient.Start(data, modules)
 		end
 		if payload.event == "spawned" then
 			ParticlePool.Burst(payload.position, Color3.fromRGB(255, 240, 160), 10)
-			SoundPool.Play("uiClick", { pitchMult = 1.3 })
+			SoundPool.Play("treasureSpawn")
 		elseif payload.event == "collected" then
 			local mine = payload.byUserId == player.UserId
 			ParticlePool.Burst(payload.position, Color3.fromRGB(140, 230, 255), mine and 18 or 8)
 			if mine then
-				SoundPool.Play("coinBurst")
+				SoundPool.Play("treasureGet")
 			end
 		end
 	end)
@@ -253,7 +266,7 @@ function CakeSubsClient.Start(data, modules)
 				Color3.fromRGB(255, 90, 120),
 				5
 			)
-			SoundPool.Play("blorp", { pitchMult = 1.2 })
+			SoundPool.Play("bossHit")
 			CameraShake.Impulse(0.12)
 			return
 		end
@@ -271,7 +284,7 @@ function CakeSubsClient.Start(data, modules)
 			local now = os.clock()
 			if now - lastFullCueAt > 0.6 then
 				lastFullCueAt = now
-				SoundPool.Play("uiClick", { pitchMult = 0.65 })
+				SoundPool.Play("blocked")
 				local probe = computeBitePoint(root)
 				if probe then
 					rEatAt:FireServer(probe)
@@ -300,7 +313,7 @@ function CakeSubsClient.Start(data, modules)
 					local now = os.clock()
 					if now - lastLockCueAt > CakeConfig.layerGate.cueInterval then
 						lastLockCueAt = now
-						SoundPool.Play("uiClick", { pitchMult = 0.55 })
+						SoundPool.Play("blocked")
 						pushAnnounce("layer-locked")
 					end
 				end
@@ -343,13 +356,16 @@ function CakeSubsClient.Start(data, modules)
 			)
 			if layer.shatterFx then
 				ParticlePool.Burst(point + Vector3.new(0, 1.5, 0), layer.colors.top, JuiceConfig.particles.shardsPerCrack)
-				SoundPool.Play("crack")
+				SoundPool.Play("shatter")
 			end
 			CameraShake.Impulse(JuiceConfig.camera.biteShakeAmp * (0.6 + intensity))
 			-- Eat gesture: rip this layer's piece out of the cake in front and
 			-- fly it hand -> mouth. Speed tracks the eat-rate stat. LOCAL only,
 			-- like the rest of this bite's juice.
 			EatGestureController.Play(point, layer, LocalStatsService.EatRate())
+			-- A chew layered over the fast per-bite crumbles. Throttled in
+			-- AudioConfig, so it keeps a slow mouth rhythm at any eat-rate.
+			SoundPool.Play("chew")
 		end
 	end
 

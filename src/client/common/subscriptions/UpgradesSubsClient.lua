@@ -50,6 +50,7 @@ function UpgradesSubsClient.Start(data, modules)
 		return
 	end
 	local AppRoot = modules.AppRoot
+	local SoundPool = modules.SoundPool
 	local LocalStatsService = modules.LocalStatsService
 	local PlayerControlService = modules.PlayerControlService
 	local controlData = data.PlayerControlData
@@ -176,12 +177,31 @@ function UpgradesSubsClient.Start(data, modules)
 		end
 	end
 
+	-- nil until the first push: the join snapshot is the player's existing tree,
+	-- not a purchase. The cue follows a level actually going UP in the update,
+	-- never the button — a refused buy (unaffordable, maxed) stays silent
+	-- (docs/features/audio.md).
+	local lastLevels: { [string]: number }? = nil
+
 	Net.Update("UpgradesUpdate").OnClientEvent:Connect(function(payload)
 		if type(payload) ~= "table" or type(payload.levels) ~= "table" then
 			return
 		end
 		LocalStatsService.SetLevels(payload.levels)
 		AppRoot.Set({ upgrades = payload.levels })
+		local snapshot, bought = {}, false
+		for id, level in pairs(payload.levels) do
+			if type(id) == "string" and type(level) == "number" then
+				snapshot[id] = level
+				if lastLevels ~= nil and level > (lastLevels[id] or 0) then
+					bought = true
+				end
+			end
+		end
+		lastLevels = snapshot
+		if bought and SoundPool then
+			SoundPool.Play("upgradeBuy")
+		end
 	end)
 
 	AppRoot.SetCallbacks({

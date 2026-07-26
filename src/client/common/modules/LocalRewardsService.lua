@@ -2,6 +2,7 @@
 	LocalRewardsService — view-model mapping for the reward windows (R2,
 	logic only, no React, no .Connect). Turns server payload snapshots into
 	DayCard props for UIKit.RewardsPanel; AppRoot renders them.
+	Each card carries an `iconName` (Theme.Icons key) for its reward kind.
 
 	Daily state machine (per card):
 	  claimable — day == current and claimable
@@ -34,6 +35,24 @@ function LocalRewardsService.FormatClock(seconds: number): string
 		return string.format("%d:%02d:%02d", h, m, s)
 	end
 	return string.format("%d:%02d", m, s)
+end
+
+-- Reward kind -> Theme.Icons name. Art carries the reward far faster than
+-- "+250 Gems" does, which is the whole point of the landscape card.
+local REWARD_ICON = {
+	gems = "UiGem",
+	calories = "UiCoins",
+	boost = "UiBoost",
+}
+
+local function rewardIcon(desc): string?
+	if type(desc) ~= "table" then
+		return nil
+	end
+	if desc.kind == "egg" then
+		return if desc.eggType == "epic7" then "Egg7" else "Egg1"
+	end
+	return REWARD_ICON[desc.kind]
 end
 
 local function rewardText(desc): string
@@ -91,6 +110,7 @@ function LocalRewardsService.BuildDailyCards(daily)
 			id = day,
 			title = locale.T("label-day-n", { n = day }),
 			rewardText = rewardText(desc),
+			iconName = rewardIcon(desc),
 			subText = if state == "claimable"
 				then locale.T("btn-claim")
 				elseif state == "claimed" then locale.T("btn-claimed")
@@ -144,6 +164,7 @@ function LocalRewardsService.BuildTimeCards(time)
 			id = index,
 			title = LocalRewardsService.FormatClock(threshold),
 			rewardText = rewardText(desc),
+			iconName = rewardIcon(desc),
 			subText = sub,
 			state = state,
 		})

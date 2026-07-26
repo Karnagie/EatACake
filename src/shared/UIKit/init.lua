@@ -6,6 +6,7 @@
 ]]
 
 local Theme = require(script.Theme)
+local Interaction = require(script.Interaction)
 local ComponentsFolder = script.Components
 
 local Components = {
@@ -29,8 +30,15 @@ local Components = {
 	Badge = require(ComponentsFolder.Badge),
 	DayCard = require(ComponentsFolder.DayCard),
 	RewardsPanel = require(ComponentsFolder.RewardsPanel),
-	ShopRow = require(ComponentsFolder.ShopRow),
+	ShopRow = require(ComponentsFolder.ShopRow), -- retired portrait row, kept for API compat
 	ShopPanel = require(ComponentsFolder.ShopPanel),
+	-- Landscape sectioned shop (grids per category)
+	ShopSectionHeader = require(ComponentsFolder.ShopSectionHeader),
+	ShopTile = require(ComponentsFolder.ShopTile),
+	ShopPackCard = require(ComponentsFolder.ShopPackCard),
+	ShopBanner = require(ComponentsFolder.ShopBanner),
+	PriceButton = require(ComponentsFolder.PriceButton),
+	Ribbon = require(ComponentsFolder.Ribbon),
 	TextInput = require(ComponentsFolder.TextInput),
 	CodesPanel = require(ComponentsFolder.CodesPanel),
 	-- Eat the Cake additions
@@ -58,6 +66,10 @@ table.freeze(Components)
 return table.freeze({
 	Theme = Theme,
 	Components = Components,
+	-- Inject the player-side click/hover sound layer once (AudioSubsClient).
+	-- Shared code cannot require a client module, so the kit takes the handler
+	-- instead — see Interaction's SOUND section and docs/features/audio.md.
+	SetSoundHandler = Interaction.SetSoundHandler,
 	-- Demo apps (reference compositions): require lazily, e.g. require(UIKit.Demos.HudDemo)
 	Demos = script.Demos,
 })

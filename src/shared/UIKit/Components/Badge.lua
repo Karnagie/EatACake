@@ -1,6 +1,10 @@
 --[[ Badge — green notification dot (ring + gradient fill). Pops in (UIScale
 	0 -> 1, springy) whenever it becomes visible, so a newly-available
-	notification draws the eye instead of blinking in. ]]
+	notification draws the eye instead of blinking in.
+
+	Optional `iconName` (a Theme.Icons key) draws a glyph inside the dot, which
+	turns the same element into an OWNED / CLAIMED mark. Omitted = the original
+	bare dot, unchanged. ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -66,6 +70,18 @@ local function Badge(props)
 				Color = style.FillGradient,
 				Rotation = 90,
 			}),
+			Icon = if props.iconName
+				then React.createElement("ImageLabel", {
+					Name = "Icon",
+					Position = UDim2.fromScale(style.IconInset, style.IconInset),
+					Size = UDim2.fromScale(1 - style.IconInset * 2, 1 - style.IconInset * 2),
+					BackgroundTransparency = 1,
+					BorderSizePixel = 0,
+					Image = Theme.Icon(props.iconName),
+					ScaleType = Enum.ScaleType.Fit,
+					ZIndex = zIndex + 2,
+				})
+				else nil,
 		}),
 	})
 end

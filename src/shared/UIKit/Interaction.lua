@@ -25,6 +25,38 @@
 	- Desktop gets hover + press; touch gets press via InputBegan/Ended (no
 	  hover). Activation flows through MouseButton1Click, which Roblox also fires
 	  for touch taps — same contract the kit's buttons already used.
+
+	SQUASH (the squishy theme's motion signature) — opt in with `config.squash`:
+
+	  local scaleRef, handlers, squashRef = Interaction.usePressable({
+	      enabled = enabled, onActivated = ..., squash = true })     -- or a table
+	  Content = Interaction.pressLayer(scaleRef, zIndex, children, squashRef)
+
+	UIScale is uniform and cannot squash, so the deform rides `Content.Size`
+	instead — legal under ADR-0006 because React writes that prop exactly once
+	with the constant `Interaction.FullSize` and then diffs it away forever.
+	`squash = true` uses the button preset; a table `{press=, hover=,
+	pressTween=, hoverTween=, releaseTween=}` overrides per surface (cards want a
+	hover pose, buttons do not). Poses live in `Theme.Feel.Squish`.
+	Panels cannot use this: a panel's root Size IS a live React prop, so the
+	squash would have to ride an inner constant-sized frame. That variant is not
+	built — add it with its call site.
+
+	SOUND — every kit button clicks, from one place:
+
+	  Interaction.SetSoundHandler(function(cue) ... end)   -- "hover" | "press"
+
+	`usePressable` calls the handler on hover-in and on the AGGREGATE press edge
+	(first finger down, so multi-touch and drag-off never double-fire). The kit
+	stays CLIENT-FREE: shared code must not require a client module, so the
+	handler is injected once by a subscription (AudioSubsClient) and defaults to
+	a no-op — the kit is silent, and correct, without it. Cue -> sample mapping
+	lives in AudioConfig.sounds (docs/features/audio.md).
+
+	Components that are clickable but do NOT use `usePressable` (Toggle, PetCard,
+	DayCard, the reveal overlay's dismiss catcher — each owns its own motion)
+	call `Interaction.Cue("press")` from their activation handler instead. Never
+	both: a `usePressable` button that also calls `Cue` clicks twice.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -33,6 +65,34 @@ local React = require(ReplicatedStorage.Packages.React)
 local Theme = require(script.Parent.Theme)
 
 local Interaction = {}
+
+-- Injected by the client (AudioSubsClient). nil = the kit makes no sound.
+local soundHandler: ((string) -> ())? = nil
+
+--API
+-- Route kit interaction cues ("hover", "press") to a player-side sound layer.
+-- Pass nil to silence the kit again. Errors in the handler must never break a
+-- button, so the call is pcall'd at the call site.
+function Interaction.SetSoundHandler(handler: ((string) -> ())?)
+	soundHandler = handler
+end
+
+local function cue(name: string)
+	local handler = soundHandler
+	if handler then
+		pcall(handler, name)
+	end
+end
+
+--API
+-- Emit an interaction cue by hand. For clickable components that deliberately
+-- do NOT take `usePressable`'s visual bounce (a Toggle owns its knob slide, a
+-- card its selected pose) but must still CLICK — call it from the activation
+-- handler. Components that use `usePressable` get this for free; calling it
+-- there too would double the click.
+function Interaction.Cue(name: string)
+	cue(name)
+end
 
 --API
 -- Shallow-merge `extra` (event handlers) into a copy of `base` (element props).
@@ -44,21 +104,50 @@ function Interaction.merge(base: { [any]: any }, extra: { [any]: any }): { [any]
 	return out
 end
 
+-- The ONE value `Content.Size` is ever given by React. Hoisted so the ownership
+-- invariant is auditable: this prop is written once with a constant, then the
+-- reconciler diffs it away and the squash tween owns the property (ADR-0006,
+-- same class of constant as ZERO_FILL / KNOB_INITIAL).
+local FULL_SIZE = UDim2.fromScale(1, 1)
+Interaction.FullSize = FULL_SIZE
+
 --API
 -- Center-anchored, transparent wrapper holding the press UIScale + the visual
 -- children. Scaling this frame pops the button's visuals around their centre.
-function Interaction.pressLayer(scaleRef, zIndex: number?, children: { [any]: any })
+-- Pass `squashRef` to also let the squash tween own this frame's Size.
+function Interaction.pressLayer(scaleRef, zIndex: number?, children: { [any]: any }, squashRef)
 	local wrapped = table.clone(children)
 	wrapped.PressScale = React.createElement("UIScale", { ref = scaleRef })
 	return React.createElement("Frame", {
 		Name = "Content",
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromScale(1, 1),
+		Size = FULL_SIZE,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ZIndex = zIndex or 1,
+		ref = squashRef,
 	}, wrapped)
+end
+
+-- Normalise `config.squash` into { press, hover, pressTween, hoverTween,
+-- releaseTween }. `true` = the plain button preset (press squash, no hover
+-- squash — two competing poses on one property fight each other).
+local function resolveSquash(squash, feel)
+	if not squash then
+		return nil
+	end
+	local sq = feel.Squish
+	if squash == true then
+		return { press = sq.PressPose, hover = nil }
+	end
+	return {
+		press = squash.press or sq.PressPose,
+		hover = squash.hover,
+		pressTween = squash.pressTween,
+		hoverTween = squash.hoverTween,
+		releaseTween = squash.releaseTween,
+	}
 end
 
 local ZERO_FILL = UDim2.fromScale(0, 1)
@@ -98,6 +187,14 @@ function Interaction.usePressable(config)
 	local pressScale = config.pressScale or feel.PressScale
 
 	local scaleRef = React.useRef(nil)
+	-- Squash is OPT-IN and read through a ref, never through the memo deps: the
+	-- caller usually builds `config.squash` as a fresh table literal each render,
+	-- and putting that in the deps would rebuild the handlers on every one of the
+	-- HUD's ~14 re-renders per second.
+	local squashRef = React.useRef(nil)
+	local squashCfgRef = React.useRef(nil)
+	squashCfgRef.current = resolveSquash(config.squash, feel)
+
 	local flags = React.useRef(nil)
 	if flags.current == nil then
 		-- `pressed` is finger-aware: the button is held while the mouse is down
@@ -128,19 +225,34 @@ function Interaction.usePressable(config)
 		end
 
 		local function retarget()
+			local pressed = isPressed()
 			local scale = scaleRef.current
-			if not scale then
-				return
+			if scale then
+				local target, info
+				if pressed then
+					target, info = pressScale, feel.PressTween
+				elseif flags.current.hover then
+					target, info = hoverScale, feel.PressTween
+				else
+					target, info = 1, feel.ReleaseTween
+				end
+				TweenService:Create(scale, info, { Scale = target }):Play()
 			end
-			local target, info
-			if isPressed() then
-				target, info = pressScale, feel.PressTween
-			elseif flags.current.hover then
-				target, info = hoverScale, feel.PressTween
-			else
-				target, info = 1, feel.ReleaseTween
+			-- Squash rides the SAME state machine on the Content frame's Size.
+			local squash, cfg = squashRef.current, squashCfgRef.current
+			if squash and cfg then
+				local pose, info
+				if pressed then
+					pose, info = cfg.press, cfg.pressTween or feel.Squish.PressTween
+				elseif flags.current.hover and cfg.hover then
+					pose, info = cfg.hover, cfg.hoverTween or feel.Squish.CardHoverTween
+				else
+					pose, info = nil, cfg.releaseTween or feel.Squish.ReleaseTween
+				end
+				TweenService:Create(squash, info, {
+					Size = if pose then UDim2.fromScale(pose.X, pose.Y) else FULL_SIZE,
+				}):Play()
 			end
-			TweenService:Create(scale, info, { Scale = target }):Play()
 		end
 
 		-- Call after mutating mouseDown / touches. Drives the squish tween and,
@@ -153,6 +265,9 @@ function Interaction.usePressable(config)
 			if nowPressed == wasPressed then
 				return
 			end
+			if nowPressed then
+				cue("press") -- exactly one click per press, however many fingers
+			end
 			local cb = if nowPressed then pressStartRef.current else pressEndRef.current
 			if cb then
 				cb(input)
@@ -162,6 +277,7 @@ function Interaction.usePressable(config)
 		return {
 			[React.Event.MouseEnter] = function()
 				flags.current.hover = true
+				cue("hover")
 				retarget()
 			end,
 			[React.Event.MouseLeave] = function()
@@ -218,6 +334,12 @@ function Interaction.usePressable(config)
 		if scale then
 			TweenService:Create(scale, feel.ReleaseTween, { Scale = 1 }):Play()
 		end
+		-- Mirror the reset for squash, or a button disabled mid-press (an
+		-- affordability gate flipping) stays permanently flattened.
+		local squash = squashRef.current
+		if squash then
+			TweenService:Create(squash, feel.ReleaseTween, { Size = FULL_SIZE }):Play()
+		end
 		-- A HOLD button disabled/hidden mid-press must release its hold too
 		-- (else eating would stick on after the eat button hides).
 		if wasPressed and pressEndRef.current then
@@ -225,7 +347,9 @@ function Interaction.usePressable(config)
 		end
 	end, { enabled })
 
-	return scaleRef, handlers
+	-- Third return is OPTIONAL: every existing caller destructures two values and
+	-- is unaffected. Attach it via pressLayer(scaleRef, z, children, squashRef).
+	return scaleRef, handlers, squashRef
 end
 
 return Interaction

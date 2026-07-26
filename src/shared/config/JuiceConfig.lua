@@ -1,39 +1,15 @@
 --[[
-	JuiceConfig — every ASMR/juice tuning number (GDD §7). Client-only
-	consumers (SoundPool, ParticlePool, CameraShake, Combo, Squish).
+	JuiceConfig — the non-audio ASMR/juice tuning numbers (GDD §7): particles,
+	camera shake, combo, squish, chunks, walk cadence. Client-only consumers
+	(ParticlePool, CameraShake, ComboMeter, ChunkDebris, CakeRenderer).
 
-	⚠ Sound ids are rbxasset:// BUILT-INS as guaranteed-to-play placeholders.
-	Replace with uploaded close-mic'd ASMR samples before release — keys stay,
-	only the ids change. Layer sfx keys come from CakeConfig.layers[*].sfx.
+	SOUND LIVES IN `AudioConfig` (docs/features/audio.md) — sample map, pool,
+	pitch jitter, combo pitch ramp and the slump-loop response all moved there
+	when the game got its real audio layer. Layer sfx keys (CakeConfig.layers
+	[*].sfx) index `AudioConfig.sounds`, not this file.
 ]]
 
 local JuiceConfig = {}
-
-JuiceConfig.sounds = {
-	-- key = { id, volume, basePitch }; pitch is randomized ±pitchJitter
-	squish = { id = "rbxasset://sounds/impact_water.mp3", volume = 0.5, pitch = 1.1 },
-	crumble = { id = "rbxasset://sounds/splat.mp3", volume = 0.45, pitch = 1.0 },
-	crack = { id = "rbxasset://sounds/snap.mp3", volume = 0.7, pitch = 0.9 },
-	blorp = { id = "rbxasset://sounds/impact_water.mp3", volume = 0.55, pitch = 0.7 },
-	pshhh = { id = "rbxasset://sounds/action_falling.mp3", volume = 0.4, pitch = 1.3 },
-	stretch = { id = "rbxasset://sounds/impact_water.mp3", volume = 0.5, pitch = 0.5 },
-	shhh = { id = "rbxasset://sounds/action_falling.mp3", volume = 0.35, pitch = 0.8 },
-	slumpLoop = { id = "rbxasset://sounds/action_falling.mp3", volume = 0.0, pitch = 0.6 }, -- granular loop, volume driven by avalanche volume
-	gymWhoosh = { id = "rbxasset://sounds/action_jump.mp3", volume = 0.7, pitch = 1.0 },
-	coinBurst = { id = "rbxasset://sounds/electronicpingshort.wav", volume = 0.5, pitch = 1.2 },
-	uiClick = { id = "rbxasset://sounds/button.wav", volume = 0.4, pitch = 1.0 },
-	fanfare = { id = "rbxasset://sounds/victory.wav", volume = 0.7, pitch = 1.0 },
-	crustCrack = { id = "rbxasset://sounds/snap.mp3", volume = 0.9, pitch = 0.7 },
-}
-JuiceConfig.soundPoolSize = 16 -- hard cap, GDD §14
-JuiceConfig.pitchJitter = 0.1 -- ±10%
--- Combo raises bite pitch: pitch * (1 + comboPitchPerStep * (combo - 1))
-JuiceConfig.comboPitchPerStep = 0.04
--- Slump loop: volume = clamp(avalanche studs³ / slumpVolumeDiv, 0, slumpMaxVolume),
--- peak-held and decayed at slumpDecayPerSecond.
-JuiceConfig.slumpVolumeDiv = 60
-JuiceConfig.slumpMaxVolume = 0.6
-JuiceConfig.slumpDecayPerSecond = 0.8
 
 JuiceConfig.particles = {
 	maxActive = 200, -- pooled emit budget, GDD §14

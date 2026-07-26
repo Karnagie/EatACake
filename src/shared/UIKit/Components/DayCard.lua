@@ -17,6 +17,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local React = require(ReplicatedStorage.Packages.React)
 local Theme = require(script.Parent.Parent.Theme)
+local Interaction = require(script.Parent.Parent.Interaction)
 local OutlinedText = require(script.Parent.OutlinedText)
 
 local function roundedFrame(name, position, size, corner, zIndex, gradient)
@@ -83,14 +84,33 @@ local function DayCard(props)
 			textXAlignment = Enum.TextXAlignment.Center,
 			zIndex = zIndex + 3,
 		}),
+		-- Reward band: art + amount side by side when the caller names an icon,
+		-- otherwise the amount alone spanning the band (the original render, so
+		-- existing callers are unaffected).
 		Reward = React.createElement(OutlinedText, {
 			text = props.rewardText or "",
-			position = UDim2.fromScale(style.RewardPosition.X, style.RewardPosition.Y),
-			size = UDim2.fromScale(style.RewardSize.X, style.RewardSize.Y),
+			position = if props.iconName
+				then UDim2.fromScale(style.IconTextPosition.X, style.IconTextPosition.Y)
+				else UDim2.fromScale(style.RewardPosition.X, style.RewardPosition.Y),
+			size = if props.iconName
+				then UDim2.fromScale(style.IconTextSize.X, style.IconTextSize.Y)
+				else UDim2.fromScale(style.RewardSize.X, style.RewardSize.Y),
 			textGradient = style.RewardGradient,
-			textXAlignment = Enum.TextXAlignment.Center,
+			textXAlignment = if props.iconName then Enum.TextXAlignment.Left else Enum.TextXAlignment.Center,
 			zIndex = zIndex + 3,
 		}),
+		RewardIcon = if props.iconName
+			then React.createElement("ImageLabel", {
+				Name = "RewardIcon",
+				Position = UDim2.fromScale(style.IconPosition.X, style.IconPosition.Y),
+				Size = UDim2.fromScale(style.IconSize.X, style.IconSize.Y),
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				Image = Theme.Icon(props.iconName),
+				ScaleType = Enum.ScaleType.Fit,
+				ZIndex = zIndex + 3,
+			})
+			else nil,
 		Sub = React.createElement(OutlinedText, {
 			text = props.subText or "",
 			position = UDim2.fromScale(style.SubPosition.X, style.SubPosition.Y),
@@ -148,6 +168,7 @@ local function DayCard(props)
 		ZIndex = zIndex,
 		[React.Event.MouseButton1Click] = function()
 			if claimable and props.onActivated then
+				Interaction.Cue("press") -- only when the card can actually be claimed
 				props.onActivated(props.id)
 			end
 		end,

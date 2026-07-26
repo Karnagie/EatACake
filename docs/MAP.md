@@ -15,21 +15,22 @@
 | body-gym (stomach, morph, roll) | `features/body-gym.md` | StomachService, GymService, BodySubs (server morph) / BallRollController, BodySubsClient, UIKit/GymOverlay |
 | checkpoint (gym + upgrade station platform) | `features/checkpoint.md` | MapService, CakeSubs (ReturnToCheckpoint), CakeCycleSubs/CakeSimulationSubs (height) / BodySubsClient (F key + button) |
 | upgrades (hex tier tree) | `features/upgrades.md` | UpgradeService, StatsService, UpgradeSubs / LocalStatsService, LocalUpgradeTree, UpgradesSubsClient (lobby opener pending), UIKit HexNode/HexTreeOverlay, HexUtil |
-| pets | `features/pets.md` | PetService, PetSubs / PetsSubsClient, PetFollowers, LocalPetsService |
+| pets (shown as SQUISHIES — display-only rename, ids are DataStore keys) | `features/pets.md` | PetService, PetSubs / PetsSubsClient, PetFollowers, LocalPetsService |
 | rebirth + biomes | `features/rebirth.md` | ProgressService, RebirthSubs / RebirthSubsClient |
 | quests | `features/quests.md` | QuestService, QuestsSubs / QuestsSubsClient |
-| juice (ASMR layer) | `features/juice.md` | — / SoundPool, ParticlePool, CameraShake, ComboMeter, FloatingNumbers |
+| juice (ASMR layer) | `features/juice.md` | — / ParticlePool, CameraShake, ComboMeter, FloatingNumbers |
+| audio (SFX + music) | `features/audio.md` | — / SoundPool, MusicService, AudioSubsClient, AudioConfig; authored `ReplicatedStorage.SFX` + `SoundService.BackgroundMusic` |
 | map (factory scene) | file header `services/MapService.lua` + ADR-0007 | MapService (clones `ReplicatedStorage.Assets` Environment+Checkpoint), MapConfigData / — |
 | reward-grants | ADR-0002 (`decisions/`) | RewardGrantSubs (kinds: calories, gems, boost, burn, egg) / — |
 | daily-rewards | `features/daily-rewards.md` | DailyRewardService, RewardsSubs / RewardsSubsClient, LocalRewardsService |
 | time-rewards | `features/time-rewards.md` | TimeRewardService, RewardsSubs / RewardsSubsClient, LocalRewardsService |
 | group-reward | `features/group-reward.md` | SocialService, GroupRewardSubs / ShopSubsClient (Free row) |
-| shop | `features/shop.md` | ShopService, ShopSubs (ProcessReceipt owner) / ShopSubsClient, LocalShopService |
+| shop (landscape sectioned grid) | `features/shop.md` | ShopService, ShopSubs (ProcessReceipt owner) / ShopSubsClient, LocalShopService, UIKit ShopPanel/ShopTile/ShopPackCard/ShopBanner/ShopSectionHeader/PriceButton/Ribbon |
 | promo-codes | `features/promo-codes.md` | CodesService, CodesSubs / CodesSubsClient |
 | settings | `features/settings.md` | SettingsSubs / SettingsSubsClient, LocalSettingsService, SettingsData |
 | leaderstats | file header `subscriptions/LeaderboardSubs.lua` | LeaderboardSubs / — |
 | app-root (HUD + panels) | `features/app-root.md` | — / AppRoot, AppSubsClient |
-| ui-kit | `features/ui-kit.md` + skill `.agents/skills/roblox-ui-kit/` | — / Shared.UIKit, UiRoot |
+| ui-kit | `features/ui-kit.md` + skill `.claude/skills/roblox-ui-kit/` | — / Shared.UIKit, UiRoot, Shared.UIKit.Icons (`Theme.Icons` / `Theme.Icon`) |
 | lobby matchmaking (pads, modes, parties) | `features/lobby-matchmaking.md` + ADR-0010 | LobbyQueueData, LobbyQueueService, LobbyQueueSubs, LobbyMapService, TeleportSubs / LobbyUiData, LobbySubsClient, AppRoot, UIKit/MatchmakingPanel |
 | game round (roster, difficulty, result return) | `features/game-round.md` + ADR-0010 | RoundStateData, GameRoundService, GameRoundSubs, CakeCycleSubs, TeleportSubs / CakeSubsClient, AppRoot |
 

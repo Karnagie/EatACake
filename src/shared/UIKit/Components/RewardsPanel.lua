@@ -5,7 +5,7 @@
 
 	props:
 		title, size, visible, zIndex, onClose
-		cards      -- ARRAY of { id, title, rewardText, subText, state }
+		cards      -- ARRAY of { id, title, rewardText, iconName, subText, state }
 		           -- (state: "claimable"|"claimed"|"locked"|"tomorrow")
 		footerText -- bottom status line ("Played today: 12:34" / "Come back tomorrow!")
 		onClaim(id)
@@ -38,6 +38,7 @@ local function RewardsPanel(props)
 			id = card.id,
 			title = card.title,
 			rewardText = card.rewardText,
+			iconName = card.iconName,
 			subText = card.subText,
 			state = card.state,
 			layoutOrder = index,

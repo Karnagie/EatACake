@@ -10,7 +10,10 @@
 
 	CELEBRATION HOOK: payload.granted = { kind, amount, day/index } — show a
 	toast/particles here when the game adds an FX layer (locale keys
-	toast-claimed / toast-claimed-gold are reserved).
+	toast-claimed / toast-claimed-gold are reserved). The SOUND half of that
+	hook is wired: a grant plays the reward cue (audio.md). It is driven by
+	`granted` on the UPDATE, not by the button, so a rejected claim stays
+	silent — the server resyncs those without a grant.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -20,8 +23,17 @@ local RewardsSubsClient = {}
 
 function RewardsSubsClient.Start(data, modules)
 	local AppRoot = modules.AppRoot
+	local SoundPool = modules.SoundPool
 	local rClaimDaily = Net.Remote("ClaimDailyReward")
 	local rClaimTime = Net.Remote("ClaimTimeReward")
+
+	-- A gem/boost grant is a small win; an egg is the big one.
+	local function celebrate(granted)
+		if type(granted) ~= "table" then
+			return
+		end
+		SoundPool.Play(if granted.kind == "egg" then "rewardBig" else "reward")
+	end
 
 	AppRoot.SetCallbacks({
 		onClaimDaily = function(_day)
@@ -53,6 +65,7 @@ function RewardsSubsClient.Start(data, modules)
 				nodes = nodes,
 			},
 		})
+		celebrate(payload.granted) -- AFTER the push: a cue must never eat a state update
 	end)
 
 	Net.Update("TimeRewardUpdate").OnClientEvent:Connect(function(payload)
@@ -83,6 +96,7 @@ function RewardsSubsClient.Start(data, modules)
 				nodes = nodes,
 			},
 		})
+		celebrate(payload.granted) -- AFTER the push (see the daily handler)
 	end)
 end
 

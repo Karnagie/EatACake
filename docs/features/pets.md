@@ -1,4 +1,15 @@
-# Pets (rolls, collection, equip, followers)
+# Pets — displayed as SQUISHIES (rolls, collection, equip, followers)
+
+## Naming: display-only
+Players see "Squishies" (squishy toys shaped like food). The module names, the
+remotes (`EquipPet`, `PetsUpdate`, `PetRollUpdate`), the profile section `pets`
+and every `PetConfig` **`id`** keep the pet-* naming ON PURPOSE: an `id` is a
+DataStore key inside `pets.owned`, so renaming one orphans a collection, and the
+per-section `migrations` table cannot express a cross-section key rename. The
+re-theme edits ONLY the right-hand side of `LocaleData`.
+**Adding a new id is safe and needs no migration** (it is simply absent from
+everyone's `owned` map) — that is how the roster grew 12 → 30 at `PetsSection`
+v1. Renaming or removing one is not: that needs `version += 1` + `migrations`.
 
 ## What it does
 GDD §9: every cake cycle ends with ONE free random pet per player; eggs
@@ -24,6 +35,22 @@ over equipped pets × `(1 + mergeBonusPerCopy × (copies-1))` inside StatsServic
 ## Rarity mapping (UI)
 config ids `common..secret` → Theme.Rarity keys `Common, Uncommon, Rare,
 Epic, Legendary, Secret` (Uncommon/Secret added to the kit for this game).
+Colour lives ONLY in `Theme.Rarity` — `PetConfig.rarities[].color` was a second,
+disagreeing palette with zero consumers and was deleted.
+`Common` is warm foam cream (it used to alias `Theme.Button`, making a Common
+card identical to every button in the kit; a cool grey was rejected because it
+collides with the hex tree's locked state). `Secret` is violet-void, −42° off
+Epic magenta, which it was only 11.9° from. Each tier also carries `Outline`,
+`Text`, `IconDisc` and `IconStar`.
+
+## Art
+Each `PetConfig` entry names an `icon` (a `Theme.Icons` key, e.g. `SqCookie`)
+explicitly rather than deriving it from the id, so a typo warns via
+`Theme.Icon` instead of silently rendering the fallback glyph. The icon flows
+through `LocalPetsService` → `PetCard.iconName` / inspector plate / reveal
+overlay. The reveal shows art only once the spin LANDS — showing the prize
+mid-spin spoils it. `PetFollowers` still uses the primitive `look` until real 3D
+models land.
 
 ## Files
 `ProfileSchema/PetsSection`, `services/PetService`, `subscriptions/PetSubs`;

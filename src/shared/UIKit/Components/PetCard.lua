@@ -1,6 +1,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local React = require(ReplicatedStorage.Packages.React)
 local Theme = require(script.Parent.Parent.Theme)
+local Interaction = require(script.Parent.Parent.Interaction)
 local OutlinedText = require(script.Parent.OutlinedText)
 
 local function roundedFrame(name, position, size, corner, zIndex, gradient)
@@ -90,6 +91,20 @@ local function PetCard(props)
 				Color = style.PlateGradient,
 				Rotation = 90,
 			}),
+			-- Optional squishy art. Omitted = the original bare plate, so every
+			-- existing caller is unaffected.
+			Icon = if props.iconName
+				then React.createElement("ImageLabel", {
+					Name = "Icon",
+					Position = UDim2.fromScale(style.IconInset, style.IconInset),
+					Size = UDim2.fromScale(1 - style.IconInset * 2, 1 - style.IconInset * 2),
+					BackgroundTransparency = 1,
+					BorderSizePixel = 0,
+					Image = Theme.Icon(props.iconName),
+					ScaleType = Enum.ScaleType.Fit,
+					ZIndex = zIndex + 4,
+				})
+				else nil,
 		}),
 		PetName = React.createElement(OutlinedText, {
 			text = props.petName or "Pet",
@@ -97,6 +112,10 @@ local function PetCard(props)
 			size = UDim2.fromScale(style.NameSize.X, style.NameSize.Y),
 			textColor = Color3.new(1, 1, 1),
 			textGradient = style.NameGradient,
+			-- style-rules §4.3: outline = the DARK version of the element's OWN
+			-- hue. Without this a Secret card wore the default navy, and the
+			-- cream Common face carried the lowest-contrast pairing in the ladder.
+			outlineColor = rarity.Outline,
 			textXAlignment = Enum.TextXAlignment.Center,
 			zIndex = zIndex + 4,
 		}),
@@ -160,6 +179,7 @@ local function PetCard(props)
 			AutoButtonColor = false,
 			ZIndex = zIndex,
 			[React.Event.MouseButton1Click] = function()
+				Interaction.Cue("press")
 				if props.onActivated then
 					props.onActivated(props.id)
 				end

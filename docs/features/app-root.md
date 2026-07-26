@@ -36,13 +36,21 @@ hides lobby/meta UI because those handlers are lobby-only.
   onClaimTime, onToggleSetting, onShopActivated, onRedeem, onBuyUpgrade,
   onEquipPet(petId, equip), onDoRebirth, onClaimQuest, onGymTap,
   onDismissReveal, onReturnCheckpoint, onEatDown/onEatUp (EAT button hold —
-  CakeSubsClient drives `eating`). Wire to remotes in the feature's subs (R4).
+  CakeSubsClient drives `eating`), onCloseUpgrades (routes the hex-tree close
+  through UpgradesSubsClient so blur + E-binding stay in sync). Wire to remotes
+  in the feature's subs (R4).
+- `onPanelChanged(panel|nil)` is NOT an action — AppRoot fires it whenever
+  `openPanel` changes (never on mount) so ONE listener can react to every
+  open/close. `AudioSubsClient` uses it for the panel whoosh
+  (`features/audio.md`); a new panel cannot forget to fire it.
 - Lobby actions: `onConfigureMatch(difficulty, maxPlayers)`, `onCancelMatch()`;
   `LobbySubsClient` owns their queue remote wiring.
 - Feature subs NEVER call `UiRoot.Render` — `AppSubsClient` mounts once.
 
 ## View-models (R7)
-`LocalRewardsService` (cards), `LocalShopService` (sections),
+`LocalRewardsService` (cards), `LocalShopService` (sections — the shop is a
+landscape grid window; AppRoot also feeds it `balances` so gem packs have a
+balance anchor next to them),
 `LocalSettingsService` (rows), `LocalPetsService` (pets panel props,
 reveal props, odds line), `LocalStatsService` (upgrade costs/stat
 formulas). AppRoot builds upgrade/quest rows + CakeBar/BellyBar strings
@@ -51,6 +59,13 @@ inline (locale keys `cake-*`, `belly-*`).
 ## Gotchas
 - useEffect deps must never contain nil (jsdotlua positional compare) —
   booleans/counters only.
+- **Each panel family needs its own viewport fit.** `calculateScale(aspect,
+  maxFraction)` is per-aspect, and every scale must ALSO be recomputed in the
+  refit effect or that panel stops resizing with the window. The shop is
+  landscape now and has `shopScale`; it used to borrow `portraitScale`.
+- `formatNumber` abbreviates at 10K (`37.1K`, `12.4M`) and stays exact below
+  that. The switch-on threshold and the divisor are deliberately different for
+  the K tier (10,000 vs 1,000) — collapsing them renders 37,051 as "3.7K".
 - Combo state is throttled by CakeSubsClient (Set only on VALUE change);
   announceKey lifetime is `Theme.AnnounceBanner.Duration` (via CakeSubsClient's
 pushAnnounce `task.delay`), Clear via `false`.

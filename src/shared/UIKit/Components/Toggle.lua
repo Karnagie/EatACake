@@ -2,6 +2,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local React = require(ReplicatedStorage.Packages.React)
 local Theme = require(script.Parent.Parent.Theme)
+local Interaction = require(script.Parent.Parent.Interaction)
 
 local STYLE = Theme.Toggle
 -- Stable initial knob Position (React sets it once; the ref-tween owns it after).
@@ -79,6 +80,7 @@ local function Toggle(props)
 		Selectable = enabled,
 		ZIndex = zIndex,
 		[React.Event.MouseButton1Click] = function()
+			Interaction.Cue("press") -- the knob slide is this component's own motion
 			if enabled and props.onChanged then
 				props.onChanged(not value)
 			end

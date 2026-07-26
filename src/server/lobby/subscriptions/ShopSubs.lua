@@ -16,8 +16,9 @@
 	  re-pushes this catalogue once ownership resolves.
 
 	ShopUpdate payload:
-	  { products = ARRAY {key,label,priceRobux,section,order,oneTime,owned},
-	    passes   = ARRAY {key,label,priceRobux,order,owned} }
+	  { products = ARRAY {key,label,desc,icon,priceRobux,section,order,best,
+	                      oneTime,owned,configured},
+	    passes   = ARRAY {key,label,desc,icon,priceRobux,order,owned,configured} }
 	Prices are reference-only (dashboard is authoritative) — shown on
 	buttons, never used in math.
 ]]
@@ -46,11 +47,21 @@ local function shopPayload(userId: number)
 		table.insert(products, {
 			key = key,
 			label = def.label,
+			desc = def.desc,
+			icon = def.icon,
 			priceRobux = def.priceRobux,
-			section = def.section or "gold",
+			-- Fall back to "eggs" (a TILE), never "gems": a pack card has no
+			-- subText slot, so a mis-sectioned product would silently lose its
+			-- perk line. Matches LocalShopService's else-branch.
+			section = def.section or "eggs",
 			order = def.order or 0,
+			best = def.best == true,
 			oneTime = def.oneTime == true,
 			owned = def.oneTime == true and ShopService.IsOneTimeOwned(userId, key) or false,
+			-- The UI must be able to SHOW that an id is unconfigured. Without
+			-- this it renders a live BUY button whose purchase ProcessReceipt
+			-- refuses, and the player sees nothing happen (R8: silent failure).
+			configured = type(def.devProductId) == "number" and def.devProductId > 0,
 		})
 	end
 	table.sort(products, function(a, b)
@@ -64,9 +75,12 @@ local function shopPayload(userId: number)
 		table.insert(passes, {
 			key = key,
 			label = def.label,
+			desc = def.desc,
+			icon = def.icon,
 			priceRobux = def.priceRobux,
 			order = def.order or 0,
 			owned = ShopService.OwnsPass(userId, key),
+			configured = type(def.gamePassId) == "number" and def.gamePassId > 0,
 		})
 	end
 	table.sort(passes, function(a, b)
@@ -199,10 +213,14 @@ function ShopSubs.Start(data, services, subscriptions)
 
 	Net.Remote("RequestPurchase").OnServerEvent:Connect(function(player, key)
 		if type(key) ~= "string" then
+			Log.Once(SCOPE, "purchase-badtype", `RequestPurchase with a non-string key from {player.Name} — ignored`)
 			return
 		end
 		local def = ShopData.products[key]
 		if not def then
+			-- Either a tampering client or a UI row whose id drifted from ShopData.
+			-- Silent, this is a button that does nothing with no console trace.
+			Log.Once(SCOPE, `purchase-unknown-{key}`, `RequestPurchase for unknown product '{key}' — refused`)
 			return
 		end
 		if def.oneTime and ShopService.IsOneTimeOwned(player.UserId, key) then
@@ -218,10 +236,12 @@ function ShopSubs.Start(data, services, subscriptions)
 
 	Net.Remote("RequestGamepass").OnServerEvent:Connect(function(player, key)
 		if type(key) ~= "string" then
+			Log.Once(SCOPE, "gamepass-badtype", `RequestGamepass with a non-string key from {player.Name} — ignored`)
 			return
 		end
 		local def = ShopData.gamepasses[key]
 		if not def then
+			Log.Once(SCOPE, `gamepass-unknown-{key}`, `RequestGamepass for unknown gamepass '{key}' — refused`)
 			return
 		end
 		if ShopService.OwnsPass(player.UserId, key) then

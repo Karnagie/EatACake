@@ -11,6 +11,7 @@ local CodesSubsClient = {}
 
 function CodesSubsClient.Start(data, modules)
 	local AppRoot = modules.AppRoot
+	local SoundPool = modules.SoundPool
 	local locale = data.LocaleData
 	local rRedeem = Net.Remote("RedeemCode")
 
@@ -46,6 +47,7 @@ function CodesSubsClient.Start(data, modules)
 				else locale.T("status-code-invalid")
 		end
 		AppRoot.Set({ codesStatus = { text = text, kind = kind } })
+		SoundPool.Play(if kind == "ok" then "notifyGood" else "notifyBad")
 	end)
 end
 

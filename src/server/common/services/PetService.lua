@@ -158,6 +158,17 @@ function PetService.Collection(userId: number)
 				copies = copies,
 				equipped = table.find(section.equipped, petId) ~= nil,
 			})
+		else
+			-- A profile id with no PetConfig entry is DROPPED here, before it ever
+			-- reaches the client — so this is the only place it can be reported.
+			-- It means a config id was renamed or removed: those ids are DataStore
+			-- keys, and every player who owned this one just lost it (R8).
+			Log.Once(
+				SCOPE,
+				`orphan-{petId}`,
+				`profile owns '{petId}' but PetConfig has no such id — squishy dropped from the collection. `
+					.. `Ids are DataStore keys: restore the entry, or add a PetsSection migration that remaps it.`
+			)
 		end
 	end
 	table.sort(out, function(a, b)

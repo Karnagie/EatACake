@@ -24,7 +24,9 @@
 	onShopActivated(rowId), onRedeem(code), onBuyUpgrade(id),
 	onEquipPet(petId, equip), onDoRebirth(), onClaimQuest(id), onGymTap(),
 	onDismissReveal(), onEatDown(input), onEatUp(input), onReturnCheckpoint(),
-	onConfigureMatch(difficulty, maxPlayers), onCancelMatch().
+	onConfigureMatch(difficulty, maxPlayers), onCancelMatch(),
+	onPanelChanged(panel|nil) — fired whenever `openPanel` changes (never on
+	mount); AudioSubsClient turns it into the open/close whoosh.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -142,10 +144,45 @@ end
 
 -- ── helpers ─────────────────────────────────────────────────────────────
 
+-- Simulator number formatting: exact with thousands separators below 10K, then
+-- abbreviated. A HUD pill is ~128 nominal px wide — "1,284,930" renders at a
+-- size a player cannot read at a glance, and in this genre the leading digits
+-- are the only part that carries meaning anyway. The 10K floor keeps small,
+-- countable values (quest progress, early calories) exact.
+-- { switchAt, divisor, suffix } — the two numbers are NOT the same: K switches on
+-- at 10,000 (below that the exact figure still reads fine) but divides by 1,000.
+local ABBREV = {
+	{ 1e12, 1e12, "T" },
+	{ 1e9, 1e9, "B" },
+	{ 1e6, 1e6, "M" },
+	{ 1e4, 1e3, "K" },
+}
+
 local function formatNumber(amount: number): string
-	local text = tostring(math.floor(amount or 0))
+	local value = math.floor(amount or 0)
+	local sign = if value < 0 then "-" else ""
+	value = math.abs(value)
+	for _, step in ipairs(ABBREV) do
+		local switchAt, scale, suffix = step[1], step[2], step[3]
+		if value >= switchAt then
+			-- One decimal below 100 units ("12.4M"), none above ("124M") — the
+			-- decimal stops being informative once the integer part is 3 digits.
+			local scaled = value / scale
+			local text
+			if scaled < 100 then
+				-- gsub returns (string, count): bind it before use, or the count
+				-- leaks into the concatenation.
+				text = string.format("%.1f", scaled)
+				text = text:gsub("%.0$", "")
+			else
+				text = tostring(math.floor(scaled))
+			end
+			return `{sign}{text}{suffix}`
+		end
+	end
+	local text = tostring(value)
 	local formatted = text:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
-	return formatted
+	return sign .. formatted
 end
 
 -- Fit a panel aspect within maxFraction of the viewport on the limiting axis.
@@ -267,6 +304,11 @@ local function App()
 			Theme.MatchmakingLayout.PanelMaxViewportFraction
 		)
 	end)
+	-- The shop is landscape now (grids per category), so it needs its own fit —
+	-- it used to borrow portraitScale.
+	local shopScale, setShopScale = React.useState(function()
+		return calculateScale(Theme.ShopLayout.PanelAspect, Theme.ShopLayout.PanelMaxViewportFraction)
+	end)
 	local codeInput, setCodeInput = React.useState("")
 	local selectedPetId, setSelectedPetId = React.useState(nil :: string?)
 	local sortByRarity, setSortByRarity = React.useState(true)
@@ -283,6 +325,32 @@ local function App()
 		end
 	end, {})
 
+	-- Panel open/close cue (AudioSubsClient wires the sound). ONE place: every
+	-- panel opens through `openPanel`, so a whoosh can never drift out of sync
+	-- with a panel that forgot to fire it. `primed` swallows the effect's first
+	-- run — mounting with no panel open is not a close.
+	-- Deps use `or false` (jsdotlua breaks on nil in a dep array).
+	local panelCueRef = React.useRef(nil)
+	if panelCueRef.current == nil then
+		panelCueRef.current = { value = false, primed = false }
+	end
+	local openPanelDep = state.openPanel or false
+	React.useEffect(function()
+		local record = panelCueRef.current
+		if not record.primed then
+			record.primed = true
+			record.value = openPanelDep
+			return
+		end
+		if record.value == openPanelDep then
+			return
+		end
+		record.value = openPanelDep
+		if callbacks.onPanelChanged then
+			callbacks.onPanelChanged(if openPanelDep == false then nil else openPanelDep)
+		end
+	end, { openPanelDep })
+
 	-- Viewport re-fit (kit checklist: aspect held at any window size).
 	React.useEffect(function()
 		local viewportConnection, cameraConnection
@@ -295,6 +363,10 @@ local function App()
 			setMatchScale(calculateScale(
 				Theme.MatchmakingLayout.PanelAspect,
 				Theme.MatchmakingLayout.PanelMaxViewportFraction
+			))
+			setShopScale(calculateScale(
+				Theme.ShopLayout.PanelAspect,
+				Theme.ShopLayout.PanelMaxViewportFraction
 			))
 		end
 		local function bindCamera()
@@ -410,6 +482,12 @@ local function App()
 	local shopSections = React.useMemo(function()
 		return LocalShopService.BuildSections(state.shop, state.group)
 	end, { state.shop or false, state.group or false })
+	local shopBalances = React.useMemo(function()
+		return {
+			{ iconName = "UiGem", value = formatNumber(state.gems) },
+			{ iconName = "UiCoins", value = formatNumber(state.calories) },
+		}
+	end, { state.gems, state.calories })
 	local oddsText = React.useMemo(LocalPetsService.OddsText, {})
 
 	local matchmaking = if type(state.matchmaking) == "table" then state.matchmaking else nil
@@ -878,9 +956,12 @@ local function App()
 			name = "ShopPanel",
 			title = locale.T("title-shop"),
 			visible = state.openPanel == "Shop",
-			size = UDim2.fromScale(portraitScale.X, portraitScale.Y),
+			size = UDim2.fromScale(shopScale.X, shopScale.Y),
 			zIndex = 50,
 			sections = shopSections,
+			-- The shop shows what you can spend. Gem packs with no balance
+			-- anchor next to them are just numbers.
+			balances = shopBalances,
 			onActivated = function(rowId)
 				if callbacks.onShopActivated then
 					callbacks.onShopActivated(rowId)

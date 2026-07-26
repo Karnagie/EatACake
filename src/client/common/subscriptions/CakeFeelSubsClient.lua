@@ -99,7 +99,8 @@ function CakeFeelSubsClient.Start(data, modules)
 			return
 		end
 		-- Crust crack: CrackAt draws only when the surface really is crust.
-		if impact >= feelCfg.crackMinImpact and CakeRenderer.CrackAt(point, "land") then
+		local cracked = impact >= feelCfg.crackMinImpact and CakeRenderer.CrackAt(point, "land")
+		if cracked then
 			local color = CakeRenderer.PaletteColor(point.Y - gridCfg.origin.y)
 			if crustFresh then
 				-- The signature first-crack ceremony of a fresh cake (§7.1).
@@ -126,8 +127,13 @@ function CakeFeelSubsClient.Start(data, modules)
 			local v = root.AssemblyLinearVelocity
 			local up = math.min(impact * layer.bounce, feelCfg.bounceMaxUp)
 			root.AssemblyLinearVelocity = Vector3.new(v.X, up, v.Z)
-			SoundPool.Play(layer.sfx, { pitchMult = 1.3 })
+			SoundPool.Play("bounce") -- trampoline layers throw you back up: a boing, not a thud
 			CameraShake.Impulse(0.15)
+		elseif not cracked and impact >= feelCfg.crackMinImpact then
+			-- Came down hard enough to feel it but the surface was not crust (or the
+			-- crack was already drawn there): a soft body thud, scaled by fall speed,
+			-- so a real landing is never silent. Small hops stay quiet by design.
+			SoundPool.Play("land", { volumeMult = math.clamp(impact / feelCfg.bounceMinImpact, 0.35, 1) })
 		end
 	end
 

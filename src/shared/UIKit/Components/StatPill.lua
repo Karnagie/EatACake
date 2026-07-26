@@ -169,8 +169,10 @@ local function StatPill(props)
 	if props.iconImage then
 		children.IconImage = React.createElement("ImageLabel", {
 			Name = "IconImage",
-			Position = UDim2.fromScale(7 / 190, 5 / 48),
-			Size = UDim2.fromScale(38 / 190, 38 / 48),
+			-- 42 of the pill's 48 height: a square glyph under ScaleType.Fit
+			-- draws at the zone's shorter side, so this IS the drawn size.
+			Position = UDim2.fromScale(5 / 190, 3 / 48),
+			Size = UDim2.fromScale(42 / 190, 42 / 48),
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
 			Image = props.iconImage,

@@ -24,6 +24,7 @@ local HexNode = require(script.Parent.HexNode)
 local StatPill = require(script.Parent.StatPill)
 local Button = require(script.Parent.Button)
 local CloseButton = require(script.Parent.CloseButton)
+local Interaction = require(script.Parent.Parent.Interaction)
 
 local DRAG_THRESHOLD = 8 -- px of movement before a press counts as a pan (not a tap)
 
@@ -296,6 +297,10 @@ local function HexTreeOverlay(props)
 			setFocus(nil)
 			return
 		end
+		-- Nodes are hit-tested through the pan surface rather than rendered as
+		-- buttons, so `usePressable` never sees this press — cue it by hand, only
+		-- once the tap has actually landed ON a node (empty space returned above).
+		Interaction.Cue("press")
 		if best.kind == "category" or best.kind == "back" then
 			setFocusedKey(nil)
 			setFocus(nil)

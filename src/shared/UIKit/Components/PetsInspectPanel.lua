@@ -154,13 +154,27 @@ local function inspector(props, layout, zIndex)
 		}, {
 			Corner = React.createElement("UICorner", { CornerRadius = UDim.new(1, 0) }),
 			Gradient = React.createElement("UIGradient", { Color = Theme.PetCard.PlateGradient, Rotation = 90 }),
+			Icon = if pet.iconName
+				then React.createElement("ImageLabel", {
+					Name = "Icon",
+					Position = UDim2.fromScale(Theme.PetCard.IconInset, Theme.PetCard.IconInset),
+					Size = UDim2.fromScale(1 - Theme.PetCard.IconInset * 2, 1 - Theme.PetCard.IconInset * 2),
+					BackgroundTransparency = 1,
+					BorderSizePixel = 0,
+					Image = Theme.Icon(pet.iconName),
+					ScaleType = Enum.ScaleType.Fit,
+					ZIndex = zIndex + 4,
+				})
+				else nil,
 		})
+		local rarityStyle = Theme.Rarity[pet.rarity or "Common"] or Theme.Rarity.Common
 		children.PetName = React.createElement(OutlinedText, {
 			text = pet.name,
 			position = UDim2.fromScale(style.NamePosition.X, style.NamePosition.Y),
 			size = UDim2.fromScale(style.NameSize.X, style.NameSize.Y),
 			textColor = Color3.new(1, 1, 1),
 			textGradient = Theme.PetCard.NameGradient,
+			outlineColor = rarityStyle.Outline, -- same hue rule as PetCard
 			textXAlignment = Enum.TextXAlignment.Center,
 			zIndex = zIndex + 2,
 		})
@@ -254,6 +268,7 @@ local function PetsInspectPanel(props)
 			id = pet.id,
 			petName = pet.name,
 			rarity = pet.rarity,
+			iconName = pet.iconName,
 			equipped = props.equipped ~= nil and props.equipped[pet.id] == true,
 			selected = props.selectedId == pet.id,
 			layoutOrder = index,

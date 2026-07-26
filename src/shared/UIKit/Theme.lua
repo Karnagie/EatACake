@@ -1,4 +1,11 @@
 -- Layout values are normalized Scale ratios. SourceRects are raster sampling coordinates only.
+
+-- Icon registry (name -> rbxassetid). Lives in its own module so Theme.lua
+-- stays about STYLE, but it is reached as `Theme.Icons.X` — components take an
+-- icon NAME and never inline an asset id (iron rule 2). See Icons.lua header.
+local Icons = require(script.Parent.Icons)
+local Log = require(script.Parent.Parent.Log)
+
 local Theme = {
 	Colors = {
 		Outline = Color3.fromRGB(4, 42, 64),
@@ -289,6 +296,32 @@ Theme.Feel = {
 	ToggleTween = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 }
 
+-- ===== Squish: the theme's motion signature (squash & stretch) =====
+-- UIScale is UNIFORM — it cannot squash. Squash needs anti-correlated X/Y
+-- (sx*sy ≈ 1, so the shape deforms but the "volume" reads constant). The only
+-- ADR-0006-safe carrier is the `Size` of Interaction's `Content` frame: React
+-- writes it exactly once with a value that never changes (Interaction.FullSize)
+-- and then diffs it away forever — the same sanctioned trick as ZeroFill /
+-- KNOB_INITIAL. NEVER squash a Size that React recomputes (PanelShell.size,
+-- grid cells): the reconciler would clobber the tween on the next render.
+-- Poses are Vector2(scaleX, scaleY) fed through usePressable's `squash` opt-in.
+Theme.Feel.Squish = {
+	-- (a) button press: flatten while held, spring back on release.
+	PressPose = Vector2.new(1.08, 0.90), -- 1.08*0.90 = 0.972 ≈ volume preserved
+	PressTween = TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	ReleaseTween = TweenInfo.new(0.24, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+	-- (b) collection card: a gentle vertical stretch on hover, hard squash on press.
+	CardHoverPose = Vector2.new(0.970, 1.045),
+	CardHoverTween = TweenInfo.new(0.13, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	CardPressPose = Vector2.new(1.10, 0.88),
+	-- Panel-jelly, reward-splat and idle-breath poses were designed alongside
+	-- these but are NOT shipped: they had no call sites, and naming one of them
+	-- PanelOpenTween would have SHADOWED the live Theme.Feel.PanelOpenTween that
+	-- PanelShell actually reads — two identically named knobs, one of them dead.
+	-- Add them back WITH their call site, not before it.
+}
+table.freeze(Theme.Feel.Squish)
+
 -- ===== Wide (landscape) panel family. Nominal grids: panel 1000x600, header 1000x120. =====
 
 Theme.PanelWide = {
@@ -385,10 +418,40 @@ Theme.Scrollbar = {
 -- Rarity accents: Button keypoint structure and lightness curve, hue-shifted.
 Theme.Rarity = {
 	Order = { "Common", "Rare", "Epic", "Legendary" },
+	-- Common used to ALIAS Theme.Button — same blue, and structurally a different
+	-- animal from the other five tiers (6-keypoint Rim starting DARK + 7-keypoint
+	-- Face, vs the canonical 4/4/5 with a BRIGHT Rim kp0). So a Common card obeyed
+	-- different light physics AND was indistinguishable from every button, row and
+	-- chip in the kit.
+	-- Restructured to the canonical form and hue-shifted to warm FOAM CREAM: H 30°,
+	-- S ≈ 0.13 (Rim/Face) / 0.45 (Outer), V curve inherited unchanged from the Rare
+	-- prototype. Two separations had to hold at once and both are published here:
+	--   vs the locked/disabled hex-gray family (hexGrayFace H 215°, S 0.16) — 185°
+	--     of hue apart, so a Common squishy never reads as "locked";
+	--   vs Legendary gold (H 43.6°, S 0.65) — only 13.6° apart in hue but 5x apart
+	--     in saturation, so pale foam never reads as gold.
+	-- A cool grey satisfied the first test but failed it against hexGray; cream is
+	-- also simply what squishy foam looks like.
 	Common = {
-		Outer = Theme.Button.OuterGradient,
-		Rim = Theme.Button.RimGradient,
-		Face = Theme.Button.FaceGradient,
+		Outer = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(54, 42, 30)),
+			ColorSequenceKeypoint.new(0.10, Color3.fromRGB(45, 35, 25)),
+			ColorSequenceKeypoint.new(0.80, Color3.fromRGB(46, 36, 25)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(50, 39, 28)),
+		}),
+		Rim = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(160, 148, 136)),
+			ColorSequenceKeypoint.new(0.05, Color3.fromRGB(225, 211, 196)),
+			ColorSequenceKeypoint.new(0.72, Color3.fromRGB(195, 182, 168)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(150, 139, 127)),
+		}),
+		Face = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(225, 211, 197)),
+			ColorSequenceKeypoint.new(0.50, Color3.fromRGB(200, 187, 173)),
+			ColorSequenceKeypoint.new(0.93, Color3.fromRGB(185, 172, 159)),
+			ColorSequenceKeypoint.new(0.96, Color3.fromRGB(145, 134, 122)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(155, 144, 132)),
+		}),
 	},
 	Rare = {
 		Outer = ColorSequence.new({
@@ -455,6 +518,104 @@ Theme.Rarity = {
 	},
 }
 
+-- Rarity extensions (hue-shift rule §7): Uncommon = teal family between
+-- Common(blue) and Rare(green); Secret = void magenta, dark face + pink rim.
+Theme.Rarity.Order = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Secret" }
+Theme.Rarity.Uncommon = {
+	Outer = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 56, 52)),
+		ColorSequenceKeypoint.new(0.10, Color3.fromRGB(0, 46, 43)),
+		ColorSequenceKeypoint.new(0.80, Color3.fromRGB(0, 47, 44)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 52, 48)),
+	}),
+	Rim = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(45, 170, 155)),
+		ColorSequenceKeypoint.new(0.05, Color3.fromRGB(85, 230, 210)),
+		ColorSequenceKeypoint.new(0.72, Color3.fromRGB(65, 200, 180)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(40, 155, 140)),
+	}),
+	Face = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 230, 210)),
+		ColorSequenceKeypoint.new(0.50, Color3.fromRGB(70, 205, 185)),
+		ColorSequenceKeypoint.new(0.93, Color3.fromRGB(60, 190, 170)),
+		ColorSequenceKeypoint.new(0.96, Color3.fromRGB(35, 150, 130)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 160, 140)),
+	}),
+}
+-- Secret was 316.7° magenta — only 11.9° from Epic (304.8°), so at card size the
+-- two top tiers read as the same purple and the rarest drop in the game lands
+-- without a distinct colour. Hue-shifted −42° to 274.7° violet-void, keeping the
+-- keypoint positions and the dark V≈.47 face that makes it read as "forbidden".
+Theme.Rarity.Secret = {
+	Outer = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(15, 0, 38)),
+		ColorSequenceKeypoint.new(0.10, Color3.fromRGB(12, 0, 30)),
+		ColorSequenceKeypoint.new(0.80, Color3.fromRGB(13, 0, 32)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 0, 36)),
+	}),
+	Rim = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(191, 60, 215)),
+		ColorSequenceKeypoint.new(0.05, Color3.fromRGB(235, 105, 255)),
+		ColorSequenceKeypoint.new(0.72, Color3.fromRGB(215, 85, 235)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(180, 50, 200)),
+	}),
+	Face = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(82, 30, 120)),
+		ColorSequenceKeypoint.new(0.50, Color3.fromRGB(64, 22, 96)),
+		ColorSequenceKeypoint.new(0.93, Color3.fromRGB(56, 18, 84)),
+		ColorSequenceKeypoint.new(0.96, Color3.fromRGB(33, 8, 55)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(42, 12, 66)),
+	}),
+}
+
+-- Per-tier outline + text gradient + rarity marks. style-rules §4.3: an
+-- element's outline is the DARK version of its own hue — Secret had none at all
+-- and fell back to the default navy. Icons are NAMES into Theme.Icons: the disc
+-- keeps its silhouette at chip size (18px), the star only survives ≥36px.
+local rarityTrim = {
+	Common = {
+		Outline = Color3.fromRGB(34, 26, 18),
+		TextStop = Color3.fromRGB(234, 224, 214),
+		TextMid = Color3.fromRGB(246, 241, 236),
+	},
+	Uncommon = {
+		Outline = Color3.fromRGB(0, 52, 48),
+		TextStop = Color3.fromRGB(186, 240, 230),
+		TextMid = Color3.fromRGB(222, 250, 245),
+	},
+	Rare = {
+		Outline = Color3.fromRGB(0, 60, 24),
+		TextStop = Color3.fromRGB(168, 240, 196),
+		TextMid = Color3.fromRGB(224, 255, 236),
+	},
+	Epic = {
+		Outline = Color3.fromRGB(46, 0, 38),
+		TextStop = Color3.fromRGB(255, 196, 240),
+		TextMid = Color3.fromRGB(255, 228, 250),
+	},
+	Legendary = {
+		Outline = Color3.fromRGB(74, 48, 0),
+		TextStop = Color3.fromRGB(255, 214, 120),
+		TextMid = Color3.fromRGB(255, 238, 178),
+	},
+	Secret = {
+		Outline = Color3.fromRGB(24, 0, 46),
+		TextStop = Color3.fromRGB(226, 170, 255),
+		TextMid = Color3.fromRGB(243, 214, 255),
+	},
+}
+for tier, trim in pairs(rarityTrim) do
+	local set = Theme.Rarity[tier]
+	set.Outline = trim.Outline
+	set.Text = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+		ColorSequenceKeypoint.new(0.55, trim.TextMid),
+		ColorSequenceKeypoint.new(1, trim.TextStop),
+	})
+	set.IconDisc = `RarityDisc{tier}`
+	set.IconStar = `RarityStar{tier}`
+end
+
 -- Pet card. Nominal 140x160; grid cell bakes the 12px vertical gap into its aspect.
 Theme.PetCard = {
 	CellAspectRatio = 135 / 166.3,
@@ -466,8 +627,9 @@ Theme.PetCard = {
 	FacePosition = Vector2.new(10 / 140, 10 / 160),
 	FaceSize = Vector2.new(120 / 140, 134 / 160),
 	FaceCorner = 0.12,
-	PlatePosition = Vector2.new(32 / 140, 26 / 160),
-	PlateSize = Vector2.new(76 / 140, 76 / 160),
+	PlatePosition = Vector2.new(26 / 140, 24 / 160),
+	PlateSize = Vector2.new(88 / 140, 88 / 160),
+	IconInset = 0.04, -- squishy art nearly fills the plate (was 0.10)
 	PlateGradient = ColorSequence.new({
 		ColorSequenceKeypoint.new(0, Color3.fromRGB(252, 253, 255)),
 		ColorSequenceKeypoint.new(1, Color3.fromRGB(208, 234, 252)),
@@ -781,65 +943,78 @@ Theme.PetsLayout = {
 -- ===== Template feature windows (rewards / shop / codes / app HUD) =====
 
 -- Notification badge (green dot, ratio-transferred from PetCard.Badge 30x30).
+-- With an optional `iconName` the same dot becomes an OWNED / CLAIMED mark.
 Theme.Badge = {
 	AspectRatio = 1,
 	RingColor = Theme.Toggle.KnobOnOutlineColor,
 	FillGradient = Theme.Toggle.KnobOnGradient,
 	FillPosition = Vector2.new(0.13, 0.13),
 	FillSize = Vector2.new(0.74, 0.74),
+	IconInset = 0.12, -- glyph inset inside the fill circle
 }
 
--- Day/milestone card (rewards grids). Nominal 118x135, PetCard family
--- (fractions ratio-transferred from PetCard 140x160: rim inset 6/118≈7/140,
--- face inset 8.5/118≈10/140). Vertical zones: 10 title(26) 16 reward(30)
--- 10 sub(24) 19 = 135 ✓.
+-- Rewards window geometry (daily + time share it). Nominal 1000x600.
+-- WAS 7 columns of 118x135 in a 904x360 zone: a single row of short cards left
+-- 62% of the grid zone empty ("big panel, tiny buttons"). 7 across a 904 canvas
+-- caps a card at 117px wide no matter how much vertical room there is, so the
+-- fix is FEWER COLUMNS over TWO ROWS, with a landscape card cut.
+-- Vertical: header 120, gap 22, grid 360 (y 142..502), gap 14, footer 48, margin 36
+--   120 + 22 + 360 + 14 + 48 + 36 = 600 ✓
+-- Grid rows: 2*172 + 16 = 360 ✓   Grid cols: 4*214 + 3*16 = 856 + 48 = 904 ✓
+Theme.RewardsLayout = {
+	PanelAspect = 1000 / 600,
+	PanelMaxViewportFraction = 0.9,
+	HeaderHeight = 120 / 600,
+	GridPosition = Vector2.new(48 / 1000, 142 / 600),
+	GridSize = Vector2.new(904 / 1000, 360 / 600),
+	Columns = 4,
+	-- 213.5, not 214: an exact-fit grid can wrap its last cell on float
+	-- rounding (kit pitfall 6).
+	CellWidth = 213.5 / 904,
+	CellPaddingX = 16 / 904,
+	CellHeight = 172 / 360,
+	FooterPosition = Vector2.new(48 / 1000, 516 / 600),
+	FooterSize = Vector2.new(904 / 1000, 48 / 600),
+	FooterGradient = Theme.Header.TitleGradient,
+}
+
+-- Day/milestone card, LANDSCAPE cut for the 4x2 rewards grid. Nominal 214x172.
+-- The portrait 118x135 cut is kept below as Theme.DayCardTall for any caller
+-- that still wants a strip.
+-- Vertical: 14 title(32) 6 art(58) 6 sub(26) 30 = 172 ✓ (art zone holds the
+-- reward icon + its amount side by side, so the card reads at a glance).
+-- Horizontal: 14 content(186) 14 = 214 ✓
 Theme.DayCard = {
-	AspectRatio = 118 / 135,
+	AspectRatio = 214 / 172,
 	OuterCorner = 0.14,
-	RimPosition = Vector2.new(6 / 118, 6 / 135),
-	RimSize = Vector2.new(106 / 118, 117 / 135),
+	RimPosition = Vector2.new(7 / 214, 7 / 172),
+	RimSize = Vector2.new(200 / 214, 150 / 172),
 	RimCorner = 0.13,
-	FacePosition = Vector2.new(8.5 / 118, 8 / 135),
-	FaceSize = Vector2.new(101 / 118, 111 / 135),
+	FacePosition = Vector2.new(11 / 214, 11 / 172),
+	FaceSize = Vector2.new(192 / 214, 142 / 172),
 	FaceCorner = 0.12,
-	TitlePosition = Vector2.new(10 / 118, 10 / 135),
-	TitleSize = Vector2.new(98 / 118, 26 / 135),
-	RewardPosition = Vector2.new(8 / 118, 52 / 135),
-	RewardSize = Vector2.new(102 / 118, 30 / 135),
-	SubPosition = Vector2.new(8 / 118, 92 / 135),
-	SubSize = Vector2.new(102 / 118, 24 / 135),
+	TitlePosition = Vector2.new(14 / 214, 14 / 172),
+	TitleSize = Vector2.new(186 / 214, 32 / 172),
+	RewardPosition = Vector2.new(14 / 214, 52 / 172),
+	RewardSize = Vector2.new(186 / 214, 58 / 172),
+	SubPosition = Vector2.new(14 / 214, 116 / 172),
+	SubSize = Vector2.new(186 / 214, 26 / 172),
+	-- Reward art sits left of the amount inside the reward band.
+	IconPosition = Vector2.new(30 / 214, 52 / 172),
+	IconSize = Vector2.new(58 / 214, 58 / 172),
+	IconTextPosition = Vector2.new(96 / 214, 60 / 172),
+	IconTextSize = Vector2.new(96 / 214, 42 / 172),
 	TitleGradient = Theme.Button.TextGradient,
 	RewardGradient = Theme.PetCard.NameGradient,
 	-- Claimable accent: gold Outer/Rim swap (PetCard selection rule).
 	ClaimableOuterGradient = Theme.PetCard.SelectOuterGradient,
 	ClaimableRimGradient = Theme.PetCard.SelectRingGradient,
-	BadgeCenter = Vector2.new(100 / 118, 24 / 135),
-	BadgeSize = Vector2.new(26 / 118, 26 / 135),
+	BadgeCenter = Vector2.new(182 / 214, 30 / 172),
+	BadgeSize = Vector2.new(34 / 214, 34 / 172),
 	BadgeOutlineColor = Theme.Toggle.KnobOnOutlineColor,
 	BadgeGradient = Theme.Toggle.KnobOnGradient,
 	CheckColor = Color3.new(1, 1, 1),
 	DisabledTransparency = 0.22,
-}
-
--- Rewards window geometry (daily + time share it). Nominal 1000x600.
--- Vertical: header 120, gap 30, grid 360 (y150..510), gap 10, footer 48,
--- margin 32 -> 120+30+360+10+48+32 = 600 ✓. Horizontal: 48+904+48 = 1000 ✓.
--- Grid: 7 columns -> 7*118 + 6*13 = 826+78 = 904 ✓.
-Theme.RewardsLayout = {
-	PanelAspect = 1000 / 600,
-	PanelMaxViewportFraction = 0.9,
-	HeaderHeight = 120 / 600,
-	GridPosition = Vector2.new(48 / 1000, 150 / 600),
-	GridSize = Vector2.new(904 / 1000, 360 / 600),
-	Columns = 7,
-	-- 117.5, not 118: exact-fit grids can wrap the last cell on float
-	-- rounding (kit pitfall) — shave the cell width a hair.
-	CellWidth = 117.5 / 904,
-	CellPaddingX = 13 / 904,
-	CellHeight = 135 / 360,
-	FooterPosition = Vector2.new(48 / 1000, 520 / 600),
-	FooterSize = Vector2.new(904 / 1000, 48 / 600),
-	FooterGradient = Theme.Header.TitleGradient,
 }
 
 -- Shop row (vertical sectioned list archetype). Nominal 418x88.
@@ -873,22 +1048,353 @@ Theme.ShopRow = {
 	SubGradient = Theme.PetCard.NameGradient,
 }
 
--- Shop window list geometry (portrait Panel family, same content region as
--- the settings rows: x 47..465, y 128..691). Section label 40, row 88.
+-- ===== Shop: LANDSCAPE sectioned scroll, one multi-column grid per section ====
+--
+-- window-archetypes' "Shop" worked example is a portrait one-column list sized
+-- for ~8 items. This catalogue is 17 items in 5 categories — comparison content,
+-- which the genre (Pet Sim 99, Blade Ball, Adopt Me) always renders as a hero
+-- banner + per-category GRIDS in a long scroll. The old portrait panel occupied
+-- 36% of screen width and could structurally never hold two cells side by side.
+--
+-- PANEL FAMILY: the existing PanelWide/HeaderWide. A bespoke 1280x800 family was
+-- designed and REJECTED: calculateScale pins height to maxFraction*viewportH
+-- regardless of aspect, so on 16:9 a 1.6 panel renders 1624x1015 while PanelWide
+-- at the same fraction renders 1692x1015 — the new grid would have been NARROWER
+-- while costing a whole second chrome family to maintain.
+--
+-- Vertical (content y 132..559, h 427):   balance 48 · gap 12 · pane 367
+--   48 + 12 + 367 = 427 ✓
+-- Horizontal (content x 48..952, w 904):  window 870 + gap 12 + bar 22 = 904 ✓
+--   (PetsLayout's proven split. The old ShopLayout had 0.96 + 0.05 = 1.01 — the
+--   scrollbar track overlapped the scroll window and there was no gap at all.)
 Theme.ShopLayout = {
-	PanelAspect = Theme.Layout.PanelAspect,
-	PanelMaxViewportFraction = Theme.Layout.PanelMaxViewportFraction,
-	ListPosition = Theme.Layout.RowsPosition,
-	ListSize = Theme.Layout.RowsSize,
-	-- Section header cell (gap baked into the aspect, same recipe as rows —
-	-- NO scale Padding inside an AutomaticCanvasSize list).
-	SectionCellAspect = 418 / 50,
-	SectionCellHeight = 50 / 563,
-	SectionContentHeight = 40 / 50,
-	SectionGradient = Theme.Header.TitleGradient,
+	PanelAspect = Theme.PanelWide.AspectRatio,
+	PanelMaxViewportFraction = 0.92,
+	HeaderHeight = 120 / 600,
+	BalancePosition = Vector2.new(48 / 1000, 132 / 600),
+	BalanceSize = Vector2.new(904 / 1000, 48 / 600),
+	BalanceChipWidth = 190 / 904, -- Theme.Chip nominal 190x48
+	BalanceChipStride = 202 / 904, -- 190 + 12 gap
+	PanePosition = Vector2.new(48 / 1000, 192 / 600),
+	PaneSize = Vector2.new(904 / 1000, 367 / 600),
+	ScrollWindowFraction = 870 / 904,
+	ScrollBarWidth = 22 / 904,
+
+	-- DETERMINISTIC CANVAS (nominal px on the 870x367 scroll window). The panel
+	-- walks the sections, sums these, and positions every cell by an explicit
+	-- fraction of the resulting canvas.
+	--
+	-- The alternative — a UIListLayout with AutomaticCanvasSize and one aspect
+	-- constraint per cell — was built first and DOES NOT WORK here: an aspect
+	-- constraint fits within (windowWidth, seedFraction * canvas), the canvas is
+	-- what the cells are growing, and the fixed point that converges is one where
+	-- the height binds and every row renders narrower than the window. Measured:
+	-- 377px rows in a 596px window, all four row kinds the same height.
+	-- Deterministic math is what patterns.md prescribes for grids, and it removes
+	-- the aspect constraints, the automatic canvas and UIGridLayout all at once.
+	CanvasWidthPx = 870,
+	WindowHeightPx = 367,
+	SectionHeaderPx = 56,
+	SectionHeaderGapPx = 12,
+	SectionGapPx = 24, -- after each section block
+	BannerPx = 200,
+	BannerGapPx = 16,
+	TilePx = 160,
+	TileRowGapPx = 14,
+	PackPx = 264,
+	PackRowGapPx = 14,
+	CanvasBottomPadPx = 16,
+	-- Column packing on the 870 canvas:
+	--   tiles: 3*282 + 2*12 = 846 + 24 = 870 ✓
+	--   packs: 4*208 + 3*12 = 832 + 36 = 868 — 2px slack ON PURPOSE; exact-fit
+	--          grids wrap their last cell on float rounding (kit pitfall 6).
+	TileColumns = 3,
+	TileWidthPx = 282,
+	TileStridePx = 294,
+	PackColumns = 4,
+	PackWidthPx = 208,
+	PackStridePx = 220,
+
+	-- Retired portrait ShopRow still reads this for its default cell height.
 	RowCellHeight = 98 / 563,
-	ScrollWindowFraction = 0.96,
-	ScrollBarWidth = 0.05,
+}
+
+-- Section header. Nominal 870x48: icon 38 | label | right-aligned count, over a
+-- full-width 4px underline pill.
+-- Horizontal: 0 icon(38) 10 label(560) 32 count(230) = 870 ✓
+-- Vertical: icon y 5..43, label y 8..40, underline y 44..48 ✓
+Theme.ShopSectionHeader = {
+	AspectRatio = 870 / 56,
+	IconPosition = Vector2.new(0, 3 / 56),
+	IconSize = Vector2.new(44 / 870, 44 / 56),
+	LabelPosition = Vector2.new(54 / 870, 8 / 56),
+	LabelSize = Vector2.new(556 / 870, 36 / 56),
+	CountPosition = Vector2.new(610 / 870, 12 / 56),
+	CountSize = Vector2.new(240 / 870, 30 / 56), -- ends at 850: 20px right margin
+	UnderlinePosition = Vector2.new(0, 51 / 56),
+	UnderlineSize = Vector2.new(1, 5 / 56),
+	UnderlineCorner = 1,
+	UnderlineColor = Theme.Colors.Outline,
+	LabelGradient = Theme.Header.TitleGradient,
+	CountGradient = Theme.PetCard.NameGradient,
+}
+
+-- Shop tile — the workhorse cell (passes, eggs, boosts). Nominal 282x160,
+-- icon LEFT / name+perk+price RIGHT so three fit across the 870 canvas and the
+-- perk line finally has somewhere to live (it was hardcoded "" before).
+-- Layer recipe by style-rules §2 on H=160: rim top 8 (5%) / bottom 19 (11.9%,
+-- 2.4x), face top 12 / bottom 22. Corners .14/.13/.12 of the shorter side.
+-- Horizontal: 16 plate(80) 8 column(162) 16 = 282 ✓
+-- Vertical right column: 20 name(30) 2 sub(24) 6 price(48) 30 = 160 ✓
+-- Vertical left column: 22 plate(80) 58 = 160 ✓
+Theme.ShopTile = {
+	AspectRatio = 282 / 160,
+	OuterCorner = 0.14,
+	RimPosition = Vector2.new(8 / 282, 8 / 160),
+	RimSize = Vector2.new(266 / 282, 133 / 160),
+	RimCorner = 0.13,
+	FacePosition = Vector2.new(12 / 282, 12 / 160),
+	FaceSize = Vector2.new(258 / 282, 126 / 160),
+	FaceCorner = 0.12,
+	PlatePosition = Vector2.new(14 / 282, 20 / 160),
+	PlateSize = Vector2.new(88 / 282, 88 / 160),
+	IconInset = 0.06, -- icon nearly fills the plate (was 0.16: 68% -> 88%)
+	NamePosition = Vector2.new(110 / 282, 20 / 160),
+	NameSize = Vector2.new(158 / 282, 30 / 160),
+	SubPosition = Vector2.new(110 / 282, 52 / 160),
+	SubSize = Vector2.new(158 / 282, 24 / 160),
+	-- Price is CENTRED under the text column (104 + (162-130)/2 = 120), not
+	-- left-aligned with it: a 130-wide button under a 162-wide column left a
+	-- visible dead notch at the card's bottom-right.
+	PricePosition = Vector2.new(124 / 282, 82 / 160),
+	PriceSize = Vector2.new(130 / 282, 48 / 160),
+	BadgeCenter = Vector2.new(92 / 282, 28 / 160), -- owned check, on the plate corner
+	BadgeSize = Vector2.new(32 / 282, 32 / 160),
+	OutlineColor = Theme.Button.OutlineColor,
+	OuterGradient = Theme.Button.OuterGradient,
+	RimGradient = Theme.Button.RimGradient,
+	FaceGradient = Theme.Button.FaceGradient,
+	PlateGradient = Theme.PetCard.PlateGradient,
+	PlateTransparency = Theme.PetCard.PlateTransparency,
+	NameGradient = Theme.Button.TextGradient,
+	SubGradient = Theme.PetCard.NameGradient,
+}
+
+-- Currency pack card — portrait, compare-at-a-glance. Nominal 208x248 with a
+-- RESERVED ribbon band at the top: every pack keeps the band whether or not it
+-- wears a ribbon, so the four cards stay the same height and the BEST VALUE tag
+-- can never overlap the art or the price (the classic version of this bug).
+-- Vertical: 18 ribbon(35) 5 plate(76) 6 amount(28) 4 price(46) 30 = 248 ✓
+-- Horizontal: plate (208-76)/2 = 66 · price (208-148)/2 = 30 · ribbon (208-140)/2 = 34 ✓
+Theme.ShopPack = {
+	AspectRatio = 208 / 264,
+	OuterCorner = 0.14,
+	RimPosition = Vector2.new(6 / 208, 8 / 264),
+	RimSize = Vector2.new(196 / 208, 230 / 264),
+	RimCorner = 0.13,
+	FacePosition = Vector2.new(10 / 208, 14 / 264),
+	FaceSize = Vector2.new(188 / 208, 220 / 264),
+	FaceCorner = 0.12,
+	RibbonPosition = Vector2.new(34 / 208, 18 / 264),
+	RibbonSize = Vector2.new(140 / 208, 35 / 264),
+	PlatePosition = Vector2.new(58 / 208, 57 / 264),
+	PlateSize = Vector2.new(92 / 208, 92 / 264),
+	IconInset = 0.05,
+	AmountPosition = Vector2.new(12 / 208, 153 / 264),
+	AmountSize = Vector2.new(184 / 208, 28 / 264),
+	PricePosition = Vector2.new(39 / 208, 187 / 264),
+	PriceSize = Vector2.new(130 / 208, 46 / 264),
+	OutlineColor = Theme.Button.OutlineColor,
+	OuterGradient = Theme.Button.OuterGradient,
+	RimGradient = Theme.Button.RimGradient,
+	FaceGradient = Theme.Button.FaceGradient,
+	PlateGradient = Theme.PetCard.PlateGradient,
+	PlateTransparency = Theme.PetCard.PlateTransparency,
+	AmountGradient = Theme.Button.TextGradient,
+	-- Best-value pack swaps to the gold selection accent (PetCard's rule):
+	-- gradients change, geometry does not.
+	BestOuterGradient = Theme.PetCard.SelectOuterGradient,
+	BestRimGradient = Theme.PetCard.SelectRingGradient,
+}
+
+-- Hero banner — one per section at most (Featured, Free). Nominal 870x200.
+-- Horizontal: 26 plate(150) 24 column(460) 24 ribbon(160) 26 = 870 ✓
+-- Vertical column: 30 name(40) 4 desc(28) 10 price(58) 30 = 200 ✓
+-- Vertical plate: 25 plate(150) 25 = 200 ✓
+Theme.ShopBanner = {
+	AspectRatio = 870 / 200,
+	OuterCorner = 0.16,
+	RimPosition = Vector2.new(8 / 870, 8 / 200),
+	RimSize = Vector2.new(854 / 870, 168 / 200),
+	RimCorner = 0.15,
+	FacePosition = Vector2.new(14 / 870, 13 / 200),
+	FaceSize = Vector2.new(842 / 870, 162 / 200),
+	FaceCorner = 0.14,
+	PlatePosition = Vector2.new(22 / 870, 16 / 200),
+	PlateSize = Vector2.new(168 / 870, 168 / 200),
+	IconInset = 0.06,
+	RibbonPosition = Vector2.new(684 / 870, 24 / 200),
+	RibbonSize = Vector2.new(160 / 870, 40 / 200),
+	NamePosition = Vector2.new(206 / 870, 30 / 200),
+	NameSize = Vector2.new(454 / 870, 40 / 200),
+	DescPosition = Vector2.new(206 / 870, 74 / 200),
+	DescSize = Vector2.new(454 / 870, 28 / 200),
+	PricePosition = Vector2.new(206 / 870, 112 / 200),
+	PriceSize = Vector2.new(220 / 870, 58 / 200),
+	BadgeCenter = Vector2.new(172 / 870, 32 / 200),
+	BadgeSize = Vector2.new(40 / 870, 40 / 200),
+	OutlineColor = Theme.Rarity.Legendary.Outline,
+	OuterGradient = Theme.Rarity.Legendary.Outer,
+	RimGradient = Theme.Rarity.Legendary.Rim,
+	FaceGradient = Theme.Rarity.Legendary.Face,
+	PlateGradient = Theme.PetCard.PlateGradient,
+	PlateTransparency = Theme.PetCard.PlateTransparency,
+	NameGradient = Theme.Rarity.Legendary.Text,
+	DescGradient = Theme.PetCard.NameGradient,
+}
+-- Free/group banner: same geometry, Rare-green accent (this is a GIVE, not a
+-- sell — it must not read as the paid hero).
+Theme.ShopBannerFree = {
+	OutlineColor = Theme.Rarity.Rare.Outline,
+	OuterGradient = Theme.Rarity.Rare.Outer,
+	RimGradient = Theme.Rarity.Rare.Rim,
+	FaceGradient = Theme.Rarity.Rare.Face,
+	NameGradient = Theme.Rarity.Rare.Text,
+}
+
+-- Price button: icon + amount, the largest coloured element on every cell.
+-- Thickness by style-rules §2 on H=48: rim top 3 (6.3%) / bottom 7 (14.6%).
+-- Horizontal: 12 icon(26) 6 text(74) 12 = 130 ✓
+Theme.ShopPrice = {
+	AspectRatio = 130 / 48,
+	OuterCorner = 0.20,
+	RimPosition = Vector2.new(3 / 130, 3 / 48),
+	RimSize = Vector2.new(124 / 130, 38 / 48),
+	RimCorner = 0.18,
+	FacePosition = Vector2.new(4.5 / 130, 4.5 / 48),
+	FaceSize = Vector2.new(121 / 130, 35 / 48),
+	FaceCorner = 0.17,
+	IconPosition = Vector2.new(12 / 130, 11 / 48),
+	IconSize = Vector2.new(26 / 130, 26 / 48),
+	TextPosition = Vector2.new(44 / 130, 11 / 48),
+	TextSize = Vector2.new(74 / 130, 26 / 48),
+	-- Text-only (OWNED / SOON / FREE): the icon is hidden and the label spans.
+	WideTextPosition = Vector2.new(10 / 130, 11 / 48),
+	WideTextSize = Vector2.new(110 / 130, 26 / 48),
+}
+-- Banner variant. Its own fraction table — the same fractions at a different
+-- aspect would move every inset (a 130-wide table stretched to 220 is not the
+-- same button).
+-- Horizontal: 20 icon(32) 8 text(140) 20 = 220 ✓
+Theme.ShopPriceWide = {
+	AspectRatio = 220 / 58,
+	OuterCorner = 0.20,
+	RimPosition = Vector2.new(4 / 220, 4 / 58),
+	RimSize = Vector2.new(212 / 220, 45 / 58),
+	RimCorner = 0.18,
+	FacePosition = Vector2.new(6 / 220, 6 / 58),
+	FaceSize = Vector2.new(208 / 220, 41 / 58),
+	FaceCorner = 0.17,
+	IconPosition = Vector2.new(20 / 220, 13 / 58),
+	IconSize = Vector2.new(32 / 220, 32 / 58),
+	TextPosition = Vector2.new(60 / 220, 14 / 58),
+	TextSize = Vector2.new(140 / 220, 30 / 58),
+	WideTextPosition = Vector2.new(16 / 220, 14 / 58),
+	WideTextSize = Vector2.new(188 / 220, 30 / 58),
+}
+
+-- Price button state accents. `unavailable` is the one that did not exist: an
+-- unconfigured dev-product id used to render a live BUY button whose purchase
+-- the server silently refused (R8 — the failure has to be visible in the UI).
+Theme.ShopPriceStates = {
+	buy = {
+		OutlineColor = Theme.EquipGreen.OutlineColor,
+		OuterGradient = Theme.EquipGreen.OuterGradient,
+		RimGradient = Theme.EquipGreen.RimGradient,
+		FaceGradient = Theme.EquipGreen.FaceGradient,
+		TextGradient = Theme.EquipGreen.TextGradient,
+	},
+	owned = {
+		OutlineColor = Theme.Button.OutlineColor,
+		OuterGradient = Theme.Button.OuterGradient,
+		RimGradient = Theme.Button.RimGradient,
+		FaceGradient = Theme.Button.FaceGradient,
+		TextGradient = Theme.Button.TextGradient,
+	},
+	-- Neutral grey — the same "this is not available to you" language the hex
+	-- tree uses for a locked node, so the state is learned once and read
+	-- everywhere. A green SOON button would still say "press me".
+	unavailable = {
+		OutlineColor = Color3.fromRGB(20, 23, 28),
+		OuterGradient = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(48, 54, 64)),
+			ColorSequenceKeypoint.new(0.10, Color3.fromRGB(34, 39, 47)),
+			ColorSequenceKeypoint.new(0.80, Color3.fromRGB(33, 38, 46)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(30, 34, 42)),
+		}),
+		RimGradient = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 130, 145)),
+			ColorSequenceKeypoint.new(0.05, Color3.fromRGB(150, 160, 175)),
+			ColorSequenceKeypoint.new(0.72, Color3.fromRGB(104, 114, 130)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(78, 86, 100)),
+		}),
+		FaceGradient = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(126, 136, 150)),
+			ColorSequenceKeypoint.new(0.50, Color3.fromRGB(104, 113, 128)),
+			ColorSequenceKeypoint.new(0.93, Color3.fromRGB(90, 98, 112)),
+			ColorSequenceKeypoint.new(0.96, Color3.fromRGB(60, 66, 78)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(70, 77, 90)),
+		}),
+		TextGradient = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(226, 231, 240)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(176, 184, 198)),
+		}),
+	},
+}
+
+-- Corner tag ("BEST VALUE", "ONE TIME"). Built from the kit's own layer recipe,
+-- NOT from the Ribbon*.png art: that art is a square 257x257 rosette, so a
+-- 4:1 tag box with ScaleType.Fit renders it as a 40x40 blob behind the label.
+-- A dark Outer pill + accent Face + OutlinedText is both correct at this aspect
+-- and closer to the kit, which builds chrome from Frame+UICorner+UIGradient and
+-- reserves images for icons.
+-- ONE fraction table serves both sizes: banner 160x40 and pack 140x35 are the
+-- same aspect 4.0.
+-- Horizontal: 12 label(136) 12 = 160 ✓ · Vertical: face y 3..33, label y 5..31 ✓
+Theme.ShopRibbon = {
+	AspectRatio = 4.0,
+	OuterCorner = 0.30,
+	FacePosition = Vector2.new(3 / 160, 3 / 40),
+	FaceSize = Vector2.new(154 / 160, 30 / 40),
+	FaceCorner = 0.26,
+	LabelPosition = Vector2.new(12 / 160, 5 / 40),
+	LabelSize = Vector2.new(136 / 160, 26 / 40),
+	Variants = {
+		BestValue = {
+			Outer = Theme.Rarity.Legendary.Outer,
+			Face = Theme.Rarity.Legendary.Face,
+			Outline = Theme.Rarity.Legendary.Outline,
+			Text = Theme.Rarity.Legendary.Text,
+		},
+		Limited = {
+			Outer = Theme.Exit.OuterGradient,
+			Face = Theme.Exit.FaceGradient,
+			Outline = Theme.Exit.XOutline,
+			Text = Theme.Exit.XGradient,
+		},
+		New = {
+			Outer = Theme.Rarity.Rare.Outer,
+			Face = Theme.Rarity.Rare.Face,
+			Outline = Theme.Rarity.Rare.Outline,
+			Text = Theme.Rarity.Rare.Text,
+		},
+		Event = {
+			Outer = Theme.Rarity.Epic.Outer,
+			Face = Theme.Rarity.Epic.Face,
+			Outline = Theme.Rarity.Epic.Outline,
+			Text = Theme.Rarity.Epic.Text,
+		},
+	},
 }
 
 -- Kit-styled text input (dark well + light groove face). Nominal 418x84.
@@ -950,10 +1456,14 @@ Theme.MenuButton = {
 -- than the old MenuButton for phones.
 Theme.HudMenuButton = {
 	IconPosition = Vector2.new(0, 0),
-	IconSize = Vector2.new(1, 86 / 118),
-	IconColor = Color3.new(1, 1, 1), -- no tint (placeholder icons are pre-colored)
-	LabelPosition = Vector2.new(0, 90 / 118),
-	LabelSize = Vector2.new(1, 24 / 118),
+	-- Nominal 100x126: icon 0..96, gap 4, label 100..122, margin 4 = 126 ✓
+	-- The icon zone is deliberately near-square (100 wide x 96 tall) — a square
+	-- glyph under ScaleType.Fit draws at the zone's shorter side, so a short,
+	-- wide zone throws away the width.
+	IconSize = Vector2.new(1, 96 / 126),
+	IconColor = Color3.new(1, 1, 1), -- no tint (icons are pre-colored)
+	LabelPosition = Vector2.new(0, 100 / 126),
+	LabelSize = Vector2.new(1, 22 / 126),
 	LabelGradient = Theme.Hud.ButtonLabelGradient,
 	LabelOutlineColor = Theme.Colors.TextOutline,
 	-- Notification dot on the icon's top-right (Badge self-squares from width).
@@ -974,59 +1484,17 @@ Theme.AppHud = {
 	-- 2x4 block that stops around mid-screen. Each cell is comfortable to tap on
 	-- phones; the HudMenuButton icon self-fits its cell (no aspect constraint).
 	MenuColumns = 2,
-	MenuButtonWidth = 92 / 1920,
-	MenuButtonHeight = 100 / 1080,
-	MenuGap = 12 / 1080, -- vertical gap between rows
-	MenuGapX = 12 / 1920, -- horizontal gap between columns
+	-- 92x100 was too small to read on a phone: the icon drew at 73% of the
+	-- button height because ScaleType.Fit letterboxes a square image into the
+	-- zone's SHORTER side. Grown ~35% and the icon zone made near-square so the
+	-- width is no longer wasted.
+	MenuButtonWidth = 124 / 1920,
+	MenuButtonHeight = 132 / 1080,
+	MenuGap = 14 / 1080, -- vertical gap between rows
+	MenuGapX = 14 / 1920, -- horizontal gap between columns
 }
 
 -- ===== Eat the Cake game sections =====
-
--- Rarity extensions (hue-shift rule §7): Uncommon = teal family between
--- Common(blue) and Rare(green); Secret = void magenta, dark face + pink rim.
-Theme.Rarity.Order = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Secret" }
-Theme.Rarity.Uncommon = {
-	Outer = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 56, 52)),
-		ColorSequenceKeypoint.new(0.10, Color3.fromRGB(0, 46, 43)),
-		ColorSequenceKeypoint.new(0.80, Color3.fromRGB(0, 47, 44)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 52, 48)),
-	}),
-	Rim = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(45, 170, 155)),
-		ColorSequenceKeypoint.new(0.05, Color3.fromRGB(85, 230, 210)),
-		ColorSequenceKeypoint.new(0.72, Color3.fromRGB(65, 200, 180)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(40, 155, 140)),
-	}),
-	Face = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 230, 210)),
-		ColorSequenceKeypoint.new(0.50, Color3.fromRGB(70, 205, 185)),
-		ColorSequenceKeypoint.new(0.93, Color3.fromRGB(60, 190, 170)),
-		ColorSequenceKeypoint.new(0.96, Color3.fromRGB(35, 150, 130)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 160, 140)),
-	}),
-}
-Theme.Rarity.Secret = {
-	Outer = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(38, 0, 34)),
-		ColorSequenceKeypoint.new(0.10, Color3.fromRGB(30, 0, 27)),
-		ColorSequenceKeypoint.new(0.80, Color3.fromRGB(32, 0, 29)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(36, 0, 32)),
-	}),
-	Rim = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(215, 60, 130)),
-		ColorSequenceKeypoint.new(0.05, Color3.fromRGB(255, 105, 170)),
-		ColorSequenceKeypoint.new(0.72, Color3.fromRGB(235, 85, 150)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 50, 115)),
-	}),
-	Face = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 30, 95)),
-		ColorSequenceKeypoint.new(0.50, Color3.fromRGB(96, 22, 76)),
-		ColorSequenceKeypoint.new(0.93, Color3.fromRGB(84, 18, 66)),
-		ColorSequenceKeypoint.new(0.96, Color3.fromRGB(55, 8, 44)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(66, 12, 52)),
-	}),
-}
 
 -- Belly meter (HUD bottom-center). Nominal 420x64, Chip family: dark outer
 -- pill + light groove inset 6 + warm fill. Fill zone x 6..414 (408).
@@ -1335,19 +1803,24 @@ Theme.AppHud.CheckpointHeight = 52 / 1080
 -- the plate". Studs, world space.
 Theme.AppHud.CheckpointHideMarginStuds = 0.4
 
--- HUD menu button icons (one per panel). Placeholder for now — swap per game
--- (like Theme.Hud.Icons). All point at the same asset until real art lands.
-local menuIconPlaceholder = "rbxassetid://138519589128299"
+-- HUD menu button icons (one per panel). Every button MUST be visually
+-- distinct — a shared placeholder makes the meta menu unreadable in the first
+-- 30 seconds, which is the single worst onboarding bug a simulator can ship.
+-- Names resolve through the Icons registry (Icons.lua).
+local menuIconPlaceholder = Icons.UiBox
 Theme.AppHud.MenuIconPlaceholder = menuIconPlaceholder
 Theme.AppHud.MenuIcons = {
-	Pets = menuIconPlaceholder,
-	Rebirth = menuIconPlaceholder,
-	Quests = menuIconPlaceholder,
-	Shop = menuIconPlaceholder,
-	DailyRewards = menuIconPlaceholder,
-	TimeRewards = menuIconPlaceholder,
-	Codes = menuIconPlaceholder,
-	Settings = menuIconPlaceholder,
+	Squishies = Icons.SqRainbowDrop, -- the collection = the game's identity
+	Pets = Icons.SqRainbowDrop, -- legacy panel name, same destination
+	Rebirth = Icons.UiRebirth,
+	Quests = Icons.UiQuest,
+	Shop = Icons.UiShop,
+	DailyRewards = Icons.UiGift,
+	TimeRewards = Icons.BadgeClock,
+	Codes = Icons.UiCodes,
+	Settings = Icons.UiSettings,
+	Upgrades = Icons.UiStrength,
+	Index = Icons.BadgeStats,
 }
 
 -- ===== Upgrades HEX TREE (features/upgrades.md) =====
@@ -1597,6 +2070,19 @@ table.freeze(Theme.Badge)
 table.freeze(Theme.DayCard)
 table.freeze(Theme.RewardsLayout)
 table.freeze(Theme.ShopRow)
+table.freeze(Theme.ShopSectionHeader)
+table.freeze(Theme.ShopTile)
+table.freeze(Theme.ShopPack)
+table.freeze(Theme.ShopBanner)
+table.freeze(Theme.ShopBannerFree)
+table.freeze(Theme.ShopPrice)
+table.freeze(Theme.ShopPriceWide)
+table.freeze(Theme.ShopPriceStates.buy)
+table.freeze(Theme.ShopPriceStates.owned)
+table.freeze(Theme.ShopPriceStates.unavailable)
+table.freeze(Theme.ShopPriceStates)
+table.freeze(Theme.ShopRibbon.Variants)
+table.freeze(Theme.ShopRibbon)
 table.freeze(Theme.ShopLayout)
 table.freeze(Theme.TextInput)
 table.freeze(Theme.CodesLayout)
@@ -1604,4 +2090,37 @@ table.freeze(Theme.MenuButton)
 table.freeze(Theme.HudMenuButton)
 table.freeze(Theme.AppHud.MenuIcons)
 table.freeze(Theme.AppHud)
+
+Theme.Icons = table.freeze(Icons)
+
+-- Every menu icon must resolve. A nil here falls back to the generic
+-- placeholder and the button becomes unreadable — the precise failure this
+-- registry exists to prevent, and one that a retired icon name reintroduces
+-- silently (R8: never let it pass unreported).
+for panel, id in pairs(Theme.AppHud.MenuIcons) do
+	if id == nil or id == "" then
+		Log.Warn(
+			"UIKit",
+			`AppHud.MenuIcons.{panel} does not resolve — the button will render the generic placeholder. `
+				.. `Point it at a name that exists in Icons.lua.`
+		)
+	end
+end
+
+--API
+-- Resolve an icon NAME to an asset id. R8: an unknown name warns ONCE and
+-- renders a visible "something is wrong" glyph — never a silently blank
+-- ImageLabel, which is indistinguishable from a layout bug.
+function Theme.Icon(name: string?): string
+	if name == nil then
+		return Icons.UiShocked
+	end
+	local id = Icons[name]
+	if id then
+		return id
+	end
+	Log.Once("UIKit", `icon-{name}`, `unknown icon '{name}' — see src/shared/UIKit/Icons.lua`)
+	return Icons.UiShocked
+end
+
 return table.freeze(Theme)

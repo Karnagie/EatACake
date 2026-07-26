@@ -14,6 +14,7 @@ local ShopSubsClient = {}
 
 function ShopSubsClient.Start(data, modules)
 	local AppRoot = modules.AppRoot
+	local SoundPool = modules.SoundPool
 	local rPurchase = Net.Remote("RequestPurchase")
 	local rGamepass = Net.Remote("RequestGamepass")
 	local rGroup = Net.Remote("ClaimGroupReward")
@@ -26,11 +27,15 @@ function ShopSubsClient.Start(data, modules)
 			local productKey = string.match(rowId, "^product:(.+)$")
 			if productKey then
 				rPurchase:FireServer(productKey)
+				-- The Robux prompt is about to take over the screen: cue the
+				-- handoff, not the sale (ProcessReceipt owns the outcome).
+				SoundPool.Play("purchaseStart")
 				return
 			end
 			local passKey = string.match(rowId, "^pass:(.+)$")
 			if passKey then
 				rGamepass:FireServer(passKey)
+				SoundPool.Play("purchaseStart")
 				return
 			end
 			if rowId == "group" then
@@ -64,7 +69,10 @@ function ShopSubsClient.Start(data, modules)
 			},
 		})
 		-- CELEBRATION HOOK: payload.status == "granted" with payload.granted
-		-- descriptor — toast/particles when the FX layer lands.
+		-- descriptor — toast/particles when the FX layer lands. Sound is wired.
+		if payload.status == "granted" then
+			SoundPool.Play("purchaseOk")
+		end
 	end)
 end
 

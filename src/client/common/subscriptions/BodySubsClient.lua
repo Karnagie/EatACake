@@ -144,7 +144,7 @@ function BodySubsClient.Start(data, modules)
 		local event = payload.event
 		if event == "started" then
 			AppRoot.Set({ gym = { active = true, remain01 = 1 } })
-			SoundPool.Play("uiClick")
+			SoundPool.Play("gymStart")
 		elseif event == "progress" then
 			AppRoot.Set({ gym = { active = true, remain01 = tonumber(payload.remain01) or 0 } })
 		elseif event == "result" or event == "stopped" or event == "auto" or event == "instant" then
@@ -152,7 +152,7 @@ function BodySubsClient.Start(data, modules)
 			local banked = tonumber(payload.banked) or 0
 			if banked > 0 and event ~= "stopped" then
 				SoundPool.Play("gymWhoosh")
-				SoundPool.Play("coinBurst")
+				SoundPool.Play("gymPayout") -- the calories actually banking
 				local pos = headPosition()
 				if pos then
 					ParticlePool.Burst(pos, Color3.fromRGB(255, 220, 90), JuiceConfig.particles.coinsPerGymBurn)
@@ -171,7 +171,9 @@ function BodySubsClient.Start(data, modules)
 				return
 			end
 			rGymTap:FireServer()
-			SoundPool.Play("uiClick") -- tactile per-tap feedback while burning
+			-- No sound here: the tap button is a kit pressable, so the shared
+			-- press primitive already clicks it (Interaction SOUND contract) —
+			-- a second cue per tap would just double up.
 		end,
 		onReturnCheckpoint = returnToCheckpoint,
 	})

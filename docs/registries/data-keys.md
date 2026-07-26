@@ -46,8 +46,19 @@ Products: `starterpack`, `lucky-egg`, `mega-egg`, `instant-burn`,
 `SWEETTOOTH` (`CodesData.lua`). Boost ids: `golden-slice`, `boost-15m`
 (`TreasureConfig.boosts`). Egg types: `cycle`, `lucky`, `mega`, `epic7`
 (`PetConfig.eggs`). Row-id prefixes over the wire: `product:` / `pass:` /
-`group`. Quest ids: `eat-cakes`, `burn-calories`, `collect-finds`
-(`QuestsData.lua`).
+`group`. Shop section ids (client grouping): `featured`, `passes`, `eggs`,
+`gems`, `free`; cell kinds: `banner`, `tile`, `pack`; price-button states:
+`buy`, `owned`, `unavailable`. Quest ids: `eat-cakes`, `burn-calories`,
+`collect-finds` (`QuestsData.lua`).
+
+## Icon names (`src/shared/UIKit/Icons.lua` = source of truth)
+
+Flat `name -> rbxassetid`, resolved via `Theme.Icon(name)` (warns once + visible
+fallback on a miss). Prefixes: `Ui*` UI glyphs · `Badge*` heavier line glyphs ·
+`Pass*` gamepass badges · `RarityDisc*` / `RarityStar*` per tier · `Ribbon*`
+(square rosette art — NOT usable as a 4:1 sash) · `GemPack{S,M,L,XL}`,
+`CoinPack{S,M,L,XL}`, `Egg1..8` · `Sq*` the squishy roster. Add new rows there,
+not here.
 
 ## Shared config modules (ADR-0004)
 
@@ -69,6 +80,11 @@ full list lives there, not here; add new keys there and note the feature).
 Reserved (celebration hook pending): `toast-claimed`, `toast-claimed-gold`.
 Lobby/game addition: `match-*` group + `announce-match-lost`
 (`features/lobby-matchmaking.md`, `features/game-round.md`).
+Squishy re-theme: `pet-<id>` display names pair 1:1 with `PetConfig` ids (30
+entries — the KEY never changes, only the string); shop additions `btn-soon`,
+`ribbon-best-value`, `ribbon-one-time`, `shop-section-gems`,
+`shop-section-eggs` (`shop-section-gold` is legacy, kept for the retired
+ShopRow list).
 
 ## Cross-place protocol ids
 

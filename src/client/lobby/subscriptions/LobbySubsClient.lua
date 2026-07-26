@@ -53,6 +53,7 @@ end
 function LobbySubsClient.Start(data, modules, subscriptions)
 	local lobbyData = data.LobbyUiData
 	local AppRoot = modules.AppRoot
+	local SoundPool = modules.SoundPool
 	if lobbyData == nil or AppRoot == nil then
 		Log.Warn(SCOPE, "LobbyUiData/AppRoot missing -- lobby UI wiring skipped")
 		return
@@ -127,6 +128,9 @@ function LobbySubsClient.Start(data, modules, subscriptions)
 				error = false,
 			})
 			AppRoot.Set({ matchmaking = state })
+			-- No open cue here: AppRoot's `openPanel` effect owns the panel whoosh
+			-- (audio.md — ONE source), and a second play of the same sample in the
+			-- same frame just doubles its amplitude.
 			AppRoot.Open("Matchmaking")
 		elseif kind == "close" then
 			closeMatchPanel()
@@ -142,6 +146,10 @@ function LobbySubsClient.Start(data, modules, subscriptions)
 			if state == nil then
 				Log.Warn(SCOPE, `LobbyQueueUpdate {kind} arrived without an open selector -- update dropped`)
 				return
+			end
+			if SoundPool then
+				-- "busy" = the queue accepted us and the countdown is running.
+				SoundPool.Play(if kind == "error" then "uiError" else "queueTick")
 			end
 			AppRoot.Set({ matchmaking = state })
 		else
