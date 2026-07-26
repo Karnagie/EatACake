@@ -95,13 +95,13 @@ UpgradeConfig.upgrades = {
 		-- full). Grows the scoop (and forward reach) with upgrades. ⚠ STARTING value
 		-- — verify clear-time by feel in Studio (this + biteDepth, the clean-bite
 		-- "strength", set the pace together).
-		base = 1.7,
+		base = 2.7,
 		tiers = {
-			{ value = 1.85, cost = 910 },
-			{ value = 2.0, cost = 2750 },
-			{ value = 2.15, cost = 7350 },
-			{ value = 2.25, cost = 18000 },
-			{ value = 2.4, cost = 42000 },
+			{ value = 2.85, cost = 910 },
+			{ value = 3.0, cost = 2750 },
+			{ value = 3.15, cost = 7350 },
+			{ value = 3.25, cost = 18000 },
+			{ value = 3.4, cost = 42000 },
 		},
 	},
 	biteDepth = {

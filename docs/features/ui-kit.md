@@ -11,9 +11,11 @@ doc covers integration only; do not duplicate the skill here.
 |---|---|
 | Kit (Theme + component catalog + demos) | `src/shared/UIKit/` → `ReplicatedStorage.Shared.UIKit` (exact list: `UIKit.init` Components table) |
 | Interaction primitive (press/tween juice) | `src/shared/UIKit/Interaction.lua` — `usePressable`, `pressLayer`, `merge`, `useFillGlide`, `ZeroFill`; timings in `Theme.Feel`. ADR-0006 |
-| React root owner (client) | `src/client/modules/UiRoot.lua` — `Init()` by bootstrap, `Render(element)`, `Unmount()` |
+| React root owner (client) | `src/client/common/modules/UiRoot.lua` — `Init()` by bootstrap, `Render(element)`, `Unmount()` |
 | React packages | `ReactLua-Packages.rbxmx` — vendored model (React + ReactRoblox + node_modules), rojo-mapped to `ReplicatedStorage.Packages` |
 | Demo selector | `UIKit.Demos.Selector` (`SHOW` constant: Hud / PetsInspect / Pets / Settings) |
+| Match selector | `Components.MatchChoice` + `Components.MatchmakingPanel`; integration in `features/lobby-matchmaking.md` |
+| Effect template | `Templates.UpgradeTreeBlur`; cloned by the lobby upgrade modal (R5) |
 
 ## Setup
 

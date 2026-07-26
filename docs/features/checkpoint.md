@@ -22,11 +22,10 @@ gym is seconds away at your eating height).
   If the template is missing, `GenerateAssets` self-heals the default look (won't
   persist — save the place); a missing `CheckpointPlate`/`GymMachine` warns (R8)
   and the checkpoint degrades.
-- **Upgrade station** (the "computer"): a terminal on the plate's cake-side +Z
-  corner (clear of the centre landing + the walk-back path). Its `UpgradeStation`
-  ProximityPrompt opens the upgrades hex-tree — handled CLIENT-side
-  (`UpgradesSubsClient`, `features/upgrades.md`); no server round-trip. Rides the
-  plate height in `SetCheckpointHeight` like the gym machine.
+- **Legacy upgrade station** (the "computer"): still authored on the game
+  checkpoint and rides its height, but its prompt is intentionally inactive in
+  the published game after the place split. The lobby-owned replacement has not
+  yet been authored; see `features/upgrades.md` / ADR-0009 Remaining.
 - Placed on the loaf's **+X** side: plate inner edge = `origin.x +
   footprint.hx*grid.cell (=42) + edgeGap`; z-span stays inside the straight
   edge (clear of the rounded corners). Legs drop to the floor (y=0).
@@ -50,10 +49,10 @@ gym is seconds away at your eating height).
 - `MapService.GetGymDismountCFrame()` — step-off spot beside the treadmill after a
   completed run (`treadmillDismountBack` toward the plate centre, facing the cake).
 
-## Driven by (CakeSubs)
-- **New cake**: `SetCheckpointHeight(origin.y + composition[#].top)` (full
+## Driven by cake subscriptions
+- **New cake (`CakeCycleSubs`)**: `SetCheckpointHeight(origin.y + composition[#].top)` (full
   height — frosting is the last/top band).
-- **1 Hz scan** (eating phase only): `ScanStats()` returns `topBandIndex`;
+- **1 Hz scan (`CakeSimulationSubs`, eating phase only)**: `ScanStats()` returns `topBandIndex`;
   `SetCheckpointHeight(origin.y + composition[topBandIndex].top)`. `topBandIndex`
   = highest band still present, so the plate = the top of the current intact
   layer and steps down when a whole layer is consumed (auto-sweep collapses the
@@ -62,7 +61,8 @@ gym is seconds away at your eating height).
 
 ## Remotes
 - `ReturnToCheckpoint` (client→server, no args): teleport request. Server
-  validates `IsLoaded` + character, **0.5 s debounce** (anti rag-doll), then
+  validates a started/participating round, `IsLoaded` + character, **0.5 s
+  debounce** (anti rag-doll), then
   `root.CFrame = MapService.GetCheckpointCFrame()`. The destination is server
   truth — the client supplies nothing to spoof. Owner: `CakeSubs`.
 - Gym start still flows through the `GymPrompt` ProximityPrompt on the machine
@@ -111,7 +111,8 @@ stays in `BodyConfig.gym` (duration/taps/bonus).
 ## Files
 Server: `data/MapConfigData` (`checkpoint`), `services/MapService`
 (`SetCheckpointHeight`/`GetCheckpointCFrame`/`NearGym`), `subscriptions/CakeSubs`
-(height drive + `ReturnToCheckpoint`), `subscriptions/BodySubs` (prompt name).
+(`ReturnToCheckpoint`), `CakeCycleSubs`/`CakeSimulationSubs` (height drive),
+`subscriptions/BodySubs` (prompt name).
 Shared: `remotes/ReturnToCheckpoint`, `UIKit/Theme` (`CheckpointButton`,
 `AppHud.Checkpoint*`). Client: `subscriptions/BodySubsClient` (F key + callback),
 `modules/AppRoot` (button), `data/LocaleData` (`hud-burn-fat`).

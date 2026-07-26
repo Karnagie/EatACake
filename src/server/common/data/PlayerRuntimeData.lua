@@ -11,6 +11,8 @@
 	  lastMorphFill— { [userId] = number } last replicated StomachFill attr
 	                 (BodySubs skips redundant attribute writes)
 
+	  returnCooldown -- { [userId] = os.clock timestamp } checkpoint debounce
+
 	Entries are cleared on PlayerRemoving (PlayerLifecycleSubs).
 ]]
 
@@ -33,6 +35,7 @@ PlayerRuntimeData.gymSessions = {} :: {
 }
 PlayerRuntimeData.lastAutoBurn = {} :: { [number]: number }
 PlayerRuntimeData.lastMorphFill = {} :: { [number]: number }
+PlayerRuntimeData.returnCooldown = {} :: { [number]: number }
 
 --API
 function PlayerRuntimeData.Clear(userId: number)
@@ -40,6 +43,7 @@ function PlayerRuntimeData.Clear(userId: number)
 	PlayerRuntimeData.gymSessions[userId] = nil
 	PlayerRuntimeData.lastAutoBurn[userId] = nil
 	PlayerRuntimeData.lastMorphFill[userId] = nil
+	PlayerRuntimeData.returnCooldown[userId] = nil
 end
 
 return PlayerRuntimeData

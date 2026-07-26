@@ -7,7 +7,7 @@ locking, ~300s auto-save (first ~150s after load skipped), retries and final sav
 
 ## The schema
 Each top-level slice of the profile is one **section file** in
-`src/server/data/ProfileSchema/` declaring:
+`src/server/common/data/ProfileSchema/` declaring:
 
 - `key` — field name in the profile table (unique; `__schema` reserved)
 - `version` + `migrations[oldVersion]` — sequential shape upgrades
@@ -31,6 +31,12 @@ whitelists to keep in sync.
    data a newer server already migrated, or the migration re-runs and corrupts
    the section (`PersistenceService.lua`).
 
+The full pipeline runs on a deep copy and commits back only after every section
+succeeds. A missing/throwing migration or throwing sanitizer aborts the load;
+the unchanged profile session is ended and no partial shape/version stamp can
+be saved. Migration steps may mutate their copy and return nil, or return a
+replacement table.
+
 Sections removed from the schema are preserved in stored data untouched.
 
 ## Runtime access
@@ -38,29 +44,48 @@ Sections removed from the schema are preserved in stored data untouched.
   table services read and mutate directly; changes auto-save while active.
 - `PlayerProfileData.sessions[userId]` — ProfileStore handle
   (`FirstSessionTime`, `SessionLoadCount` for analytics).
-- `PersistenceService.LoadProfile(player) -> (profile?, isNew)` — yields;
-  kicks the player on lock conflict/failure. `isNew` is true only for a
-  genuinely fresh profile (never on failed reads).
+- `PersistenceService.LoadProfile(player, options?) -> (profile?, isNew)` —
+  yields; normal lifecycle loads kick on lock conflict/failure. Recovery may
+  supply `{deadline, cancel, kickOnFailure=false}`; a late acquisition is ended
+  before it can enter `PlayerProfileData`. `isNew` is true only for a genuinely
+  fresh profile (never on failed reads).
 - `PersistenceService.Save(userId)` — immediate save for critical moments:
   Robux purchases AND in-game earning **milestones** (upgrade buy, cake-clear
   reward, treasure find, gym-drain complete / instant-burn). Short game rounds
   never reach the 300s autosave (first 150s skipped), so without milestone saves
   a crash would lose the round. Routine saving is otherwise automatic.
 - `PersistenceService.Unload(userId, intentional?)` — final save + session end
-  (on leave). `intentional = true` marks a deliberate pre-teleport release: it
-  sets `PlayerProfileData.releasing[userId]`, which `OnSessionEnd` consumes to
-  SUPPRESS the `session-taken` kick (the player is being moved on purpose, not
-  displaced). Routine leave omits it.
+  (on leave). `intentional = true` marks a deliberate pre-teleport release,
+  writes a unique nonce into `RobloxMetaData`, and suppresses the expected
+  `session-taken` kick. `VerifyReleased(userId)` then read-backs the profile and
+  succeeds only when that exact nonce and a nil persisted session appear
+  together. Routine leave omits it.
 - `PersistenceService.IsLoaded(userId)`.
+- `PersistenceService.IsReleased(userId)` / yielding `VerifyReleased(userId)` /
+  `ClearReleaseState(userId)` — intentional-handoff proof and cleanup; callers
+  must not treat ordinary unload as a verified release.
 
 ## Cross-place handoff (lobby ↔ game)
 DataStores are universe-scoped, so both places share ONE `PlayerProfiles`
-session lock. The profile FOLLOWS the player: the source place folds playtime,
-`Save`s, `Unload(userId, true)`s and WAITS for the lock to release, THEN
-`TeleportAsync`; the destination runs the unchanged `LoadProfile` (lock already
-free → fresh data). Never `Steal=true` (P5). Owner: `TeleportSubs` (common) +
-`PlaceConfig` (PlaceIds). See ADR-0009. Verify ONLY on PUBLISHED places — Studio
-mock stores are per-VM and share no lock.
+session lock. The profile FOLLOWS the player: the source folds playtime,
+intentionally unloads (final save), verifies the exact nonce + cleared lock,
+THEN calls `TeleportAsync`; the destination runs unchanged `LoadProfile`. Never
+`Steal=true` (P5). The source `Teleporting` attribute acquires a common-client
+movement lock until departure/recovery. Synchronous failures schedule concurrent
+per-player re-acquisition; async `TeleportInitFailed` retries the exact returned
+`TeleportOptions` (preserving a reserved party destination) before recovery.
+Recovery is token-gated and bounded to 30 seconds; its watchdog safely kicks a
+still-present player if ProfileStore cannot re-acquire, while any late acquired
+session is immediately released and never published. On success every available
+subscription `PushInitialState` hook (including the authoritative cake snapshot)
+is replayed before the `Teleporting` input lock clears. Owners: `TeleportSubs`,
+`TeleportRetrySubs`, `Teleport/Release`, `Teleport/Recovery`,
+`Teleport/Resync`, `TeleportData`, `TeleportControlSubsClient`,
+`PlayerControlService`, `PlaceConfig`. See
+ADR-0009/0010. Verify the complete hop ONLY on PUBLISHED places — Studio cannot
+prove the cross-server lock.
+`RequestTeleport` is compatibility return only (game → lobby); lobby → game is
+owned by the validated queue's `TeleportSubs.SendGroup` call.
 
 ## Lifecycle
 `PlayerLifecycleSubs` wires PlayerAdded (load) and PlayerRemoving (unload).

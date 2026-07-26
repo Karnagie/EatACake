@@ -59,6 +59,16 @@ CakeStateData.netDirty = {} :: { [number]: boolean }
 CakeStateData.netDirtyList = {} :: { number }
 CakeStateData.repairCursor = 0
 
+-- One-Heartbeat scheduling clocks (CakeSimulationSubs). Runtime only.
+CakeStateData.simulationAccumulators = {
+	settle = 0,
+	net = 0,
+	collision = 0,
+	treasure = 0,
+	scan = 0,
+	cycle = 0,
+}
+
 -- Collision: net.collisionGrid² invisible safety-net parts (16x16) owned by CakeCollisionService.
 CakeStateData.collisionParts = {} :: { BasePart }
 
@@ -72,6 +82,9 @@ function CakeStateData.Init()
 	local CakeConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("config"):WaitForChild("CakeConfig"))
 	local size = CakeConfig.grid.size
 	CakeStateData.field = buffer.create(size * size * 2)
+	for key in pairs(CakeStateData.simulationAccumulators) do
+		CakeStateData.simulationAccumulators[key] = 0
+	end
 end
 
 return CakeStateData

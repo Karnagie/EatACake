@@ -585,6 +585,73 @@ Theme.UnequipRed = {
 	TextGradient = Theme.Exit.XGradient,
 }
 
+-- Match selector choice. Nominal 288x68, derived from the Button family at a
+-- shorter height class. Selection swaps the Outer/Rim to the existing gold
+-- selection accent; the blue Face stays put so the state reads as selected,
+-- not as a different action type.
+Theme.MatchChoice = {
+	AspectRatio = 288 / 68,
+	OuterCorner = 0.22,
+	RimPosition = Vector2.new(5 / 288, 5 / 68),
+	RimSize = Vector2.new(278 / 288, 55 / 68),
+	RimCorner = 0.20,
+	FacePosition = Vector2.new(8 / 288, 7 / 68),
+	FaceSize = Vector2.new(272 / 288, 51 / 68),
+	FaceCorner = 0.19,
+	TextPosition = Vector2.new(16 / 288, 18 / 68),
+	TextSize = Vector2.new(256 / 288, 32 / 68),
+	LayerColor = Color3.new(1, 1, 1),
+	OutlineColor = Theme.Button.OutlineColor,
+	OuterGradient = Theme.Button.OuterGradient,
+	RimGradient = Theme.Button.RimGradient,
+	FaceGradient = Theme.Button.FaceGradient,
+	TextGradient = Theme.Button.TextGradient,
+	SelectedOuterGradient = Theme.PetCard.SelectOuterGradient,
+	SelectedRimGradient = Theme.PetCard.SelectRingGradient,
+	DisabledTransparency = 0.32,
+}
+
+local matchmakingStartButton = table.clone(Theme.EquipGreen)
+matchmakingStartButton.AspectRatio = 360 / 68
+Theme.MatchmakingStartButton = matchmakingStartButton
+
+-- Matchmaking selector: wide configurator archetype, nominal 1000x600.
+-- Content is 904x420 at x48..952, y132..552.
+-- Vertical: 40+8+68+24+40+8+68+20+44+20+68+12 = 420 ✓.
+-- Difficulty: 3*288 + 2*20 = 904 ✓.
+-- Players:    4*211 + 3*20 = 904 ✓.
+Theme.MatchmakingLayout = {
+	PanelAspect = 1000 / 600,
+	PanelMaxViewportFraction = 0.9,
+	HeaderHeight = 120 / 600,
+	ContentZIndex = 5,
+	ContentPosition = Vector2.new(48 / 1000, 132 / 600),
+	ContentSize = Vector2.new(904 / 1000, 420 / 600),
+	DifficultyTitlePosition = Vector2.new(0, 0),
+	DifficultyTitleSize = Vector2.new(904 / 904, 40 / 420),
+	DifficultyRowPosition = Vector2.new(0, 48 / 420),
+	DifficultyRowSize = Vector2.new(904 / 904, 68 / 420),
+	DifficultyChoiceWidth = 288 / 904,
+	DifficultyChoiceGap = 20 / 904,
+	DifficultyChoiceAspectRatio = 288 / 68,
+	PlayersTitlePosition = Vector2.new(0, 140 / 420),
+	PlayersTitleSize = Vector2.new(904 / 904, 40 / 420),
+	PlayersRowPosition = Vector2.new(0, 188 / 420),
+	PlayersRowSize = Vector2.new(904 / 904, 68 / 420),
+	PlayerChoiceWidth = 211 / 904,
+	PlayerChoiceGap = 20 / 904,
+	PlayerChoiceAspectRatio = 211 / 68,
+	StatusPosition = Vector2.new(0, 276 / 420),
+	StatusSize = Vector2.new(904 / 904, 44 / 420),
+	StartPosition = Vector2.new(272 / 904, 340 / 420),
+	StartSize = Vector2.new(360 / 904, 68 / 420),
+	HeadingGradient = Theme.Header.TitleGradient,
+	StatusGradient = Theme.Button.TextGradient,
+	ErrorGradient = Theme.Exit.XGradient,
+	TextOutlineColor = Theme.Colors.TextOutline,
+	StartDisabledTransparency = 0.38,
+}
+
 -- Pets panel variation with inspector. Nominal 1000x600; grid pane 610 wide, inspector 278.
 Theme.PetsInspectLayout = {
 	PanelAspect = 1000 / 600,
@@ -816,8 +883,10 @@ Theme.ShopLayout = {
 	-- Section header cell (gap baked into the aspect, same recipe as rows —
 	-- NO scale Padding inside an AutomaticCanvasSize list).
 	SectionCellAspect = 418 / 50,
+	SectionCellHeight = 50 / 563,
 	SectionContentHeight = 40 / 50,
 	SectionGradient = Theme.Header.TitleGradient,
+	RowCellHeight = 98 / 563,
 	ScrollWindowFraction = 0.96,
 	ScrollBarWidth = 0.05,
 }
@@ -1475,6 +1544,9 @@ table.freeze(Theme.RebirthLayout.StatPositions)
 table.freeze(Theme.RebirthLayout)
 table.freeze(Theme.QuestRow)
 table.freeze(Theme.QuestsLayout)
+table.freeze(Theme.MatchChoice)
+table.freeze(Theme.MatchmakingStartButton)
+table.freeze(Theme.MatchmakingLayout)
 table.freeze(Theme.HexTree.States.locked)
 table.freeze(Theme.HexTree.States.available)
 table.freeze(Theme.HexTree.States.owned)

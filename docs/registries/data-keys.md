@@ -36,7 +36,7 @@ Reserved: `__schema` (managed by PersistenceService).
 ## Setting ids (profile `core.settings` = the whitelist)
 
 `music-enabled`, `sfx-enabled` — must match in `CoreSection.lua` AND
-`src/client/data/SettingsData.lua`.
+`src/client/common/data/SettingsData.lua`.
 
 ## Shop keys / codes / boosts / eggs
 
@@ -52,7 +52,8 @@ Products: `starterpack`, `lucky-egg`, `mega-egg`, `instant-burn`,
 ## Shared config modules (ADR-0004)
 
 `CakeConfig`, `UpgradeConfig`, `UpgradeTreeConfig` (honeycomb layout),
-`BodyConfig`, `PetConfig`, `TreasureConfig`, `JuiceConfig` — `src/shared/config/`.
+`BodyConfig`, `PetConfig`, `TreasureConfig`, `JuiceConfig`, `PlaceConfig`,
+`MatchConfig` — `src/shared/config/`.
 Shared util: `HexUtil` (axial hex math, sibling to `GridUtil`).
 
 ## ProximityPrompt names (unique — clients filter PromptTriggered by name)
@@ -63,9 +64,20 @@ hex-tree, client `UpgradesSubsClient`) — both defined in
 
 ## Locale keys
 
-Source of truth: `src/client/data/LocaleData.lua` (the strings table — the
+Source of truth: `src/client/common/data/LocaleData.lua` (the strings table — the
 full list lives there, not here; add new keys there and note the feature).
 Reserved (celebration hook pending): `toast-claimed`, `toast-claimed-gold`.
+Lobby/game addition: `match-*` group + `announce-match-lost`
+(`features/lobby-matchmaking.md`, `features/game-round.md`).
+
+## Cross-place protocol ids
+
+Persistence metadata: `teleport-release-nonce` (`PersistenceService`,
+`features/persistence.md`). Difficulties: `easy`, `medium`, `hard`; queue actions:
+`configure`, `leave`; queue updates: `open`, `close`, `error`, `busy`; teleport
+kind: `match-result`; results: `win`, `loss` (ADR-0010 / matchmaking docs).
+Client movement-lock reasons: `teleport-handoff`, `upgrade-overlay`
+(`PlayerControlData`, `features/persistence.md`).
 
 ## Config modules
 
@@ -83,3 +95,9 @@ Reserved (celebration hook pending): `toast-claimed`, `toast-claimed-gold`.
 | `ShopData` | `features/shop.md` |
 | `CodesData` | `features/promo-codes.md` |
 | `SettingsData` (client) | `features/settings.md` |
+| `LobbyQueueData` (lobby runtime) | `features/lobby-matchmaking.md` |
+| `RoundStateData` (game runtime) | `features/game-round.md` |
+| `TeleportData` (common runtime) | `features/persistence.md` |
+| `PlayerControlData` (client movement-lock runtime) | `features/persistence.md` |
+| `LobbyUiData` / `GameUiData` (client place markers) | `features/lobby-matchmaking.md` |
+| `MatchConfig` (shared queue/round contract) | `features/lobby-matchmaking.md` |

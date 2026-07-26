@@ -12,7 +12,9 @@ honeycomb** UI (GDD §10), grouped in three categories:
 `upgrades.levels[id]` = tiers OWNED (0 = none, `#tiers` = maxed). Tier values +
 costs ONLY in `Shared/config/UpgradeConfig`; ALL derived numbers come from
 `StatsService` (server) / `LocalStatsService` (client mirror). The tree is a
-full-screen overlay opened from the **checkpoint computer**, NOT a HUD button.
+full-screen lobby overlay reserved for an authored `UpgradeStation`, NOT a HUD
+button; that lobby station is not placed yet, so the published opener remains
+intentionally unavailable (ADR-0009 Remaining).
 
 ## Progression (easy-mode retune 2026-07-19)
 Each stat is ~5 tiers (`instantBurn` 4). `StatsService.upgradeValue` returns
@@ -63,14 +65,23 @@ UNCHANGED** by the tier rework (still `BuyUpgrade(statId)`).
 ## Open/close + modal (UpgradesSubsClient — R4)
 The station `ProximityPrompt` ("UpgradeStation") fires client-side →
 `ProximityPromptService.PromptTriggered` → `AppRoot.Open("Upgrades")`. Opening a
-menu is LOCAL UI — no server round-trip. On open it becomes MODAL: a `BlurEffect`
-dims the world, the camera is frozen (`CameraType = Scriptable`) and character
-movement disabled (PlayerModule `Controls:Disable()`) so nothing shifts behind
-the tree, and ALL checkpoint prompts are disabled (station + gym both use E — an
+menu is LOCAL UI — no server round-trip. On open it becomes MODAL: the cloned
+`Shared.UIKit.Templates.UpgradeTreeBlur` dims the world, the camera is frozen
+(`CameraType = Scriptable`) and character
+movement is locked through `PlayerControlService`'s `upgrade-overlay` reason so
+nothing shifts behind
+the tree, and ALL prompts under the active `LobbyMap`/`Map` are disabled (station + nearby prompts may share E — an
 enabled one would re-fire on the E-to-close press and hide behind the overlay).
 **E** (ContextAction, suppressed while a TextBox is focused) or the red **X**
-top-right closes (restores camera/controls/prompts). Reopening resets the
+top-right closes (restores camera/prompts and releases only its own movement
+lock; an active teleport lock remains). Reopening resets the
 nav-stack to root (AppRoot effect on `openPanel=="Upgrades"`).
+
+**Place-split status:** the subscription, overlay, and server handler are
+lobby-only, but the authored `LobbyEnvironment` does not yet contain an
+`UpgradeStation` prompt. Therefore the published lobby currently has no world
+opener; the old game checkpoint prompt is intentionally inactive. Re-author the
+station in the lobby before advertising this entry point (ADR-0009 Remaining).
 
 ## GUI contract
 `HexTreeOverlay` (zIndex 60, above panels): dim scrim + a clipped square
@@ -124,5 +135,7 @@ Server: `ProfileSchema/UpgradesSection` (v2), `services/UpgradeService`,
 (axial math), `UIKit/Theme` (`HexTree`), `UIKit/Components/HexNode` +
 `HexTreeOverlay`. Client: `LocalStatsService`, `LocalUpgradeTree` (view-model),
 `AppRoot` (overlay + nav-stack), `subscriptions/UpgradesSubsClient` (prompt
-open/close), `data/LocaleData` (`hex-*`, `cat-*`, `upgrade-*-desc`).
+open/close), lobby `LobbyUiData` (modal config/state),
+`PlayerControlData`/`PlayerControlService`, `UIKit/Templates/UpgradeTreeBlur`,
+`data/LocaleData` (`hex-*`, `cat-*`, `upgrade-*-desc`).
 The old flat `UIKit/UpgradesPanel`/`UpgradeRow` are now UNUSED (kept, not wired).

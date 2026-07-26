@@ -15,9 +15,12 @@
 	                     cleared by PersistenceService.
 	released[userId]  -> transient flag: the intentional release's ENDING save has
 	                     COMMITTED (on-disk lock cleared — the SAFE-to-teleport
-	                     signal, via ProfileStore OnAfterSave). NOT the same as
+	                     signal, proven by nonce + read-back). NOT the same as
 	                     "unloaded": OnSessionEnd (which clears profiles/sessions)
 	                     fires BEFORE the commit. Set/cleared by PersistenceService.
+	releaseCandidates[userId] -> inactive OnAfterSave observed; permits read-back.
+	releaseNonces[userId] -> exact handoff nonce that ending save must persist.
+	releaseVerifying[userId] -> nonce of the one in-flight read-back worker.
 
 	The profile table shape is defined by section files in data/ProfileSchema/.
 	Never add profile fields anywhere else — see docs/recipes/add-profile-section.md.
@@ -29,12 +32,18 @@ PlayerProfileData.profiles = {} -- [userId: number] = profile data table
 PlayerProfileData.sessions = {} -- [userId: number] = ProfileStore Profile object
 PlayerProfileData.releasing = {} -- [userId: number] = true during an intentional pre-teleport release (see header)
 PlayerProfileData.released = {} -- [userId: number] = true once that release's ending save COMMITTED (safe to teleport; see header)
+PlayerProfileData.releaseCandidates = {} -- [userId: number] = OnAfterSave fired after EndSession began
+PlayerProfileData.releaseNonces = {} -- [userId: number] = nonce that the ending save must persist
+PlayerProfileData.releaseVerifying = {} -- [userId: number] = nonce with one in-flight read-back
 
 function PlayerProfileData.Init()
 	table.clear(PlayerProfileData.profiles)
 	table.clear(PlayerProfileData.sessions)
 	table.clear(PlayerProfileData.releasing)
 	table.clear(PlayerProfileData.released)
+	table.clear(PlayerProfileData.releaseCandidates)
+	table.clear(PlayerProfileData.releaseNonces)
+	table.clear(PlayerProfileData.releaseVerifying)
 end
 
 --API

@@ -34,9 +34,12 @@
           "LocalBootstrap": {
             "$path": "src/client/LocalBootstrap.client.lua"
           },
-          "Common": {
-            "$path": "src/client/common"
-          }
+        "Common": {
+          "$path": "src/client/common"
+        },
+        "Lobby": {
+          "$path": "src/client/lobby"
+        }
         }
       }
     },

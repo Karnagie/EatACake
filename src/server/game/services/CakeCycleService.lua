@@ -14,10 +14,23 @@ local CakeCycleService = {}
 
 local state -- CakeStateData
 local cakeCfg -- CakeConfigData.cake
+local roundState -- RoundStateData
+
+local function difficultyConfig()
+	local matchConfig = roundState and roundState["match-config"]
+	local difficulty = roundState and roundState["difficulty"]
+	local config = matchConfig and matchConfig.difficulties[difficulty]
+	if config == nil then
+		Log.Once("CakeCycle", "missing-difficulty", `round difficulty '{tostring(difficulty)}' has no MatchConfig tuning -- neutral multipliers used`)
+		return {}
+	end
+	return config
+end
 
 function CakeCycleService.Init(data)
 	state = data.CakeStateData
 	cakeCfg = data.CakeConfigData.cake
+	roundState = data.RoundStateData
 end
 
 --API
@@ -49,8 +62,9 @@ function CakeCycleService.RollComposition(biome: string, playerCount: number)
 	-- 4 players ~18 min (not ~10). The footprint is fixed, so height is the only
 	-- population lever (CakeConfig.composition.perPlayerScale, features/cake-cycle.md).
 	local playerScale = 1 + (comp.perPlayerScale or 0) * math.max(0, math.max(1, playerCount) - 1)
+	local heightMultiplier = difficultyConfig().cakeHeightMultiplier or 1
 	local totalTarget = math.min(
-		math.floor(math.random(comp.totalHeight[1], comp.totalHeight[2]) * playerScale),
+		math.floor(math.random(comp.totalHeight[1], comp.totalHeight[2]) * playerScale * heightMultiplier),
 		grid.maxHeight
 	)
 	local frosting = math.random(comp.frostingThickness[1], comp.frostingThickness[2])
@@ -101,11 +115,15 @@ end
 --API
 -- eating -> boss. HP scales with the current population.
 function CakeCycleService.BeginBoss(playerCount: number)
+	local difficulty = difficultyConfig()
 	state.phase = "boss"
-	state.phaseTimer = cakeCfg.cycle.bossDuration
-	local hp = cakeCfg.cycle.bossTapsPerPlayer * math.max(1, playerCount)
+	state.phaseTimer = cakeCfg.cycle.bossDuration * (difficulty.bossDurationMultiplier or 1)
+	local hp = math.max(
+		1,
+		math.ceil(cakeCfg.cycle.bossTapsPerPlayer * math.max(1, playerCount) * (difficulty.bossHpMultiplier or 1))
+	)
 	state.boss = { hp = hp, maxHp = hp }
-	Log.Sum("CakeCycle", `boss phase — {cakeCfg.cycle.bossName}, hp={hp}, {cakeCfg.cycle.bossDuration}s limit`)
+	Log.Sum("CakeCycle", `boss phase — {cakeCfg.cycle.bossName}, hp={hp}, {state.phaseTimer}s limit`)
 end
 
 --API
@@ -144,7 +162,7 @@ end
 --API
 -- Advances timed phases. Returns an event string when a transition is due,
 -- which the SUBSCRIPTION acts on (R3/R4):
---   "boss-timeout"  boss timer expired (auto-defeat — never block the loop)
+--   "boss-timeout"  boss timer expired (the round orchestrator records a loss)
 --   "boss-defeated" hp reached zero
 --   "spawn-cake"    spawning countdown finished
 function CakeCycleService.Step(dt: number): string?

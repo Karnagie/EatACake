@@ -31,6 +31,10 @@ local SCOPE = "CakeFeelSubsClient"
 local CakeFeelSubsClient = {}
 
 function CakeFeelSubsClient.Start(data, modules)
+	if data.GameUiData == nil then
+		Log.Info(SCOPE, "game client partition absent -- cake feel skipped in lobby")
+		return
+	end
 	local LocalCakeField = modules.LocalCakeField
 	local CakeRenderer = modules.CakeRenderer
 	local SoundPool = modules.SoundPool

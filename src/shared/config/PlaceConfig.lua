@@ -1,17 +1,15 @@
 --[[
 	PlaceConfig — the two PlaceIds of the lobby/game universe (ADR-0009).
 
-	FILL THESE after publishing BOTH places to the SAME Roblox universe/experience
-	(DataStores are universe-scoped — that shared lock is the whole reason the
-	profile stays consistent across the teleport, see docs/features/persistence.md).
-	Until they are set, `current()` returns "unknown" and TeleportSubs warns on
-	boot + refuses to teleport (never silently strands a player).
+	Both IDs must remain places in the SAME Roblox universe/experience. DataStores
+	are universe-scoped — that shared lock is why the profile stays consistent
+	across the teleport (see docs/features/persistence.md). Invalid/unset ids make
+	`current()` return "unknown" so TeleportSubs warns and refuses the handoff.
 
 	`current()` compares game.PlaceId:
 	  - matches lobbyPlaceId -> "lobby"
 	  - matches gamePlaceId  -> "game"
-	  - neither (Studio / the combined default.project.json build) -> "unknown"
-	    (teleport disabled; both feature sets run together in one place).
+	  - neither (an unpublished/local place) -> "unknown" (teleport disabled).
 ]]
 
 local PlaceConfig = {}
@@ -19,7 +17,7 @@ local PlaceConfig = {}
 -- Universe 10515688913 ("EatACake_DontPublish"). The lobby is the START place
 -- (players land there). The game place is created in Studio at publish time.
 PlaceConfig.lobbyPlaceId = 80059832045175 -- existing START place (the lobby)
-PlaceConfig.gamePlaceId = 0 -- TODO(publish): set to the NEW game place's id
+PlaceConfig.gamePlaceId = 91726662453442
 
 export type Place = "lobby" | "game" | "unknown"
 
@@ -40,9 +38,9 @@ end
 function PlaceConfig.otherPlaceId(): number?
 	local here = PlaceConfig.current()
 	if here == "lobby" then
-		return PlaceConfig.gamePlaceId
+		return PlaceConfig.gamePlaceId ~= 0 and PlaceConfig.gamePlaceId or nil
 	elseif here == "game" then
-		return PlaceConfig.lobbyPlaceId
+		return PlaceConfig.lobbyPlaceId ~= 0 and PlaceConfig.lobbyPlaceId or nil
 	end
 	return nil
 end

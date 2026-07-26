@@ -20,9 +20,10 @@ also used by shop/codes). Runtime state: `CakeStateData.treasures`.
 gets a coin sound). Currency updates ride the grant handlers.
 
 ## Cadence
-`TreasureService.Tick` at 2 Hz inside CakeSubs (reveal check + proximity
+`TreasureService.Tick` at 2 Hz inside CakeSimulationSubs (reveal check + proximity
 collection — no Touched races).
 
 ## Files
-`services/TreasureService`, `subscriptions/CakeSubs` (grants + FX fanout),
+`services/TreasureService`, `subscriptions/CakeSimulationSubs`
+(participant-gated grants + FX fanout),
 shared `config/TreasureConfig`; client FX in `CakeSubsClient`.

@@ -6,7 +6,7 @@ and gamepasses (permanent perks). `ShopSubs` is the SINGLE owner of
 `MarketplaceService.ProcessReceipt`.
 
 ## Tuning
-`src/server/data/ShopData.lua` — the single tuning point: `products[key]`
+`src/server/common/data/ShopData.lua` — the single tuning point: `products[key]`
 (`devProductId` — **0 = not configured, purchase refused + boot warn**,
 `priceRobux` reference-only, `label`, `section` "featured"/"gems", `order`,
 `oneTime`, `grant`/`grants` descriptors), `gamepasses[key]` (`gamePassId`,
@@ -29,13 +29,15 @@ fill in). Icon-upload gotcha: Open Cloud multipart file part must be named
 - `PersistenceService.Save` right after a paid grant (P5).
 
 ## Gamepasses
-Ownership is Roblox-side: fetched on join (`UserOwnsGamePassAsync`, async
-re-push; aborts if the player leaves mid-fetch) and after
-`PromptGamePassPurchaseFinished`; cached runtime in `ShopData.passOwnership`.
+Ownership is Roblox-side: common `PassOwnershipSubs` fetches it on join in both
+places (`UserOwnsGamePassAsync`, async re-push; aborts if the player leaves
+mid-fetch); lobby `ShopSubs` updates the cache after
+`PromptGamePassPurchaseFinished`. It lives in `ShopData.passOwnership`.
 Game code reads perks via `StatsService` (`CaloriesMult`/`GemsMult`/`Capacity`/
 `HasAutoEat`/`HasAutoGym`/`PetSlots`), which reads the `ShopData.passOwnership`
 cache DIRECTLY (StatsService cannot call ShopService — R3); the client reads the
-`AutoEat`/`AutoGym` player attributes set by ShopSubs. `ShopService.OwnsPass` is
+`AutoEat`/`AutoGym` player attributes set by `PassOwnershipSubs`.
+`ShopService.OwnsPass` is
 the shop domain's own owned-flag/resync check, NOT the gameplay perk-read path.
 No grants on passes — they are permanent flags, not loot.
 
@@ -48,10 +50,16 @@ pushed on join, after ownership refresh and after every purchase.
 ## UI
 Kit `ShopPanel`: portrait sectioned list (Featured / Passes / Gold / Free —
 Free hosts the group-reward row). Rows via `ShopRow` (gap baked into cell
-aspect — no scale Padding in AutomaticCanvasSize lists). View-model:
+aspect — no scale Padding in AutomaticCanvasSize lists). Section/row cells use
+explicit nonzero height seeds; `(1, 0)` plus an aspect constraint collapses in
+an automatic canvas, so direct `ShopRow` callers also receive the theme-backed
+row height by default. View-model:
 `LocalShopService.BuildSections`.
+The Shop server/UI is lobby-owned; the authored chocolate world opener belongs
+to `features/lobby-matchmaking.md`.
 
 ## Files
-Server: `ShopData`, `ShopSection`, `ShopService`, `ShopSubs`. Client:
+Server: common `ShopData`, `ShopSection`, `PassOwnershipSubs`; lobby
+`ShopService`, `ShopSubs`. Client:
 `ShopSubsClient`, `LocalShopService`. Remotes: `RequestPurchase`,
 `RequestGamepass`, `ShopUpdate`.

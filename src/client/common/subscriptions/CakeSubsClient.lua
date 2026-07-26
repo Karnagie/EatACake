@@ -34,6 +34,10 @@ local SCOPE = "CakeSubsClient"
 local CakeSubsClient = {}
 
 function CakeSubsClient.Start(data, modules)
+	if data.GameUiData == nil then
+		Log.Info(SCOPE, "game client partition absent -- cake rendering/input skipped in lobby")
+		return
+	end
 	local LocalCakeField = modules.LocalCakeField
 	local CakeRenderer = modules.CakeRenderer
 	local CakeWaxShell = modules.CakeWaxShell
@@ -48,9 +52,25 @@ function CakeSubsClient.Start(data, modules)
 	local ChunkDebris = modules.ChunkDebris
 	local AppRoot = modules.AppRoot
 	local LocalEatState = modules.LocalEatState -- flat-while-eating gate (Task 4)
+	local PlayerControlService = modules.PlayerControlService
 
 	local player = Players.LocalPlayer
 	local rEatAt = Net.Remote("EatAt")
+	local controlGateReady = PlayerControlService ~= nil and type(PlayerControlService.IsLocked) == "function"
+	if not controlGateReady then
+		Log.Warn(SCOPE, "PlayerControlService.IsLocked missing -- cake input disabled to avoid unsafe handoff prediction")
+	end
+	local function inputLocked(): boolean
+		if not controlGateReady then
+			return true
+		end
+		local ok, lockedOrError = pcall(PlayerControlService.IsLocked)
+		if not ok then
+			Log.Once(SCOPE, "control-gate-failed", `PlayerControlService.IsLocked FAILED -- cake input disabled: {lockedOrError}`)
+			return true
+		end
+		return lockedOrError == true
+	end
 
 	CakeRenderer.Setup(LocalCakeField)
 	CakeWaxShell.Setup(LocalCakeField)
@@ -216,6 +236,9 @@ function CakeSubsClient.Start(data, modules)
 	end
 
 	local function doBite()
+		if inputLocked() then
+			return
+		end
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if not root or not LocalCakeField.HasCake() then
@@ -338,6 +361,11 @@ function CakeSubsClient.Start(data, modules)
 	-- stuck-on eating, no need to correlate a single finger here.
 	AppRoot.SetCallbacks({
 		onEatDown = function()
+			if inputLocked() then
+				eating = false
+				LocalEatState.Set(false)
+				return
+			end
 			eating = true
 			-- A tap can begin and end within one frame; fire ONE bite right now so
 			-- a tap always lands ≥1 bite, then let the Heartbeat auto-repeat the
@@ -355,7 +383,7 @@ function CakeSubsClient.Start(data, modules)
 		if gameProcessed then
 			return
 		end
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		if input.UserInputType == Enum.UserInputType.MouseButton1 and not inputLocked() then
 			eating = true
 		end
 	end)
@@ -366,12 +394,16 @@ function CakeSubsClient.Start(data, modules)
 	end)
 
 	RunService.Heartbeat:Connect(function()
+		local locked = inputLocked()
+		if locked then
+			eating = false
+		end
 		-- Auto-Eat pass (server sets the attribute): always chewing.
-		local activelyEating = eating or player:GetAttribute("AutoEat") == true
+		local activelyEating = not locked and (eating or player:GetAttribute("AutoEat") == true)
 		-- Flat-while-eating gate (Task 4) = ACTIVE hold/tap only, NOT Auto-Eat —
 		-- so an Auto-Eat pass owner keeps the (toned) per-layer bounce/jump feel
 		-- while just running around; they only go flat when they actively hold EAT.
-		LocalEatState.Set(eating)
+		LocalEatState.Set(not locked and eating)
 		if activelyEating then
 			local now = os.clock()
 			if now - lastBiteAt >= 1 / math.max(0.5, LocalStatsService.EatRate()) then

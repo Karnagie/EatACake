@@ -8,9 +8,9 @@
 	       CakeBar (top center), BellyBar (bottom center), ComboBadge,
 	       AnnounceBanner
 	  Panels (zIndex 50): Pets (inspect), Rebirth, Quests, Shop,
-	       DailyRewards, TimeRewards, Codes, Settings
-	  Overlays: GymOverlay (40), Upgrades hex-tree (60, opened from the
-	       checkpoint computer — no HUD button), PetRevealOverlay (90)
+	       DailyRewards, TimeRewards, Codes, Settings, Matchmaking
+	  Overlays: GymOverlay (40), Upgrades hex-tree (60, lobby UpgradeStation
+	       opener pending — no HUD button), PetRevealOverlay (90)
 
 	Data flows IN through AppRoot.Set(patch) (called by subscriptions when
 	remoteUpdates arrive); user actions flow OUT through callbacks registered
@@ -19,11 +19,12 @@
 
 	State fields: openPanel, calories, gems, settings, daily, time, shop,
 	group, codesStatus, cake, stomach, gym, upgrades, pets, petReveal,
-	petRevealCount, rebirth, quests, combo, announceKey.
+	petRevealCount, rebirth, quests, combo, announceKey, matchmaking.
 	Callbacks: onClaimDaily(day), onClaimTime(index), onToggleSetting(id, v),
 	onShopActivated(rowId), onRedeem(code), onBuyUpgrade(id),
 	onEquipPet(petId, equip), onDoRebirth(), onClaimQuest(id), onGymTap(),
-	onDismissReveal(), onEatDown(input), onEatUp(input), onReturnCheckpoint().
+	onDismissReveal(), onEatDown(input), onEatUp(input), onReturnCheckpoint(),
+	onConfigureMatch(difficulty, maxPlayers), onCancelMatch().
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -39,6 +40,7 @@ local React = require(ReplicatedStorage.Packages.React)
 local UIKit = require(ReplicatedStorage.Shared.UIKit)
 local UpgradeConfig = require(ReplicatedStorage.Shared.config.UpgradeConfig)
 local CakeConfig = require(ReplicatedStorage.Shared.config.CakeConfig)
+local MatchConfig = require(ReplicatedStorage.Shared.config.MatchConfig)
 local LocalRewardsService = require(script.Parent.LocalRewardsService)
 local LocalSettingsService = require(script.Parent.LocalSettingsService)
 local LocalShopService = require(script.Parent.LocalShopService)
@@ -51,6 +53,8 @@ local Components = UIKit.Components
 local AppRoot = {}
 
 local locale
+local showGame = true
+local showLobby = true
 
 -- The state bridge (module-level so subscriptions can feed it; the
 -- component mirrors it into React state on change).
@@ -75,6 +79,7 @@ local current = {
 	quests = nil,
 	combo = nil,
 	announceKey = false,
+	matchmaking = false,
 	-- Whether the player is far enough from the checkpoint platform to show the
 	-- TO CHECKPOINT button (BodySubsClient proximity check). Shown by default.
 	checkpointFar = true,
@@ -84,6 +89,10 @@ local applyState = nil -- setState captured while mounted
 
 function AppRoot.Init(data)
 	locale = data.LocaleData
+	-- Partition marker modules are mapped only into their corresponding live
+	-- place; the combined development project maps both markers.
+	showGame = data.GameUiData ~= nil
+	showLobby = data.LobbyUiData ~= nil
 end
 
 --API
@@ -148,6 +157,33 @@ local function calculateScale(panelAspect: number, maxFraction: number): Vector2
 		return Vector2.new(maxFraction * panelAspect / viewportAspect, maxFraction)
 	end
 	return Vector2.new(maxFraction, maxFraction * viewportAspect / panelAspect)
+end
+
+-- Server messages may be locale keys or already-authored display strings.
+-- Keys go through T; display copy goes through Tr so a future localization
+-- backend can translate it without changing the matchmaking contract.
+local function localizeMessage(value, key, params, fallbackKey: string?): string?
+	local hadValue = value ~= nil and value ~= false
+	if type(key) == "string" and key ~= "" then
+		return locale.T(key, params)
+	end
+	if type(value) == "table" then
+		local tableKey = value.key
+		if type(tableKey) == "string" and tableKey ~= "" then
+			return locale.T(tableKey, value.params)
+		end
+		value = value.message
+	end
+	if type(value) == "string" and value ~= "" then
+		if locale.strings[value] ~= nil then
+			return locale.T(value, params)
+		end
+		return locale.Tr(value)
+	end
+	if hadValue and fallbackKey then
+		return locale.T(fallbackKey)
+	end
+	return nil
 end
 
 local RARITY_RANK = { Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5, Secret = 6 }
@@ -225,6 +261,12 @@ local function App()
 	local rebirthScale, setRebirthScale = React.useState(function()
 		return calculateScale(Theme.RebirthLayout.PanelAspect, Theme.RebirthLayout.PanelMaxViewportFraction)
 	end)
+	local matchScale, setMatchScale = React.useState(function()
+		return calculateScale(
+			Theme.MatchmakingLayout.PanelAspect,
+			Theme.MatchmakingLayout.PanelMaxViewportFraction
+		)
+	end)
 	local codeInput, setCodeInput = React.useState("")
 	local selectedPetId, setSelectedPetId = React.useState(nil :: string?)
 	local sortByRarity, setSortByRarity = React.useState(true)
@@ -250,6 +292,10 @@ local function App()
 			setCodesScale(calculateScale(Theme.CodesLayout.PanelAspect, Theme.CodesLayout.PanelMaxViewportFraction))
 			setPetsScale(calculateScale(Theme.PetsInspectLayout.PanelAspect, Theme.PetsInspectLayout.PanelMaxViewportFraction))
 			setRebirthScale(calculateScale(Theme.RebirthLayout.PanelAspect, Theme.RebirthLayout.PanelMaxViewportFraction))
+			setMatchScale(calculateScale(
+				Theme.MatchmakingLayout.PanelAspect,
+				Theme.MatchmakingLayout.PanelMaxViewportFraction
+			))
 		end
 		local function bindCamera()
 			if viewportConnection then
@@ -366,6 +412,57 @@ local function App()
 	end, { state.shop or false, state.group or false })
 	local oddsText = React.useMemo(LocalPetsService.OddsText, {})
 
+	local matchmaking = if type(state.matchmaking) == "table" then state.matchmaking else nil
+	local matchmakingMaxPlayers = if matchmaking ~= nil and type(matchmaking.maxPlayers) == "number"
+		then math.clamp(math.floor(matchmaking.maxPlayers), 1, MatchConfig.queue.maxPlayers)
+		else MatchConfig.queue.maxPlayers
+	local difficultyOptions = React.useMemo(function()
+		local options = {}
+		for _, id in ipairs(MatchConfig.difficultyOrder) do
+			local difficulty = MatchConfig.difficulties[id]
+			if difficulty ~= nil then
+				table.insert(options, {
+					id = id,
+					label = locale.T(difficulty.labelKey),
+				})
+			end
+		end
+		return options
+	end, {})
+	local playerCountOptions = React.useMemo(function()
+		local options = {}
+		for _, count in ipairs(MatchConfig.playerCounts) do
+			if count <= matchmakingMaxPlayers then
+				table.insert(options, {
+					value = count,
+					label = if count == 1
+						then locale.T("match-player-one")
+						else locale.T("match-player-many", { n = count }),
+				})
+			end
+		end
+		return options
+	end, { matchmakingMaxPlayers })
+	local matchStatusText = if matchmaking ~= nil
+		then localizeMessage(
+			matchmaking.statusText,
+			matchmaking.statusKey,
+			matchmaking.statusParams,
+			nil
+		)
+		else nil
+	local matchErrorText = if matchmaking ~= nil
+		then localizeMessage(
+			matchmaking.error,
+			matchmaking.errorKey,
+			matchmaking.errorParams,
+			"match-error-start"
+		)
+		else nil
+	local matchCurrentPlayers = if matchmaking ~= nil and type(matchmaking.currentPlayers) == "number"
+		then math.max(math.floor(matchmaking.currentPlayers), 0)
+		else 1
+
 	local questsBadge = false
 	for _, row in ipairs(questRows) do
 		if row.state == "claim" then
@@ -382,7 +479,8 @@ local function App()
 	-- Touch hold-to-eat button: shown only while there's cake to eat (eating /
 	-- boss phases), never while the gym overlay or a panel is up (you're not
 	-- eating then, and it would sit under/beside them). Touch devices only.
-	local eatButtonVisible = IS_TOUCH
+	local eatButtonVisible = showGame
+		and IS_TOUCH
 		and (cakePhase == "eating" or cakePhase == "boss")
 		and not gymActive
 		and state.openPanel == nil
@@ -403,8 +501,8 @@ local function App()
 	local reveal = if type(state.petReveal) == "table" then LocalPetsService.BuildReveal(state.petReveal) else nil
 
 	-- ── menu ─────────────────────────────────────────────────────────────
-	-- NOTE: no "Upgrades" button — the hex-tree opens from the checkpoint
-	-- computer's ProximityPrompt (UpgradesSubsClient), not the HUD menu.
+	-- NOTE: no "Upgrades" button — the lobby's authored UpgradeStation opener is
+	-- pending (UpgradesSubsClient); the game checkpoint prompt is inactive.
 	local menu = {
 		{ name = "Pets", label = locale.T("menu-pets"), badge = false },
 		{ name = "Rebirth", label = locale.T("menu-rebirth"), badge = canRebirth },
@@ -461,6 +559,7 @@ local function App()
 		-- ── HUD ──────────────────────────────────────────────────────────
 		CaloriesPill = React.createElement("Frame", {
 			Name = "CaloriesPill",
+			Visible = showGame,
 			Position = UDim2.fromScale(hud.PillPosition.X, hud.PillPosition.Y),
 			Size = UDim2.fromScale(0.5, hud.PillHeight),
 			BackgroundTransparency = 1,
@@ -478,6 +577,7 @@ local function App()
 		}),
 		GemsPill = React.createElement("Frame", {
 			Name = "GemsPill",
+			Visible = showGame,
 			Position = UDim2.fromScale(hud.SecondPillPosition.X, hud.SecondPillPosition.Y),
 			Size = UDim2.fromScale(0.5, hud.PillHeight),
 			BackgroundTransparency = 1,
@@ -495,6 +595,9 @@ local function App()
 		}),
 		Menu = React.createElement("Frame", {
 			Name = "Menu",
+			-- Meta/progression handlers live in the lobby partition. The game place
+			-- keeps only its cake HUD; exposing this menu there creates dead remotes.
+			Visible = showLobby,
 			Position = UDim2.fromScale(hud.MenuPosition.X, hud.MenuPosition.Y),
 			Size = UDim2.fromScale(menuTotalWidth, menuTotalHeight),
 			BackgroundTransparency = 1,
@@ -503,7 +606,7 @@ local function App()
 		}, menuChildren),
 		CakeBar = React.createElement(Components.CakeBar, {
 			name = "CakeBar",
-			visible = cakeVisible,
+			visible = showGame and cakeVisible,
 			anchorPoint = Vector2.new(0.5, 0),
 			position = UDim2.fromScale(hud.CakeBarPosition.X, hud.CakeBarPosition.Y),
 			size = UDim2.fromScale(0.5, hud.CakeBarHeight),
@@ -513,23 +616,25 @@ local function App()
 			rare = state.cake ~= nil and state.cake.rareKind ~= nil,
 			zIndex = 1,
 		}),
-		BellyBar = React.createElement(Components.BellyBar, {
-			name = "BellyBar",
-			anchorPoint = Vector2.new(0.5, 1),
-			position = UDim2.fromScale(hud.BellyPosition.X, hud.BellyPosition.Y),
-			size = UDim2.fromScale(0.5, hud.BellyHeight),
-			fill01 = bellyFill,
-			text = bellyText,
-			glutton = glutton,
-			zIndex = 1,
-		}),
+		BellyBar = if showGame
+			then React.createElement(Components.BellyBar, {
+				name = "BellyBar",
+				anchorPoint = Vector2.new(0.5, 1),
+				position = UDim2.fromScale(hud.BellyPosition.X, hud.BellyPosition.Y),
+				size = UDim2.fromScale(0.5, hud.BellyHeight),
+				fill01 = bellyFill,
+				text = bellyText,
+				glutton = glutton,
+				zIndex = 1,
+			})
+			else nil,
 		-- Return to the checkpoint platform (gym) to burn fat — also the F key
 		-- (BodySubsClient). Sits just above the belly bar.
 		CheckpointBtn = React.createElement("Frame", {
 			Name = "CheckpointBtn",
 			-- Only shown when the player is away from the checkpoint platform
 			-- (proximity fed by BodySubsClient); hidden once you are on/at it.
-			Visible = state.checkpointFar ~= false,
+			Visible = showGame and state.checkpointFar ~= false,
 			AnchorPoint = Vector2.new(0.5, 1),
 			Position = UDim2.fromScale(hud.CheckpointPosition.X, hud.CheckpointPosition.Y),
 			Size = UDim2.fromScale(0.3, hud.CheckpointHeight),
@@ -579,7 +684,7 @@ local function App()
 			size = UDim2.fromScale(0.3, hud.ComboHeight),
 			combo = state.combo and state.combo.value or 0,
 			intensity01 = state.combo and state.combo.intensity or 0,
-			visible = state.combo ~= nil and (state.combo.value or 0) > 1,
+			visible = showGame and state.combo ~= nil and (state.combo.value or 0) > 1,
 			zIndex = 1,
 		}),
 		Announce = React.createElement(Components.AnnounceBanner, {
@@ -587,7 +692,9 @@ local function App()
 			anchorPoint = Vector2.new(0.5, 0),
 			position = UDim2.fromScale(hud.AnnouncePosition.X, hud.AnnouncePosition.Y),
 			size = UDim2.fromScale(0.6, hud.AnnounceHeight),
-			text = if type(state.announceKey) == "string" then locale.T(`announce-{state.announceKey}`) else nil,
+			text = if showGame and type(state.announceKey) == "string"
+				then locale.T(`announce-{state.announceKey}`)
+				else nil,
 			zIndex = 2,
 		}),
 
@@ -644,7 +751,7 @@ local function App()
 		}),
 		Upgrades = React.createElement(Components.HexTreeOverlay, {
 			name = "UpgradesOverlay",
-			visible = state.openPanel == "Upgrades",
+			visible = showLobby and state.openPanel == "Upgrades",
 			zIndex = 60,
 			treeKey = currentTree,
 			nodes = upgradeTree.nodes,
@@ -783,6 +890,42 @@ local function App()
 				AppRoot.Open(nil)
 			end,
 		}),
+		Matchmaking = React.createElement(Components.MatchmakingPanel, {
+			name = "MatchmakingPanel",
+			title = locale.T("match-title"),
+			visible = showLobby and state.openPanel == "Matchmaking" and matchmaking ~= nil,
+			size = UDim2.fromScale(matchScale.X, matchScale.Y),
+			zIndex = 50,
+			sessionKey = matchmaking and matchmaking.sessionKey or false,
+			busy = matchmaking ~= nil and matchmaking.busy == true,
+			statusText = matchStatusText,
+			error = matchErrorText,
+			errorText = locale.T("match-error-start"),
+			difficultyTitle = locale.T("match-difficulty-heading"),
+			playersTitle = locale.T("match-players-heading"),
+			difficultyOptions = difficultyOptions,
+			playerCounts = playerCountOptions,
+			startText = locale.T("match-start"),
+			busyText = locale.T("match-starting"),
+			unselectedStatusText = locale.T("match-status-choose"),
+			partialStatusText = locale.T("match-status-partial"),
+			readyStatusText = locale.T("match-status-ready", {
+				current = matchCurrentPlayers,
+				max = matchmakingMaxPlayers,
+			}),
+			busyStatusText = locale.T("match-status-starting"),
+			onStart = function(difficulty, maxPlayers)
+				if callbacks.onConfigureMatch then
+					callbacks.onConfigureMatch(difficulty, maxPlayers)
+				end
+			end,
+			onClose = function()
+				if callbacks.onCancelMatch then
+					callbacks.onCancelMatch()
+				end
+				AppRoot.Open(nil)
+			end,
+		}),
 		Codes = React.createElement(Components.CodesPanel, {
 			name = "CodesPanel",
 			title = locale.T("title-codes"),
@@ -827,7 +970,7 @@ local function App()
 		-- ── overlays ─────────────────────────────────────────────────────
 		Gym = React.createElement(Components.GymOverlay, {
 			name = "GymOverlay",
-			active = gymActive,
+			active = showGame and gymActive,
 			remain01 = gymRemain01,
 			fatText = locale.T("gym-fat-left", { n = math.ceil(gymRemain01 * 100) }),
 			buttonText = locale.T("gym-tap"),
@@ -840,7 +983,7 @@ local function App()
 		}),
 		PetReveal = React.createElement(Components.PetRevealOverlay, {
 			name = "PetRevealOverlay",
-			reveal = reveal,
+			reveal = if showGame then reveal else nil,
 			revealCount = state.petRevealCount,
 			oddsText = oddsText,
 			continueText = locale.T("reveal-continue"),

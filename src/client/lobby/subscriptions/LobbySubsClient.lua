@@ -1,0 +1,202 @@
+--[[
+	LobbySubsClient -- lobby-only UI/event wiring (R4).
+
+	- LobbyQueueUpdate opens/closes the kit matchmaking selector.
+	- LobbyQueueRequest sends session-correlated configure/leave intents; destination and
+	  roster remain server-authoritative.
+	- Touching the authored Forest/Chocolate/Meshes/chocolate part opens the
+	  existing Shop panel. DescendantAdded handles the late-cloned LobbyMap.
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Log = require(Shared:WaitForChild("Log"))
+local Net = require(Shared:WaitForChild("Net"))
+
+local SCOPE = "LobbyClient"
+
+local LobbySubsClient = {}
+
+local function allowedPlayerCount(config, value: any): boolean
+	if type(value) ~= "number" or value % 1 ~= 0 then
+		return false
+	end
+	for _, allowed in ipairs(config.playerCounts) do
+		if value == allowed then
+			return true
+		end
+	end
+	return false
+end
+
+local function isChocolateTrigger(instance: Instance, config): boolean
+	if not instance:IsA("BasePart") or instance.Name ~= config.client.chocolatePartName then
+		return false
+	end
+	local chocolate = instance.Parent
+	local forest = chocolate and chocolate.Parent
+	local environment = forest and forest.Parent
+	local map = environment and environment.Parent
+	return chocolate ~= nil
+		and chocolate.Name == config.client.chocolateModelName
+		and forest ~= nil
+		and forest.Name == config.client.forestName
+		and environment ~= nil
+		and environment.Name == config.queue.environmentName
+		and map ~= nil
+		and map.Name == config.queue.mapName
+end
+
+function LobbySubsClient.Start(data, modules, subscriptions)
+	local lobbyData = data.LobbyUiData
+	local AppRoot = modules.AppRoot
+	if lobbyData == nil or AppRoot == nil then
+		Log.Warn(SCOPE, "LobbyUiData/AppRoot missing -- lobby UI wiring skipped")
+		return
+	end
+
+	local config = lobbyData["match-config"]
+	local request = Net.Remote("LobbyQueueRequest")
+	local update = Net.Update("LobbyQueueUpdate")
+
+	local function closeMatchPanel()
+		local wasOpen = AppRoot.GetOpenPanel() == "Matchmaking"
+		lobbyData.CloseMatch()
+		AppRoot.Set({ matchmaking = false })
+		if wasOpen then
+			AppRoot.Open(nil)
+		end
+	end
+
+	AppRoot.SetCallbacks({
+		onConfigureMatch = function(difficulty, maxPlayers)
+			if type(difficulty) ~= "string" or config.difficulties[difficulty] == nil then
+				Log.Warn(SCOPE, `selector produced invalid difficulty '{tostring(difficulty)}' -- request dropped`)
+				return
+			end
+			if not allowedPlayerCount(config, maxPlayers) then
+				Log.Warn(SCOPE, `selector produced invalid maxPlayers '{tostring(maxPlayers)}' -- request dropped`)
+				return
+			end
+			local state = lobbyData.PatchMatch({
+				busy = true,
+				statusText = "Starting queue...",
+				error = false,
+			})
+			if state == nil then
+				Log.Warn(SCOPE, "configure callback fired without an open matchmaking session -- request dropped")
+				return
+			end
+			if type(state.sessionKey) ~= "string" or state.sessionKey == "" then
+				Log.Warn(SCOPE, "configure callback has no active session key -- request dropped")
+				return
+			end
+			AppRoot.Set({ matchmaking = state })
+			request:FireServer("configure", state.sessionKey, difficulty, maxPlayers)
+		end,
+		onCancelMatch = function()
+			local state = lobbyData["matchmaking"]
+			if type(state) == "table" and type(state.sessionKey) == "string" and state.sessionKey ~= "" then
+				request:FireServer("leave", state.sessionKey)
+			else
+				Log.Info(SCOPE, "match selector closed without an active server session -- no leave request sent")
+			end
+			closeMatchPanel()
+		end,
+	})
+
+	update.OnClientEvent:Connect(function(kind, payload)
+		if type(kind) ~= "string" then
+			Log.Warn(SCOPE, "LobbyQueueUpdate kind was not a string -- update dropped")
+			return
+		end
+		if kind == "open" then
+			if type(payload) ~= "table" or type(payload.sessionKey) ~= "string" then
+				Log.Warn(SCOPE, "LobbyQueueUpdate open payload invalid -- selector not opened")
+				return
+			end
+			local state = lobbyData.OpenMatch({
+				sessionKey = payload.sessionKey,
+				currentPlayers = if type(payload.currentPlayers) == "number" then payload.currentPlayers else 1,
+				maxPlayers = if type(payload.maxPlayers) == "number" then payload.maxPlayers else config.queue.maxPlayers,
+				busy = false,
+				statusText = false,
+				error = false,
+			})
+			AppRoot.Set({ matchmaking = state })
+			AppRoot.Open("Matchmaking")
+		elseif kind == "close" then
+			closeMatchPanel()
+		elseif kind == "error" or kind == "busy" then
+			if type(payload) ~= "table" or type(payload.message) ~= "string" then
+				Log.Warn(SCOPE, `LobbyQueueUpdate {kind} payload invalid -- update dropped`)
+				return
+			end
+			local patch = if kind == "error"
+				then { busy = false, error = payload.message, statusText = false }
+				else { busy = true, error = false, statusText = payload.message }
+			local state = lobbyData.PatchMatch(patch)
+			if state == nil then
+				Log.Warn(SCOPE, `LobbyQueueUpdate {kind} arrived without an open selector -- update dropped`)
+				return
+			end
+			AppRoot.Set({ matchmaking = state })
+		else
+			Log.Once(SCOPE, `unknown-update-{kind}`, `unknown LobbyQueueUpdate kind '{kind}' -- ignored`)
+		end
+	end)
+
+	local localPlayer = Players.LocalPlayer
+	local bound = lobbyData["bound-shop-parts"]
+	local function bindShopPart(instance: Instance)
+		if not isChocolateTrigger(instance, config) or bound[instance] then
+			return
+		end
+		local part = instance :: BasePart
+		bound[part] = true
+		part.Touched:Connect(function(hit)
+			local character = localPlayer.Character
+			if character == nil or not hit:IsDescendantOf(character) then
+				return
+			end
+			local now = os.clock()
+			if now - lobbyData["last-shop-open-at"] < config.client.shopOpenDebounceSeconds then
+				return
+			end
+			lobbyData["last-shop-open-at"] = now
+			if AppRoot.GetOpenPanel() == "Matchmaking" then
+				local state = lobbyData["matchmaking"]
+				if type(state) == "table" and type(state.sessionKey) == "string" and state.sessionKey ~= "" then
+					request:FireServer("leave", state.sessionKey)
+				else
+					Log.Info(SCOPE, "shop replaced a selector without an active server session -- no leave request sent")
+				end
+				lobbyData.CloseMatch()
+				AppRoot.Set({ matchmaking = false })
+			end
+			AppRoot.Open("Shop")
+		end)
+	end
+
+	for _, descendant in ipairs(Workspace:GetDescendants()) do
+		bindShopPart(descendant)
+	end
+	Workspace.DescendantAdded:Connect(bindShopPart)
+
+	local boundCount = 0
+	for _ in pairs(bound) do
+		boundCount += 1
+	end
+	if boundCount == 0 then
+		Log.GraceOnce(SCOPE, "no-chocolate-trigger", 10, function()
+			return next(bound) == nil
+		end, "lobby chocolate shop trigger never replicated -- expected LobbyMap/LobbyEnvironment/Forest/Chocolate/Meshes/chocolate (docs/features/lobby-matchmaking.md)")
+	else
+		Log.Info(SCOPE, `bound {boundCount} chocolate shop touch trigger(s)`)
+	end
+end
+
+return LobbySubsClient

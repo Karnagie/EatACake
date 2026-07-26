@@ -23,7 +23,8 @@ local function ShopPanel(props)
 	-- NO scale Padding here: inside an AutomaticCanvasSize ScrollPane, scale
 	-- padding references the GROWING canvas (kit pitfall). Gaps are baked
 	-- into each cell's aspect (rows: Theme.ShopRow.CellAspectRatio, section
-	-- headers: layout.SectionCellAspect).
+	-- headers: layout.SectionCellAspect). Cells still need an explicit nonzero
+	-- height seed; (1, 0) + aspect collapses inside AutomaticCanvasSize.
 	local listChildren = {
 		Layout = React.createElement("UIListLayout", {
 			FillDirection = Enum.FillDirection.Vertical,
@@ -40,7 +41,7 @@ local function ShopPanel(props)
 		order += 1
 		listChildren[`Section{sectionIndex}`] = React.createElement("Frame", {
 			Name = `Section{sectionIndex}`,
-			Size = UDim2.fromScale(1, 0),
+			Size = UDim2.fromScale(1, layout.SectionCellHeight),
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
 			LayoutOrder = order,
@@ -66,6 +67,7 @@ local function ShopPanel(props)
 				buttonText = row.buttonText,
 				owned = row.owned,
 				buttonStyle = row.buttonStyle,
+				size = UDim2.fromScale(1, layout.RowCellHeight),
 				layoutOrder = order,
 				onActivated = props.onActivated,
 			})

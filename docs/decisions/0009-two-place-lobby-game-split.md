@@ -1,9 +1,8 @@
 # ADR-0009 — Two-place lobby/game split (one universe)
 
-Status: **Accepted, partially implemented** (structural split done; publish-time
-config + place-aware client + runtime verification pending — see "Remaining").
-Date: 2026-07-22. Supersedes nothing. Related: ADR-0001 (persistence), ADR-0007
-(place-authored scene assets), ADR-0002 (reward grants).
+Status: **Accepted** (Decision 1 superseded by ADR-0010 reserved matchmaking).
+Date: 2026-07-22. Related: ADR-0001 (persistence), ADR-0007 (place-authored
+scene assets), ADR-0002 (reward grants), ADR-0010 (finite reserved rounds).
 
 ## Context
 
@@ -17,20 +16,20 @@ consistency emergent instead of hand-synced.
 
 ## Decision
 
-1. **One universe, two places.** Lobby is the start place. Game servers are
-   **shared public** (the cake is a collaborative social sim — biome/treasures
-   are server-wide), NOT reserved; no matchmaking. Movement is
-   `TeleportService:TeleportAsync` both ways.
+1. **One universe, two places.** Lobby is the start place. The original
+   shared-public/no-matchmaking server choice is superseded by ADR-0010: lobby
+   queues now reserve one finite game server per fixed roster.
 
 2. **Session follows the player, "Option A" handoff** (`TeleportSubs`, common):
-   source freezes input → folds playtime → `Save` → `Unload(userId, true)`
-   (intentional release) → **waits for the lock to actually release** → 
+   source freezes input → folds playtime → `Unload(userId, true)` (final save)
+   → **read-backs the exact release nonce plus a cleared persisted lock** →
    `TeleportAsync`; on failure it re-acquires the lock so the player isn't
    stranded. Destination runs the **unchanged** `LoadProfile`. **Never
    `Steal=true`** (P5) — that drops the source's final save. The
    `intentionalRelease` flag (`PlayerProfileData.releasing`, consumed in
    `PersistenceService.OnSessionEnd`) suppresses the mid-teleport `session-taken`
-   kick.
+   kick. `TeleportInitFailed` retries Roblox's returned options so reserved-party
+   members retain the same destination.
 
 3. **Repo = partitions, not copies.** `src/{server,client}/{common,lobby,game}/…`.
    `src/shared` + `common` are **mapped** (single on-disk copy) into both places,
@@ -54,10 +53,11 @@ consistency emergent instead of hand-synced.
 6. **Placement.** Persistence/economy/stats/progress/pets/time/**stomach** +
    lifecycle/grant/economy/settings/leaderboard/pets/**passOwnership**/**teleport**
    subs → common. Shop/codes/rewards/group/quests/rebirth/upgrade → lobby.
-   Cake-sim/cycle/treasure/gym/map + cake/body → game. `StomachService` &
+   Cake-sim/cycle/treasure/gym/map/round + cake/body → game. `StomachService` &
    `PlayerRuntimeData` are **common** (rebirth's belly-reset and lifecycle
-   cleanup run in both places). **Client is fully common for now** (shared
-   client; place-aware UI to follow).
+   cleanup run in both places). Client partitions provide `LobbyUiData` /
+   `GameUiData` markers and lobby-only touch wiring; common AppRoot/gameplay
+   subscriptions gate their place-specific presentation/input from those markers.
 
 7. **`PassOwnershipSubs` (common)** fetches gamepass ownership on join in BOTH
    places (writes `ShopData.passOwnership`, which `StatsService` reads directly),
@@ -81,23 +81,14 @@ consistency emergent instead of hand-synced.
   trust `TeleportData` for authoritative state; verify lock behavior on published
   places.
 
-## Remaining (not yet done)
+## Remaining
 
-- Fill `PlaceConfig.lobbyPlaceId/gamePlaceId` after publishing; teleport is
-  disabled until then.
-- Author `ReplicatedStorage.Assets.LobbyEnvironment` (ADR-0007 pattern).
-- **Place-aware client** (also closes a live R8 gap): the client is fully
-  common, so the GAME place currently surfaces lobby-only controls with **no
-  handler** — the checkpoint `UpgradeStation` prompt + HUD upgrade/rebirth
-  buttons fire `BuyUpgrade`/`DoRebirth` into a server without
-  `UpgradeSubs`/`RebirthSubs` (silent dead controls). Gate the cake HUD /
-  8-button meta menu by place, and either hide the game-place upgrade/rebirth
-  controls + station prompt OR move those subs to common. Wire the
-  "Play"/"Return" buttons to the `RequestTeleport` remote.
-- Move the upgrade-station opener off the game checkpoint onto a lobby hub
-  station.
+- Resolve the pre-existing upgrade-station split completely: its subscription
+  and overlay are lobby-gated, but `LobbyEnvironment` still has no authored
+  `UpgradeStation` prompt. Move/re-author the opener off the game checkpoint and
+  into the lobby before advertising it.
 - Reward kinds whose handler is game-only (`burn`, registered by `BodySubs`)
   can't be granted in the lobby — keep belly-affecting products out of the lobby
   shop, or add a common handler.
-- Runtime verification on two published places (fast lobby↔game round-trip: no
+- Runtime verification on two published places (lobby→reserved game→lobby: no
   `session-taken` kick, no lost/duped currency).

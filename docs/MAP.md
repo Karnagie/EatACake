@@ -9,12 +9,12 @@
 |---|---|---|
 | persistence | `features/persistence.md` | PersistenceService, ProfileSchema/, PlayerLifecycleSubs / — |
 | economy (calories+gems) | `features/economy.md` | EconomyService, EconomySubs / EconomySubsClient |
-| cake-sim (heightfield) | `features/cake-sim.md` + ADR-0003, ADR-0008 | CakeFieldService, CakeCollisionService, CakeSubs / LocalCakeField, CakeRenderer, CakeWaxShell, CakeWrapper, ChunkDebris, EatGestureController, CakeSubsClient, CakeFeelSubsClient |
-| cake-cycle (boss, rare, biomes) | `features/cake-cycle.md` | CakeCycleService, CakeSubs / BossView, CakeSubsClient |
-| treasures (finds) | `features/treasures.md` | TreasureService, CakeSubs / CakeSubsClient |
+| cake-sim (heightfield) | `features/cake-sim.md` + ADR-0003, ADR-0008 | CakeFieldService, CakeCollisionService, CakeSubs, CakeSimulationSubs, CakeCycleSubs / LocalCakeField, CakeRenderer, CakeWaxShell, CakeWrapper, ChunkDebris, EatGestureController, CakeSubsClient, CakeFeelSubsClient |
+| cake-cycle (boss, rare, biomes) | `features/cake-cycle.md` | CakeCycleService, CakeCycleSubs, CakeSimulationSubs / BossView, CakeSubsClient |
+| treasures (finds) | `features/treasures.md` | TreasureService, CakeSimulationSubs / CakeSubsClient |
 | body-gym (stomach, morph, roll) | `features/body-gym.md` | StomachService, GymService, BodySubs (server morph) / BallRollController, BodySubsClient, UIKit/GymOverlay |
-| checkpoint (gym + upgrade station platform) | `features/checkpoint.md` | MapService (build/height/teleport + UpgradeStation computer), CakeSubs (ReturnToCheckpoint) / BodySubsClient (F key + button) |
-| upgrades (hex tier tree) | `features/upgrades.md` | UpgradeService, StatsService, UpgradeSubs / LocalStatsService, LocalUpgradeTree, UpgradesSubsClient (station prompt open), UIKit HexNode/HexTreeOverlay, HexUtil |
+| checkpoint (gym + upgrade station platform) | `features/checkpoint.md` | MapService, CakeSubs (ReturnToCheckpoint), CakeCycleSubs/CakeSimulationSubs (height) / BodySubsClient (F key + button) |
+| upgrades (hex tier tree) | `features/upgrades.md` | UpgradeService, StatsService, UpgradeSubs / LocalStatsService, LocalUpgradeTree, UpgradesSubsClient (lobby opener pending), UIKit HexNode/HexTreeOverlay, HexUtil |
 | pets | `features/pets.md` | PetService, PetSubs / PetsSubsClient, PetFollowers, LocalPetsService |
 | rebirth + biomes | `features/rebirth.md` | ProgressService, RebirthSubs / RebirthSubsClient |
 | quests | `features/quests.md` | QuestService, QuestsSubs / QuestsSubsClient |
@@ -29,7 +29,9 @@
 | settings | `features/settings.md` | SettingsSubs / SettingsSubsClient, LocalSettingsService, SettingsData |
 | leaderstats | file header `subscriptions/LeaderboardSubs.lua` | LeaderboardSubs / — |
 | app-root (HUD + panels) | `features/app-root.md` | — / AppRoot, AppSubsClient |
-| ui-kit | `features/ui-kit.md` + skill `.claude/skills/roblox-ui-kit/` | — / Shared.UIKit, UiRoot |
+| ui-kit | `features/ui-kit.md` + skill `.agents/skills/roblox-ui-kit/` | — / Shared.UIKit, UiRoot |
+| lobby matchmaking (pads, modes, parties) | `features/lobby-matchmaking.md` + ADR-0010 | LobbyQueueData, LobbyQueueService, LobbyQueueSubs, LobbyMapService, TeleportSubs / LobbyUiData, LobbySubsClient, AppRoot, UIKit/MatchmakingPanel |
+| game round (roster, difficulty, result return) | `features/game-round.md` + ADR-0010 | RoundStateData, GameRoundService, GameRoundSubs, CakeCycleSubs, TeleportSubs / CakeSubsClient, AppRoot |
 
 ## Infrastructure (no feature doc — the file header IS the doc)
 
@@ -47,11 +49,11 @@
 | locale stub (T/Tr) | `src/client/common/data/LocaleData.lua` |
 | React root owner (kit UI) | `src/client/common/modules/UiRoot.lua` |
 | React packages (vendored model → `ReplicatedStorage.Packages`) | `ReactLua-Packages.rbxmx` |
-| editable scene models (place-authored → `ReplicatedStorage.Assets`, cloned): game `Environment`+`Checkpoint` by MapService, `LobbyEnvironment` by LobbyMapService | Studio-authored (ADR-0007) |
+| editable scene models (place-authored → `ReplicatedStorage.Assets`, cloned): game `Environment`+`Checkpoint` by MapService; lobby `LobbyMapContainer`+`LobbyEnvironment`+`LobbySpawn` by LobbyMapService | Studio-authored (ADR-0007) |
 | **lobby/game place split** — partitions + project files | `src/{server,client}/{common,lobby,game}/…`; `game`/`lobby`/`default`(=combined)`.project.json`; partition-aware bootstrap (ADR-0009) |
-| lobby↔game teleport (Option A handoff) | `TeleportSubs` (common), `PlaceConfig` (shared, PlaceIds), `RequestTeleport` remote (ADR-0009) |
+| lobby↔game teleport (verified-release handoff) | `TeleportSubs` + `TeleportRetrySubs` (server), `TeleportControlSubsClient` + `PlayerControlService` (client), `PlaceConfig` + `MatchConfig` (shared), queue/result orchestrators (ADR-0009, ADR-0010) |
 | gamepass ownership (perks in BOTH places) | `PassOwnershipSubs` (common) |
-| lobby hub scene builder | `LobbyMapService` + `LobbySubs` (lobby) |
+| lobby hub scene builder | `LobbyMapService` + `LobbySubs` (lobby); authored contract in `features/lobby-matchmaking.md` |
 
 ## Lookup
 

@@ -40,7 +40,7 @@ Auto-Eat no-ops silently at the active floor (no cue — passive eating isn't
 nagged); the top band is always frosting (flows, so craters refill), so a
 stationary auto-eater keeps earning rather than stalling.
 
-## Server pipeline (CakeSubs Heartbeat, one connection)
+## Server pipeline (CakeSimulationSubs Heartbeat, one connection)
 | Job | Rate | Call |
 |---|---|---|
 | settle automaton | 20 Hz | `CakeFieldService.SettleStep` (≤ 1500 cells/tick) |
@@ -195,7 +195,10 @@ stationary auto-eater keeps earning rather than stalling.
   **PC** holds the mouse ANYWHERE; **TOUCH** eats ONLY via the dedicated
   bottom-right **EAT button** (`UIKit/EatButton`, wired through AppRoot
   `onEatDown`/`onEatUp`) — never a raw finger, so the movement joystick / camera
-  drag can't eat (Task 3). Hold = auto-repeat at the eat-rate stat; a tap fires
+  drag can't eat (Task 3). Held and Auto-Eat paths fail closed through
+  `PlayerControlService.IsLocked`; a teleport handoff clears held/
+  `LocalEatState` activity before a remote or local prediction can run. Hold =
+  auto-repeat at the eat-rate stat; a tap fires
   one immediate bite. The button's press primitive is finger-aware so onEatUp
   fires only on the LAST finger up (no stuck-on). Plus the client `isFull` gate
   (stops firing + soft cue when the belly
@@ -226,13 +229,17 @@ stationary auto-eater keeps earning rather than stalling.
   grids disagreed); they only catch a fall when the fine columns aren't there
   yet (join). See `CakeCollisionService` header.
 - New cakes materialize around players standing in the footprint —
-  CakeSubs lifts them onto the fresh frosting at spawn.
+  CakeCycleSubs lifts them onto the fresh frosting at spawn.
 
 ## Files
 Server: `CakeStateData`, `CakeConfigData`, `services/CakeFieldService`,
-`CakeCollisionService`, `subscriptions/CakeSubs`. Shared: `GridUtil`,
+`CakeCollisionService`, `subscriptions/CakeSubs` (input/snapshot),
+`CakeCycleSubs` (spawn/lifecycle), `CakeSimulationSubs` (Heartbeat/deltas).
+Shared: `GridUtil`,
 `CakeOps`, `config/CakeConfig`. Client: `LocalCakeField`, `CakeRenderer`,
 `CakeWaxShell`, `CakeWrapper` (textured outer wall over the ungenerated bulk),
 `EatGestureController`, `CakeSubsClient`, `CakeFeelSubsClient`,
 `LocalEatState` (flat-while-eating flag), `UIKit/EatButton` (touch hold-to-eat).
-Cycle/boss/pets: `features/cake-cycle.md`.
+In a reserved match, `EatAt` is accepted only after the match starts and only
+from a present validated participant (`features/game-round.md`). Cycle/boss/pets:
+`features/cake-cycle.md`.

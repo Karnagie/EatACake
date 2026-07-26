@@ -21,6 +21,7 @@
 ]]
 
 local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
@@ -36,6 +37,12 @@ local schemaData -- ProfileSchema
 local configData -- PersistenceData
 
 local store -- ProfileStore object
+
+export type LoadOptions = {
+	deadline: number?,
+	cancel: (() -> boolean)?,
+	kickOnFailure: boolean?,
+}
 
 local function deepCopy(source: { [any]: any }): { [any]: any }
 	local copy = {}
@@ -98,46 +105,51 @@ end
 
 -- Upgrades one stored section from its saved version to the current one.
 local function migrateSection(sectionKey: string, section: { [any]: any }, definition: { [any]: any }, storedVersion: number)
+	-- Work on a copy. A migration is allowed to mutate before throwing; touching
+	-- Profile.Data directly would make EndSession save that half-migrated shape.
+	local working = deepCopy(section)
 	local version = storedVersion
 	while version < definition.version do
 		local migrate = definition.migrations and definition.migrations[version]
 		if type(migrate) == "function" then
-			local ok, result = pcall(migrate, section)
+			local ok, result = pcall(migrate, working)
 			if ok then
 				if type(result) == "table" then
-					section = result
+					working = result
+				elseif result ~= nil then
+					error(`section '{sectionKey}': migration v{version} -> v{version + 1} returned {typeof(result)}, expected table or nil`)
 				end
 				Log.Info(SCOPE, `section '{sectionKey}': migrated v{version} -> v{version + 1}`)
 			else
-				Log.Warn(SCOPE, `section '{sectionKey}': migration v{version} -> v{version + 1} FAILED — {result}`)
-				-- Continue: reconcile + sanitize below act as the safety net.
+				error(`section '{sectionKey}': migration v{version} -> v{version + 1} FAILED — {result}`)
 			end
 		else
-			-- Version was bumped without a migration step (P2 violation?).
-			-- Old-shaped data gets stamped as current — log loudly.
-			Log.Warn(SCOPE, `section '{sectionKey}': v{version} -> v{version + 1} has NO migration defined`)
+			error(`section '{sectionKey}': v{version} -> v{version + 1} has NO migration defined (P2)`)
 		end
 		version += 1
 	end
-	return section
+	return working
 end
 
 -- Applies the full schema pipeline to a loaded profile data table:
 -- migrate -> reconcile -> int-key normalize -> sanitize, per section.
 -- Unknown fields (sections removed from the schema) are preserved untouched.
 local function applySchema(dataTable: { [any]: any })
-	if type(dataTable.__schema) ~= "table" then
-		dataTable.__schema = {}
+	-- The whole pipeline is transactional in memory. On any migration/sanitize
+	-- failure Profile.Data stays byte-for-byte at its loaded shape, so the
+	-- subsequent EndSession cannot persist a partial upgrade or false stamp.
+	local working = deepCopy(dataTable)
+	if type(working.__schema) ~= "table" then
+		working.__schema = {}
 	end
 	for sectionKey, definition in pairs(schemaData.sections) do
-		local stored = dataTable[sectionKey]
+		local stored = working[sectionKey]
 		if type(stored) ~= "table" then
-			dataTable[sectionKey] = deepCopy(definition.defaults)
-			dataTable.__schema[sectionKey] = definition.version
+			working[sectionKey] = deepCopy(definition.defaults)
+			working.__schema[sectionKey] = definition.version
 		else
-			local storedVersion = math.floor(tonumber(dataTable.__schema[sectionKey]) or 1)
+			local storedVersion = math.floor(tonumber(working.__schema[sectionKey]) or 1)
 			stored = migrateSection(sectionKey, stored, definition, storedVersion)
-			dataTable[sectionKey] = stored
 			deepReconcile(stored, definition.defaults)
 			for _, path in ipairs(definition.intKeySets or {}) do
 				normalizeIntKeys(stored, path)
@@ -145,17 +157,25 @@ local function applySchema(dataTable: { [any]: any })
 			if type(definition.sanitize) == "function" then
 				local ok, result = pcall(definition.sanitize, stored)
 				if ok and type(result) == "table" then
-					dataTable[sectionKey] = result
+					stored = result
 				elseif not ok then
-					Log.Warn(SCOPE, `section '{sectionKey}': sanitize FAILED — {result}`)
+					error(`section '{sectionKey}': sanitize FAILED — {result}`)
+				elseif result ~= nil then
+					error(`section '{sectionKey}': sanitize returned {typeof(result)}, expected table or nil`)
 				end
 			end
+			working[sectionKey] = stored
 			-- NEVER downgrade the stamp: after an update ships, old servers
 			-- keep running for a while. If an old server (lower section
 			-- version) stamped its own version onto data already migrated by
 			-- a new server, the migration would re-run later and corrupt it.
-			dataTable.__schema[sectionKey] = math.max(storedVersion, definition.version)
+			working.__schema[sectionKey] = math.max(storedVersion, definition.version)
 		end
+	end
+
+	table.clear(dataTable)
+	for key, value in pairs(working) do
+		dataTable[key] = value
 	end
 end
 
@@ -209,32 +229,66 @@ end
 -- Starts a session-locked profile session for the player. Yields.
 -- Returns (profile data table, isNew) on success, nil if the player left or
 -- the session could not be started (the player is kicked in that case).
+-- Teleport recovery may provide a deadline/generation cancel callback and
+-- disable this function's kick so its bounded recovery owner handles failure.
 -- isNew is true ONLY for a genuinely fresh profile (first session ever) —
 -- never because of a failed read (safe for retention cohorts / first-join grants).
-function PersistenceService.LoadProfile(player: Player): ({ [any]: any }?, boolean)
+function PersistenceService.LoadProfile(player: Player, options: LoadOptions?): ({ [any]: any }?, boolean)
 	local userId = player.UserId
+	local deadline = if type(options) == "table" and type(options.deadline) == "number"
+		then options.deadline
+		else nil
+	local externalCancel = if type(options) == "table" and type(options.cancel) == "function"
+		then options.cancel
+		else nil
+	local kickOnFailure = type(options) ~= "table" or options.kickOnFailure ~= false
+	local cancelErrorLogged = false
+	local function shouldCancel(): boolean
+		if player.Parent ~= Players then
+			return true
+		end
+		if deadline ~= nil and os.clock() >= deadline then
+			return true
+		end
+		if externalCancel ~= nil then
+			local ok, cancelOrError = pcall(externalCancel)
+			if not ok then
+				if not cancelErrorLogged then
+					cancelErrorLogged = true
+					Log.Warn(SCOPE, `load cancellation callback FAILED for {userId}: {cancelOrError}; cancelling load`)
+				end
+				return true
+			end
+			return cancelOrError == true
+		end
+		return false
+	end
 
 	if store == nil then
 		-- Init failed (bad store name / no DataStore access). Fail loudly
 		-- instead of leaving the player in-game with no data.
 		Log.Warn(SCOPE, `store unavailable — cannot load profile for {userId}`)
-		if player.Parent == Players then
+		if kickOnFailure and player.Parent == Players then
 			player:Kick(configData.messages["load-failed"])
 		end
 		return nil, false
 	end
 
 	local profile = store:StartSessionAsync(tostring(userId), {
-		Cancel = function()
-			return player.Parent ~= Players
-		end,
+		Cancel = shouldCancel,
 	})
 
 	if profile == nil then
-		Log.Warn(SCOPE, `session NOT started for {player.Name} ({userId}) — lock conflict or DataStore failure; kicking`)
-		if player.Parent == Players then
+		local reason = if shouldCancel() then "cancelled/deadline reached" else "lock conflict or DataStore failure"
+		Log.Warn(SCOPE, `session NOT started for {player.Name} ({userId}) — {reason}`)
+		if kickOnFailure and player.Parent == Players then
 			player:Kick(configData.messages["load-failed"])
 		end
+		return nil, false
+	end
+	if shouldCancel() then
+		profile:EndSession()
+		Log.Info(SCOPE, `session load cancelled after acquisition for {player.Name} ({userId}); released without publishing`)
 		return nil, false
 	end
 
@@ -246,15 +300,17 @@ function PersistenceService.LoadProfile(player: Player): ({ [any]: any }?, boole
 		-- End the session so the lock is released, and fail loudly.
 		Log.Warn(SCOPE, `schema apply FAILED for {userId} — {schemaErr}`)
 		profile:EndSession()
-		if player.Parent == Players then
+		if kickOnFailure and player.Parent == Players then
 			player:Kick(configData.messages["load-failed"])
 		end
 		return nil, false
 	end
 
-	if player.Parent ~= Players then
-		-- Player left while we were loading.
+	if shouldCancel() then
+		-- Player left, the deadline expired, or the recovery generation was
+		-- invalidated while schema work ran. Never publish this late session.
 		profile:EndSession()
+		Log.Info(SCOPE, `session load cancelled before publish for {player.Name} ({userId})`)
 		return nil, false
 	end
 
@@ -275,14 +331,18 @@ function PersistenceService.LoadProfile(player: Player): ({ [any]: any }?, boole
 
 	profileData.profiles[userId] = profile.Data
 	profileData.sessions[userId] = profile
-	profileData.released[userId] = nil -- fresh (or re-acquired) session: not released
+	-- Fresh (or re-acquired) session: discard every prior handoff marker.
+	profileData.released[userId] = nil
+	profileData.releaseCandidates[userId] = nil
+	profileData.releaseNonces[userId] = nil
+	profileData.releaseVerifying[userId] = nil
 
 	if not profile:IsActive() then
 		-- Session ended during load (OnSessionEnd may have fired before it
 		-- was connected) — clean up manually.
 		profileData.profiles[userId] = nil
 		profileData.sessions[userId] = nil
-		if player.Parent == Players then
+		if kickOnFailure and player.Parent == Players then
 			player:Kick(configData.messages["session-taken"])
 		end
 		return nil, false
@@ -297,6 +357,10 @@ end
 -- Immediate save for critical moments (e.g. right after granting a Robux
 -- purchase). Routine saving is automatic — do NOT call this on a timer.
 function PersistenceService.Save(userId: number)
+	if profileData.releaseNonces[userId] ~= nil then
+		Log.Once(SCOPE, `save-during-release-{userId}`, `Save({userId}) ignored while an intentional release is in flight`)
+		return
+	end
 	local session = profileData.sessions[userId]
 	if session ~= nil and session:IsActive() then
 		session:Save()
@@ -318,29 +382,22 @@ function PersistenceService.Unload(userId: number, intentional: boolean?)
 		if intentional and session:IsActive() then
 			profileData.releasing[userId] = true
 			profileData.released[userId] = nil
-			-- The SAFE "released" signal is OnAfterSave of the ENDING save: it fires
-			-- only AFTER the release UpdateAsync commits and the on-disk lock is
-			-- cleared (ProfileStore.luau:924). OnSessionEnd fires EARLIER, before the
-			-- write (line 725), and already clears profiles[]/sessions[] — so
-			-- IsLoaded()==false does NOT mean the lock is free. TeleportSubs must wait
-			-- on IsReleased(), not IsLoaded(). Guard on `not IsActive()` so a
-			-- mid-flight AUTOSAVE's OnAfterSave (session still active, lock not
-			-- cleared) can't false-signal the release.
-			--
-			-- RESIDUAL (bounded, accepted): OnAfterSave is a per-profile signal shared
-			-- by ALL saves. If a CONCURRENT save (e.g. a purchase's critical Save()
-			-- right before teleport) is mid-UpdateAsync when we release, its OnAfterSave
-			-- can fire AFTER the ending save synchronously cleared ActiveSessionCheck
-			-- (IsActive already false) but BEFORE the ending write commits — setting
-			-- `released` ~sub-second early. That only degrades the handoff to
-			-- ProfileStore's normal force-load on the destination (which still waits for
-			-- the real release) — never worse; the session-owner check stops any late
-			-- write from clobbering. Not cleanly closable without editing the vendored
-			-- lib (LastSavedData carries no MetaData). Verify on published places.
+			profileData.releaseCandidates[userId] = nil
+			profileData.releaseVerifying[userId] = nil
+			local releaseNonce = HttpService:GenerateGUID(false)
+			profileData.releaseNonces[userId] = releaseNonce
+			session.RobloxMetaData["teleport-release-nonce"] = releaseNonce
+			-- OnSessionEnd fires before the ending write commits, and OnAfterSave is
+			-- shared by every concurrent save. Therefore OnAfterSave only unlocks a
+			-- read-back attempt. VerifyReleased is the safe signal: it requires this
+			-- unique nonce and a nil persisted session lock in the same stored version.
 			local conn
 			conn = session.OnAfterSave:Connect(function()
 				if not session:IsActive() then
-					profileData.released[userId] = true
+					-- OnAfterSave is shared by every save. This is only a candidate;
+					-- VerifyReleased read-backs the persisted nonce + cleared lock before
+					-- TeleportSubs may move the player.
+					profileData.releaseCandidates[userId] = true
 					if conn then
 						conn:Disconnect()
 					end
@@ -362,6 +419,68 @@ end
 -- destination place can load fresh data. Used by TeleportSubs before TeleportAsync.
 function PersistenceService.IsReleased(userId: number): boolean
 	return profileData.released[userId] == true
+end
+
+--API
+-- Yields. Confirms that the exact ending save for this handoff committed by
+-- reading the profile through ProfileStore and requiring BOTH the release nonce
+-- and a nil persisted session lock. A generic OnAfterSave alone is ambiguous
+-- when an autosave/manual save overlaps EndSession.
+function PersistenceService.VerifyReleased(userId: number): boolean
+	if profileData.released[userId] == true then
+		return true
+	end
+	local expectedNonce = profileData.releaseNonces[userId]
+	if expectedNonce == nil or profileData.releaseCandidates[userId] ~= true then
+		return false
+	end
+	if profileData.releaseVerifying[userId] == expectedNonce then
+		return false
+	end
+	if store == nil then
+		Log.Warn(SCOPE, `release verification for {userId} skipped: profile store unavailable`)
+		return false
+	end
+	profileData.releaseVerifying[userId] = expectedNonce
+
+	local ok, viewOrError = pcall(function()
+		return store:GetAsync(tostring(userId))
+	end)
+	if profileData.releaseVerifying[userId] == expectedNonce then
+		profileData.releaseVerifying[userId] = nil
+	end
+	-- This read may finish after TeleportSubs timed out and recovered the player,
+	-- or even after a newer handoff began. Never let an old read prove a new
+	-- generation's release.
+	if profileData.releaseNonces[userId] ~= expectedNonce then
+		return false
+	end
+	if not ok then
+		Log.Warn(SCOPE, `release verification read FAILED for {userId}: {viewOrError}`)
+		return false
+	end
+	local view = viewOrError
+	if view == nil then
+		Log.Warn(SCOPE, `release verification read returned nil for {userId}`)
+		return false
+	end
+	local metadata = view.RobloxMetaData
+	local persistedNonce = type(metadata) == "table" and metadata["teleport-release-nonce"] or nil
+	if view.Session == nil and persistedNonce == expectedNonce then
+		profileData.released[userId] = true
+		Log.Info(SCOPE, `intentional release verified for {userId}`)
+		return true
+	end
+	return false
+end
+
+--API
+function PersistenceService.ClearReleaseState(userId: number)
+	profileData.releasing[userId] = nil
+	profileData.released[userId] = nil
+	profileData.releaseCandidates[userId] = nil
+	profileData.releaseNonces[userId] = nil
+	profileData.releaseVerifying[userId] = nil
 end
 
 return PersistenceService

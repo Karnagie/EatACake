@@ -2,10 +2,10 @@
 	UpgradesSubsClient — upgrade levels consumer + hex-tree open/close (R4):
 	  * UpgradesUpdate feeds LocalStatsService (bite prediction) + AppRoot's
 	    hex-tree; node buys flow back through the BuyUpgrade remote.
-	  * The tree is a full-screen overlay opened from the checkpoint COMPUTER's
-	    ProximityPrompt (features/upgrades.md). Opening a menu is local UI, so it
-	    is handled entirely client-side — no server round-trip. E (or the Close
-	    button) closes it; a BlurEffect dims the world while open.
+	  * The tree is a full-screen lobby overlay reserved for an authored
+	    UpgradeStation ProximityPrompt (placement pending; features/upgrades.md).
+	    Opening a menu is local UI, so it needs no server round-trip. E (or the
+	    Close button) closes it; a BlurEffect dims the world while open.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -20,43 +20,83 @@ local Net = require(Shared:WaitForChild("Net"))
 local Log = require(Shared:WaitForChild("Log"))
 
 local SCOPE = "UpgradesSubsClient"
--- Must match MapConfigData.checkpoint.upgradePromptName (server-built prompt).
-local UPGRADE_PROMPT = "UpgradeStation"
-local CLOSE_ACTION = "CloseUpgradeTree"
-local BLUR_SIZE = 18
 
 local UpgradesSubsClient = {}
 
 function UpgradesSubsClient.Start(data, modules)
+	if data.LobbyUiData == nil then
+		Log.Info(SCOPE, "lobby client partition absent -- lobby upgrade UI wiring skipped in game")
+		return
+	end
+	local lobbyData = data.LobbyUiData
+	local upgradesConfig = lobbyData["upgrades-config"]
+	local upgradesState = lobbyData["upgrades-state"]
+	if type(upgradesConfig) ~= "table" or type(upgradesState) ~= "table" then
+		Log.Warn(SCOPE, "LobbyUiData upgrades config/state missing -- upgrade UI wiring skipped")
+		return
+	end
+	local promptName = upgradesConfig["prompt-name"]
+	local closeActionName = upgradesConfig["close-action-name"]
+	local blurSize = upgradesConfig["blur-size"]
+	local blurTemplateName = upgradesConfig["blur-template-name"]
+	if type(promptName) ~= "string" or promptName == ""
+		or type(closeActionName) ~= "string" or closeActionName == ""
+		or type(blurSize) ~= "number"
+		or blurSize ~= blurSize or blurSize < 0
+		or type(blurTemplateName) ~= "string" or blurTemplateName == ""
+		or type(upgradesState["disabled-prompts"]) ~= "table"
+	then
+		Log.Warn(SCOPE, "LobbyUiData upgrades config invalid -- upgrade UI wiring skipped")
+		return
+	end
 	local AppRoot = modules.AppRoot
 	local LocalStatsService = modules.LocalStatsService
+	local PlayerControlService = modules.PlayerControlService
+	local controlData = data.PlayerControlData
+	if PlayerControlService == nil or controlData == nil or type(PlayerControlService.SetLocked) ~= "function" then
+		Log.Warn(SCOPE, "PlayerControlData/PlayerControlService missing -- upgrade modal control gate unavailable")
+		return
+	end
+	local controlReason = controlData.reasons and controlData.reasons.upgrades
+	if type(controlReason) ~= "string" or controlReason == "" then
+		Log.Warn(SCOPE, "PlayerControlData upgrade reason invalid -- upgrade modal control gate unavailable")
+		return
+	end
 	local rBuy = Net.Remote("BuyUpgrade")
 
-	local blur = Instance.new("BlurEffect")
-	blur.Name = "UpgradeTreeBlur"
-	blur.Size = 0
-	blur.Enabled = false
-	blur.Parent = Lighting
-
 	local player = Players.LocalPlayer
-	local isOpen = false
-	-- Checkpoint prompts we disabled on open (to re-enable on close).
-	local disabledPrompts: { ProximityPrompt } = {}
-	local savedCameraType: Enum.CameraType? = nil
-	local controls -- default PlayerModule controls (lazy)
 	local setOpen -- forward decl
-
-	local function getControls()
-		if controls == nil then
-			local ok, playerModule = pcall(function()
-				return require(player:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule"))
-			end)
-			if ok and playerModule then
-				controls = playerModule:GetControls()
-			end
-		end
-		return controls
+	local function resolveBlurTemplate(): BlurEffect?
+		local uiKit = Shared:FindFirstChild("UIKit")
+		local templates = uiKit and uiKit:FindFirstChild("Templates")
+		local template = templates and templates:FindFirstChild(blurTemplateName)
+		return if template and template:IsA("BlurEffect") then template else nil
 	end
+	local function ensureBlur(): BlurEffect?
+		local current = upgradesState["blur"]
+		if typeof(current) == "Instance" and current:IsA("BlurEffect") and current.Parent ~= nil then
+			return current
+		end
+		local template = resolveBlurTemplate()
+		if template == nil then
+			Log.GraceOnce(SCOPE, "upgrade-blur-template-missing", 10, function()
+				return resolveBlurTemplate() == nil
+			end, `Shared.UIKit.Templates.{blurTemplateName} never replicated -- upgrade overlay continues without world blur`)
+			return nil
+		end
+		local blur = template:Clone()
+		blur.Enabled = upgradesState["open"] == true
+		blur.Size = if blur.Enabled then blurSize else 0
+		blur.Parent = Lighting
+		upgradesState["blur"] = blur
+		return blur
+	end
+	ensureBlur()
+	Shared.DescendantAdded:Connect(function(descendant)
+		if descendant.Name == blurTemplateName and descendant:IsA("BlurEffect") then
+			ensureBlur()
+		end
+	end)
 
 	-- Modal while open: freeze the camera (no zoom/rotate/pan) and stop character
 	-- movement, so the tree stays put — convenient on PC and phone (the user's #2).
@@ -64,25 +104,17 @@ function UpgradesSubsClient.Start(data, modules)
 		local camera = Workspace.CurrentCamera
 		if active then
 			if camera then
-				savedCameraType = camera.CameraType
+				upgradesState["saved-camera-type"] = camera.CameraType
 				camera.CameraType = Enum.CameraType.Scriptable
 			end
-			local c = getControls()
-			if c then
-				c:Disable()
-			else
-				-- R8: don't silently skip the movement freeze.
-				Log.Once(SCOPE, "no-controls", "PlayerModule controls unavailable — movement not frozen while the tree is open")
-			end
+			PlayerControlService.SetLocked(controlReason, true)
 		else
+			local savedCameraType = upgradesState["saved-camera-type"]
 			if camera and savedCameraType ~= nil then
 				camera.CameraType = savedCameraType
 			end
-			savedCameraType = nil
-			local c = getControls()
-			if c then
-				c:Enable()
-			end
+			upgradesState["saved-camera-type"] = nil
+			PlayerControlService.SetLocked(controlReason, false)
 		end
 	end
 
@@ -98,11 +130,11 @@ function UpgradesSubsClient.Start(data, modules)
 		return Enum.ContextActionResult.Sink
 	end
 
-	-- Disable EVERY checkpoint ProximityPrompt while the tree is open. The station
-	-- AND gym prompts both use E with overlapping range — leaving either on lets
-	-- the E-to-close press ALSO re-open the station / start a gym session behind
-	-- the overlay; it also hides the overlapping prompt UI. Re-enabled on close.
+	-- Disable EVERY world prompt under this place's active map while the tree is
+	-- open. The station and nearby prompts may share E — leaving one on lets the
+	-- E-to-close press trigger behind the overlay. Re-enabled on close.
 	local function setCheckpointPromptsEnabled(enabled: boolean)
+		local disabledPrompts = upgradesState["disabled-prompts"]
 		if enabled then
 			for _, prompt in ipairs(disabledPrompts) do
 				prompt.Enabled = true
@@ -110,14 +142,13 @@ function UpgradesSubsClient.Start(data, modules)
 			table.clear(disabledPrompts)
 			return
 		end
-		local map = Workspace:FindFirstChild("Map")
-		local checkpoint = map and map:FindFirstChild("Checkpoint")
-		if checkpoint == nil then
+		local map = Workspace:FindFirstChild("LobbyMap") or Workspace:FindFirstChild("Map")
+		if map == nil then
 			-- R8: the E-to-close guard depends on these prompts being off.
-			Log.Once(SCOPE, "no-checkpoint", "workspace.Map.Checkpoint missing — checkpoint prompts not toggled while the tree is open")
+			Log.Once(SCOPE, "no-active-map", "workspace.LobbyMap/Map missing — world prompts not toggled while the tree is open")
 			return
 		end
-		for _, d in ipairs(checkpoint:GetDescendants()) do
+		for _, d in ipairs(map:GetDescendants()) do
 			if d:IsA("ProximityPrompt") and d.Enabled then
 				d.Enabled = false
 				table.insert(disabledPrompts, d)
@@ -126,19 +157,22 @@ function UpgradesSubsClient.Start(data, modules)
 	end
 
 	setOpen = function(open: boolean)
-		if open == isOpen then
+		if open == upgradesState["open"] then
 			return
 		end
-		isOpen = open
+		upgradesState["open"] = open
 		AppRoot.Open(if open then "Upgrades" else nil)
-		blur.Enabled = open
-		blur.Size = if open then BLUR_SIZE else 0
+		local blur = ensureBlur()
+		if blur then
+			blur.Enabled = open
+			blur.Size = if open then blurSize else 0
+		end
 		setCheckpointPromptsEnabled(not open)
 		setModal(open)
 		if open then
-			ContextActionService:BindAction(CLOSE_ACTION, onCloseKey, false, Enum.KeyCode.E)
+			ContextActionService:BindAction(closeActionName, onCloseKey, false, Enum.KeyCode.E)
 		else
-			ContextActionService:UnbindAction(CLOSE_ACTION)
+			ContextActionService:UnbindAction(closeActionName)
 		end
 	end
 
@@ -162,7 +196,7 @@ function UpgradesSubsClient.Start(data, modules)
 
 	-- Open on the station prompt (fires client-side for the local player).
 	ProximityPromptService.PromptTriggered:Connect(function(prompt)
-		if prompt.Name == UPGRADE_PROMPT then
+		if prompt.Name == promptName then
 			setOpen(true)
 		end
 	end)
@@ -170,7 +204,7 @@ function UpgradesSubsClient.Start(data, modules)
 	-- Respawn while open would strand the modal (frozen camera + disabled
 	-- controls on the new character) — force-close so setModal restores them.
 	player.CharacterAdded:Connect(function()
-		if isOpen then
+		if upgradesState["open"] then
 			setOpen(false)
 		end
 	end)

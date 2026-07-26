@@ -28,6 +28,10 @@ local SCOPE = "Body"
 local BodySubsClient = {}
 
 function BodySubsClient.Start(data, modules)
+	if data.GameUiData == nil then
+		Log.Info(SCOPE, "game client partition absent -- body/gym/checkpoint input skipped in lobby")
+		return
+	end
 	local AppRoot = modules.AppRoot
 	local FloatingNumbers = modules.FloatingNumbers
 	local ComboMeter = modules.ComboMeter
@@ -35,14 +39,34 @@ function BodySubsClient.Start(data, modules)
 	local ParticlePool = modules.ParticlePool
 	local BallRollController = modules.BallRollController
 	local PetFollowers = modules.PetFollowers
+	local PlayerControlService = modules.PlayerControlService
 
 	local player = Players.LocalPlayer
 	local rGymTap = Net.Remote("GymTap")
 	local rReturn = Net.Remote("ReturnToCheckpoint")
+	local controlGateReady = PlayerControlService ~= nil and type(PlayerControlService.IsLocked) == "function"
+	if not controlGateReady then
+		Log.Warn(SCOPE, "PlayerControlService.IsLocked missing -- body/checkpoint input disabled")
+	end
+	local function inputLocked(): boolean
+		if not controlGateReady then
+			return true
+		end
+		local ok, lockedOrError = pcall(PlayerControlService.IsLocked)
+		if not ok then
+			Log.Once(SCOPE, "control-gate-failed", `PlayerControlService.IsLocked FAILED -- body/checkpoint input disabled: {lockedOrError}`)
+			return true
+		end
+		return lockedOrError == true
+	end
 
 	-- Return to the checkpoint platform to burn fat. Fired by the HUD button
 	-- (onReturnCheckpoint) and the F key; the server owns the destination.
 	local function returnToCheckpoint()
+		if inputLocked() then
+			Log.Info(SCOPE, "ReturnToCheckpoint ignored while client input is locked")
+			return
+		end
 		rReturn:FireServer()
 	end
 
@@ -84,7 +108,7 @@ function BodySubsClient.Start(data, modules)
 			end, "workspace.Map.Checkpoint.GymMachine ProximityPrompt missing — gym prompt can't empty-hide (stays shown)")
 			return
 		end
-		local shouldEnable = lastFill >= gymMinStartFill
+		local shouldEnable = not inputLocked() and lastFill >= gymMinStartFill
 		if prompt.Enabled ~= shouldEnable then
 			prompt.Enabled = shouldEnable
 		end
@@ -142,6 +166,10 @@ function BodySubsClient.Start(data, modules)
 	-- through AppRoot's callbacks.
 	AppRoot.SetCallbacks({
 		onGymTap = function()
+			if inputLocked() then
+				Log.Info(SCOPE, "GymTap ignored while client input is locked")
+				return
+			end
 			rGymTap:FireServer()
 			SoundPool.Play("uiClick") -- tactile per-tap feedback while burning
 		end,

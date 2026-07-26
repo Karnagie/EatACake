@@ -9,7 +9,7 @@
 		buttonText   -- "R$ 149" / "FREE" / "Owned"
 		owned        -- true = dim row, disable button
 		buttonStyle  -- default Theme.EquipGreen
-		layoutOrder, zIndex, onActivated(id)
+		size, layoutOrder, zIndex, onActivated(id)
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -112,7 +112,7 @@ local function ShopRow(props)
 	-- the row content occupies the top ContentHeightInCell of the cell.
 	return React.createElement("Frame", {
 		Name = props.name or `ShopRow_{tostring(props.id)}`,
-		Size = UDim2.fromScale(1, 0),
+		Size = props.size or UDim2.fromScale(1, Theme.ShopLayout.RowCellHeight),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		LayoutOrder = props.layoutOrder,

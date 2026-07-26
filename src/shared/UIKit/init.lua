@@ -49,6 +49,8 @@ local Components = {
 	RebirthPanel = require(ComponentsFolder.RebirthPanel),
 	QuestRow = require(ComponentsFolder.QuestRow),
 	QuestsPanel = require(ComponentsFolder.QuestsPanel),
+	MatchChoice = require(ComponentsFolder.MatchChoice),
+	MatchmakingPanel = require(ComponentsFolder.MatchmakingPanel),
 }
 
 table.freeze(Components)

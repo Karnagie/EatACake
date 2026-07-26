@@ -1,179 +1,292 @@
 --[[
-	TeleportSubs — DATA-SAFE lobby<->game teleport handoff (COMMON, ADR-0009).
+	TeleportSubs -- data-safe lobby <-> game ProfileStore handoff (COMMON).
 
-	One universe = one universe-scoped "PlayerProfiles" session lock per user, so
-	the SOURCE place must RELEASE the profile (and the release must actually
-	COMMIT) before the DESTINATION loads it, or the two servers fight over the
-	lock (stall / steal / lost writes). "Option A" single-writer handoff:
+	One universe has one profile session lock per user. Before a player moves,
+	the source ends playtime bookkeeping, intentionally unloads the profile, and
+	waits for the ending save's committed-release signal. Only then does it call
+	TeleportAsync. A failed teleport re-acquires the released profile so nobody
+	is stranded without an active session.
 
-	  1. re-entrancy guard (one teleport per player at a time)
-	  2. set the "Teleporting" attribute (client freezes input / shows a transition)
-	  3. fold the leave-time bookkeeping (TimeRewardService) before the release
-	  4. PersistenceService.Unload(userId, true)  -- INTENTIONAL release: the
-	     intentionalRelease flag suppresses the "session-taken" kick (Phase 2)
-	  5. WAIT for PersistenceService.IsReleased(userId) -- the ending save's
-	     OnAfterSave, i.e. the on-disk lock is actually CLEARED. NOT IsLoaded:
-	     ProfileStore fires OnSessionEnd (which clears profiles[]) BEFORE the
-	     release write commits, so IsLoaded flips too early (ProfileStore.luau:725
-	     vs 924). Waiting on IsLoaded would teleport into a lock race.
-	  6. TeleportAsync; on failure — SYNC (pcall) or ASYNC (TeleportInitFailed) —
-	     RE-ACQUIRE the profile (the lock is free) so the player isn't stranded.
-
-	The destination runs the UNCHANGED LoadProfile — the lock is free, so it reads
-	fresh, fully-saved data. NEVER Steal=true (P5): that skips the source's final
-	save and drops writes.
-
-	VERIFY ON PUBLISHED PLACES ONLY — Studio mock DataStores are per-VM and share
-	no lock, so cross-place session behaviour is invisible in Studio.
-
-	Trigger: the RequestTeleport remote (a HUD "Play"/"Return" button), or call
-	TeleportSubs.Send(player) from a scene pad's ProximityPrompt subscription.
+	SendGroup performs that contract for a whole party and invokes exactly one
+	TeleportAsync call. Lobby -> game may reserve an isolated round server; game
+	-> lobby targets the public start place. TeleportData is transient match
+	metadata only and is never authoritative profile/reward state.
 ]]
 
 local Players = game:GetService("Players")
-local TeleportService = game:GetService("TeleportService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TeleportService = game:GetService("TeleportService")
+
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local Net = require(Shared:WaitForChild("Net"))
 local Log = require(Shared:WaitForChild("Log"))
+local Net = require(Shared:WaitForChild("Net"))
 local PlaceConfig = require(Shared:WaitForChild("config"):WaitForChild("PlaceConfig"))
+local Release = require(script.Parent:WaitForChild("Teleport"):WaitForChild("Release"))
+local Recovery = require(script.Parent:WaitForChild("Teleport"):WaitForChild("Recovery"))
+local Resync = require(script.Parent:WaitForChild("Teleport"):WaitForChild("Resync"))
 
 local SCOPE = "Teleport"
-local RELEASE_TIMEOUT = 12 -- seconds to wait for the source lock to actually commit-release
 
 local TeleportSubs = {}
 
 local services_
--- Wiring state (not game data): who is mid-handoff, so a double-tap can't
--- release twice or teleport a player already leaving.
-local teleporting: { [Player]: boolean } = {}
+local teleportData_
+local subscriptions_
 
--- Re-acquire the profile for a player whose teleport FAILED after we already
--- released it. The lock is free (the release committed before we ever called
--- TeleportAsync), so LoadProfile re-locks cleanly and the player isn't left
--- profile-less. Their data is unchanged (saved then reloaded), so no re-push.
-local function recoverStranded(player: Player)
-	local userId = player.UserId
-	if player.Parent == Players and not services_.PersistenceService.IsLoaded(userId) then
-		local profile = services_.PersistenceService.LoadProfile(player)
-		if profile then
-			services_.TimeRewardService.BeginSession(userId)
-			Log.Info(SCOPE, `re-acquired profile for {player.Name} after a failed teleport`)
-		end
-	end
+export type GroupOptions = {
+	targetPlaceId: number,
+	reserveServer: boolean?,
+	teleportData: any?,
+}
+
+local function handoffs(): { [Player]: boolean }
+	return teleportData_["teleporting"]
+end
+
+local function clearHandoff(player: Player)
 	player:SetAttribute("Teleporting", nil)
-	teleporting[player] = nil
+	teleportData_.Clear(player)
+	if services_ and services_.PersistenceService and services_.PersistenceService.ClearReleaseState then
+		services_.PersistenceService.ClearReleaseState(player.UserId)
+	end
 end
 
 --API
--- Release the profile safely, then teleport `player` to the OTHER place. Returns
--- false (and leaves the player put/recovered, data intact) if teleport is
--- unavailable or fails. Safe from a remote handler or a scene-pad subscription.
-function TeleportSubs.Send(player: Player): boolean
-	local targetPlaceId = PlaceConfig.otherPlaceId()
-	if targetPlaceId == nil or targetPlaceId == 0 then
-		Log.Once(SCOPE, "no-target", `teleport requested but PlaceConfig is unset/unknown here (PlaceId {game.PlaceId}) — set PlaceConfig.lobbyPlaceId/gamePlaceId after publishing`)
+function TeleportSubs.RecoverPlayer(player: Player)
+	if teleportData_ == nil or services_ == nil or teleportData_["enabled"] ~= true then
+		Log.Warn(SCOPE, `RecoverPlayer({player.Name}) called while teleport handoffs are disabled`)
 		return false
 	end
-	if teleporting[player] then
-		return false -- already handing off
-	end
-	local userId = player.UserId
-	teleporting[player] = true
-	player:SetAttribute("Teleporting", true)
-
-	if not services_.PersistenceService.IsLoaded(userId) then
-		-- No loaded profile to release (still joining, or already gone). Teleporting
-		-- now could race the in-flight LoadProfile for the lock — abort; the player
-		-- can retry once loaded. (Never teleport without a confirmed source release.)
-		Log.Once(SCOPE, `teleport-preload-{userId}`, `{player.Name}: RequestTeleport before profile load — ignored (retry once loaded)`)
-		player:SetAttribute("Teleporting", nil)
-		teleporting[player] = nil
+	if not handoffs()[player] then
 		return false
 	end
-	do
-		-- Fold leave-time bookkeeping BEFORE the release (mirrors PlayerRemoving;
-		-- EndSession is idempotent, so the later PlayerRemoving one is a no-op).
-		services_.TimeRewardService.EndSession(userId)
-		-- Release: EndSession's final save + lock-clear. Unload(intentional) wires
-		-- the committed-release signal (OnAfterSave -> IsReleased) and suppresses
-		-- the kick. EndSession is fire-and-forget (it retries until it succeeds).
-		services_.PersistenceService.Unload(userId, true)
+	return Recovery.Start(
+		player,
+		teleportData_,
+		services_.PersistenceService,
+		services_.TimeRewardService,
+		function(recoveredPlayer)
+			Resync.Push(recoveredPlayer, subscriptions_)
+		end
+	)
+end
 
-		-- WAIT for the release to actually COMMIT (lock cleared) — not merely for
-		-- OnSessionEnd. The destination must read fully-saved data.
-		local deadline = os.clock() + RELEASE_TIMEOUT
-		while not services_.PersistenceService.IsReleased(userId) do
-			if player.Parent ~= Players then
-				teleporting[player] = nil
-				return false -- left during the release; the release save still completes
+local function normalizeGroup(players: { Player }): { Player }
+	local unique = {}
+	local group = {}
+	for _, player in ipairs(players) do
+		if typeof(player) == "Instance" and player:IsA("Player") and not unique[player] then
+			unique[player] = true
+			table.insert(group, player)
+		end
+	end
+	return group
+end
+
+local function recoverPresentGroup(group: { Player })
+	for _, player in ipairs(group) do
+		if player.Parent == Players then
+			Recovery.Start(
+				player,
+				teleportData_,
+				services_.PersistenceService,
+				services_.TimeRewardService,
+				function(recoveredPlayer)
+					Resync.Push(recoveredPlayer, subscriptions_)
+				end
+			)
+		else
+			teleportData_.Clear(player)
+			if services_.PersistenceService.ClearReleaseState then
+				services_.PersistenceService.ClearReleaseState(player.UserId)
 			end
-			if os.clock() > deadline then
-				-- The release save is retrying (DataStore trouble) and WILL eventually
-				-- commit, but we can't confirm the lock is clear — teleporting now would
-				-- risk a stale destination read. Safest: kick (the data IS being saved
-				-- by the retrying release); the player rejoins fresh. Rare.
-				Log.Warn(SCOPE, `release not confirmed for {player.Name} in {RELEASE_TIMEOUT}s — kicking to avoid a stale cross-place read (the release save keeps retrying)`)
-				player:SetAttribute("Teleporting", nil)
-				teleporting[player] = nil
-				player:Kick("Couldn't move you between places (your save is retrying). Please rejoin.")
-				return false
-			end
-			task.wait(0.1)
+		end
+	end
+end
+
+--API
+-- Preflights, committed-releases, then teleports the whole group together.
+-- Returns false only when the handoff was refused/failed synchronously. An
+-- asynchronous per-player failure is recovered by TeleportInitFailed.
+function TeleportSubs.SendGroup(players: { Player }, options: GroupOptions): boolean
+	if teleportData_ == nil or services_ == nil or teleportData_["enabled"] ~= true then
+		Log.Warn(SCOPE, "SendGroup called before TeleportSubs.Start -- handoff refused")
+		return false
+	end
+	if type(options) ~= "table" or type(options.targetPlaceId) ~= "number" then
+		Log.Warn(SCOPE, "SendGroup received invalid options/targetPlaceId -- handoff refused")
+		return false
+	end
+	if type(players) ~= "table" then
+		Log.Warn(SCOPE, "SendGroup received a non-table player list -- handoff refused")
+		return false
+	end
+
+	local targetPlaceId = options.targetPlaceId
+	local currentPlace = PlaceConfig.current()
+	if currentPlace == "unknown" then
+		Log.Warn(SCOPE, `SendGroup refused from unknown PlaceId {game.PlaceId} -- PlaceConfig routing is disabled here`)
+		return false
+	end
+	local configuredTarget = targetPlaceId ~= 0
+		and (targetPlaceId == PlaceConfig.lobbyPlaceId or targetPlaceId == PlaceConfig.gamePlaceId)
+	if not configuredTarget or targetPlaceId == game.PlaceId then
+		Log.Warn(SCOPE, `SendGroup refused unconfigured/same-place target {targetPlaceId} from PlaceId {game.PlaceId}`)
+		return false
+	end
+
+	local group = normalizeGroup(players)
+	if #group == 0 then
+		Log.Warn(SCOPE, "SendGroup received no valid players -- handoff refused")
+		return false
+	end
+	if #group > 50 then
+		Log.Warn(SCOPE, `SendGroup received {#group} players (TeleportAsync limit is 50) -- handoff refused`)
+		return false
+	end
+
+	local active = handoffs()
+	for _, player in ipairs(group) do
+		if player.Parent ~= Players then
+			Log.Warn(SCOPE, `{player.Name}: left before group handoff preflight -- group refused`)
+			return false
+		end
+		if active[player] then
+			Log.Once(SCOPE, `teleport-reentry-{player.UserId}`, `{player.Name}: handoff already in progress -- duplicate request ignored`)
+			return false
+		end
+		if not services_.PersistenceService.IsLoaded(player.UserId) then
+			Log.Once(SCOPE, `teleport-preload-{player.UserId}`, `{player.Name}: handoff requested before profile load -- group refused (retry once loaded)`)
+			return false
 		end
 	end
 
-	if player.Parent ~= Players then
-		teleporting[player] = nil
+	for _, player in ipairs(group) do
+		active[player] = true
+		teleportData_["handoff-targets"][player] = targetPlaceId
+		teleportData_["retry-attempts"][player] = 0
+		teleportData_["next-release-check-at"][player] = 0
+		player:SetAttribute("Teleporting", true)
+	end
+	for _, player in ipairs(group) do
+		services_.TimeRewardService.EndSession(player.UserId)
+		-- Unload includes the final save. PersistenceService associates it with a
+		-- unique nonce; the loop below read-backs that nonce and the cleared lock.
+		services_.PersistenceService.Unload(player.UserId, true)
+	end
+
+	local timeoutSeconds = teleportData_["release-timeout-seconds"]
+	local releaseResult = Release.Wait(group, teleportData_, services_.PersistenceService)
+	if releaseResult == "timeout" then
+		Log.Warn(SCOPE, `group release not confirmed in {timeoutSeconds}s -- cancelling handoff to avoid stale destination reads`)
+		for _, player in ipairs(group) do
+			if player.Parent == Players then
+				if services_.PersistenceService.IsReleased(player.UserId) then
+					Recovery.Start(
+						player,
+						teleportData_,
+						services_.PersistenceService,
+						services_.TimeRewardService,
+						function(recoveredPlayer)
+							Resync.Push(recoveredPlayer, subscriptions_)
+						end
+					)
+				else
+					clearHandoff(player)
+					player:Kick("Couldn't move you between places (your save is retrying). Please rejoin.")
+				end
+			else
+				teleportData_.Clear(player)
+				services_.PersistenceService.ClearReleaseState(player.UserId)
+			end
+		end
+		return false
+	elseif releaseResult == "departed" then
+		Log.Warn(SCOPE, "a player left during the release wait -- group handoff cancelled; recovering remaining players")
+		recoverPresentGroup(group)
 		return false
 	end
 
-	local options = Instance.new("TeleportOptions")
-	local ok, err = pcall(function()
-		TeleportService:TeleportAsync(targetPlaceId, { player }, options)
-	end)
+	local teleportOptions = Instance.new("TeleportOptions")
+	teleportOptions.ShouldReserveServer = options.reserveServer == true
+	if options.teleportData ~= nil then
+		teleportOptions:SetTeleportData(options.teleportData)
+	end
+	local ok, result
+	local attemptLimit = teleportData_["retry-attempt-limit"]
+	for attempt = 1, attemptLimit do
+		ok, result = pcall(TeleportService.TeleportAsync, TeleportService, targetPlaceId, group, teleportOptions)
+		if ok then
+			break
+		end
+		Log.Warn(SCOPE, `TeleportAsync to place {targetPlaceId} FAILED synchronously (attempt {attempt}/{attemptLimit}): {result}`)
+		if attempt < attemptLimit then
+			task.wait(teleportData_["retry-delay-seconds"])
+		end
+	end
 	if not ok then
-		-- SYNCHRONOUS failure (bad args / immediate throttle). ASYNC failures are
-		-- caught by TeleportInitFailed (see Start). Either way -> recover the lock.
-		Log.Warn(SCOPE, `TeleportAsync to place {targetPlaceId} FAILED (sync) for {player.Name}: {err}`)
-		recoverStranded(player)
+		Log.Warn(SCOPE, `TeleportAsync to place {targetPlaceId} exhausted synchronous retries for group of {#group}`)
+		recoverPresentGroup(group)
 		return false
 	end
-	-- Success so far — but the teleport can still fail ASYNC (TeleportInitFailed).
-	-- Keep teleporting[player]/Teleporting set; cleared on PlayerRemoving (actual
-	-- departure) or by the TeleportInitFailed handler (recover).
-	Log.Info(SCOPE, `{player.Name} handed off to place {targetPlaceId}`)
+
+	-- Keep the guard/attribute set until PlayerRemoving confirms departure, or
+	-- TeleportInitFailed recovers that individual player.
+	Log.Info(SCOPE, `group of {#group} handed off to place {targetPlaceId} (reserved={options.reserveServer == true})`)
 	return true
+end
+
+--API
+-- Compatibility wrapper for the legacy RequestTeleport remote. Lobby -> game
+-- is intentionally forbidden because game arrivals require reserved-round
+-- metadata; only a game player may use this wrapper to return to the lobby.
+function TeleportSubs.Send(player: Player): boolean
+	if PlaceConfig.current() ~= "game" then
+		Log.Once(SCOPE, "legacy-send-not-game", `RequestTeleport refused outside the game place (PlaceId {game.PlaceId}); lobby launches must use a queue`)
+		return false
+	end
+	return TeleportSubs.SendGroup({ player }, {
+		targetPlaceId = PlaceConfig.lobbyPlaceId,
+		reserveServer = false,
+	})
 end
 
 function TeleportSubs.Start(data, services, subscriptions)
 	services_ = services
-
-	local here = PlaceConfig.current()
-	if here == "unknown" then
-		Log.Warn(SCOPE, `PlaceConfig is unset/unknown here (PlaceId {game.PlaceId}) — lobby<->game teleport DISABLED. Set PlaceConfig.lobbyPlaceId/gamePlaceId after publishing both places to one universe.`)
-	else
-		Log.Info(SCOPE, `this place is '{here}'; RequestTeleport sends players to the opposite place`)
+	teleportData_ = data.TeleportData
+	subscriptions_ = subscriptions
+	if teleportData_ == nil then
+		Log.Warn(SCOPE, "TeleportData missing -- teleport handoffs disabled")
+		return
+	end
+	teleportData_["enabled"] = false
+	if services_.PersistenceService == nil or services_.TimeRewardService == nil then
+		Log.Warn(SCOPE, "PersistenceService/TimeRewardService missing -- teleport handoffs disabled")
+		return
+	end
+	if type(services_.PersistenceService.VerifyReleased) ~= "function"
+		or type(services_.PersistenceService.ClearReleaseState) ~= "function"
+	then
+		Log.Warn(SCOPE, "PersistenceService release-verification API missing -- teleport handoffs disabled")
+		return
 	end
 
+	local here = PlaceConfig.current()
+	local target = PlaceConfig.otherPlaceId()
+	if here == "unknown" or target == nil then
+		Log.Warn(SCOPE, `PlaceConfig unknown/unconfigured here (PlaceId {game.PlaceId}) -- lobby/game teleport DISABLED`)
+		return
+	end
+	Log.Info(SCOPE, `this place is '{here}'; opposite target is {target}`)
+	teleportData_["enabled"] = true
+
 	Net.Remote("RequestTeleport").OnServerEvent:Connect(function(player)
-		-- Server-authoritative: the destination is always the opposite place (no
-		-- client-chosen target). Rate-limited by the handoff guard.
 		TeleportSubs.Send(player)
 	end)
 
-	-- ASYNC teleport failure: TeleportAsync returned ok but the move failed later
-	-- (place unavailable, reserved-server flood, moderation). The profile is
-	-- already released -> recover so the player isn't stranded profile-less.
-	TeleportService.TeleportInitFailed:Connect(function(player, teleportResult, errorMessage)
-		if teleporting[player] then
-			Log.Warn(SCOPE, `TeleportInitFailed for {player.Name}: {teleportResult} — {errorMessage} — recovering`)
-			recoverStranded(player)
-		end
-	end)
-
 	Players.PlayerRemoving:Connect(function(player)
-		teleporting[player] = nil
+		teleportData_.Clear(player)
+		services_.PersistenceService.ClearReleaseState(player.UserId)
 	end)
 end
 

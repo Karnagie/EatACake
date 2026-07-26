@@ -2,7 +2,8 @@
 
 ## What it does
 The ONE React tree rendered through `UiRoot.Render` (single-root contract,
-`docs/features/ui-kit.md`). HUD: calories + gems StatPills, 8-button menu
+`docs/features/ui-kit.md`). Game HUD: calories + gems StatPills, CakeBar,
+BellyBar, checkpoint/eat controls and game overlays. Lobby meta HUD: 8-button
 GRID — bare icon + label-BELOW buttons, NO background (`HudMenuButton`;
 badges on Rebirth-affordable / Quests-claimable / Daily / Time). The menu is a
 `UIGridLayout` (`Theme.AppHud.MenuColumns`, default 2 → 2×4 block that stops
@@ -15,13 +16,17 @@ right thumb zone, **TOUCH devices only** — hold to eat / tap for one bite; sho
 in eating/boss phases, hidden while a panel or the gym overlay is up; see
 `features/cake-sim.md` input). Panels toggled by ONE `openPanel` (zIndex 50):
 Pets (PetsInspectPanel), Upgrades, Rebirth, Quests, Shop, Daily, Time,
-Codes, Settings. Overlays: GymOverlay (40), PetRevealOverlay (90).
+Codes, Settings, Matchmaking. Overlays: GymOverlay (40), PetRevealOverlay (90).
+`GameUiData` / `LobbyUiData` partition markers gate place-specific presentation:
+the lobby hides cake/belly/checkpoint/eat/game overlays, shows its meta menu,
+and can show the matchmaking selector or chocolate-triggered Shop. The game
+hides lobby/meta UI because those handlers are lobby-only.
 
 ## Contract for feature subs
 - Data IN: `AppRoot.Set(patch)` — fields: `calories, gems, settings, daily,
   time, shop, group, codesStatus, cake, stomach, gym, upgrades, pets,
   petReveal (+petRevealCount), rebirth, quests, combo, announceKey,
-  checkpointFar, openPanel`. Works pre-mount. `checkpointFar` (default true;
+  matchmaking, checkpointFar, openPanel`. Works pre-mount. `checkpointFar` (default true;
   fed by BodySubsClient's proximity check) hides the TO CHECKPOINT button when
   false.
 - **⚠ `Set` cannot CLEAR a field** — `{ field = nil }` is a silent no-op
@@ -32,6 +37,8 @@ Codes, Settings. Overlays: GymOverlay (40), PetRevealOverlay (90).
   onEquipPet(petId, equip), onDoRebirth, onClaimQuest, onGymTap,
   onDismissReveal, onReturnCheckpoint, onEatDown/onEatUp (EAT button hold —
   CakeSubsClient drives `eating`). Wire to remotes in the feature's subs (R4).
+- Lobby actions: `onConfigureMatch(difficulty, maxPlayers)`, `onCancelMatch()`;
+  `LobbySubsClient` owns their queue remote wiring.
 - Feature subs NEVER call `UiRoot.Render` — `AppSubsClient` mounts once.
 
 ## View-models (R7)
@@ -54,6 +61,9 @@ pushAnnounce `task.delay`), Clear via `false`.
 - Interaction juice is in the KIT, not here: press feedback in the button
   components, open/close pop in `PanelShell`, badge/bar/toggle animation in their
   components (all off `Theme.Feel`, ADR-0006). Don't re-add animation in AppRoot.
+- Published project files map exactly one place marker. The combined development
+  build maps both; `LobbySubs` still suppresses the lobby map when game
+  `MapService` is present.
 
 ## Files
 `modules/AppRoot.lua`, `modules/UiRoot.lua`, `subscriptions/AppSubsClient.lua`;
@@ -61,5 +71,6 @@ pushAnnounce `task.delay`), Clear via `false`.
 `HudMenuButton` (bare icon+label menu button), BellyBar, CakeBar (+`visible`),
 ComboBadge, AnnounceBanner, UpgradeRow/UpgradesPanel, GymOverlay, EatButton
 (touch hold-to-eat, `Theme.EatButton`), PetRevealOverlay, RebirthPanel,
-QuestRow/QuestsPanel, StatRow (extracted). Shared press/hold feel: `Interaction`
+QuestRow/QuestsPanel, MatchmakingPanel, StatRow (extracted). Shared press/hold feel: `Interaction`
 (`usePressable` now also exposes `onPressStart`/`onPressEnd` HOLD callbacks).
+Lobby contract: `features/lobby-matchmaking.md`.

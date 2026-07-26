@@ -82,6 +82,9 @@ Runtime: `PlayerRuntimeData.gymSessions/lastAutoBurn/lastMorphFill`.
 The gym machine lives on the **checkpoint platform** beside the cake (it moved
 off the old floor zone — see `features/checkpoint.md`; you return to it with
 F / the HUD button). It carries a ProximityPrompt (`GymPrompt`).
+Client gym-tap/checkpoint callbacks and prompt availability fail closed through
+`PlayerControlService.IsLocked`, so modal/teleport handoffs cannot fire custom
+gameplay input after movement controls are disabled.
 
 **Model** (GymService owns the session math; BodySubs orchestrates): pressing
 the prompt captures the belly's START `fill`/`stored` as a baseline (and LOCKS
