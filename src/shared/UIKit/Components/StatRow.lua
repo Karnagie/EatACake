@@ -1,7 +1,7 @@
 --[[
 	StatRow — label-left / value-right stat pill (Theme.StatRow recipe,
 	extracted from PetsInspectPanel's inline helper so other windows
-	(RebirthPanel, inspectors) can place it freely via position/size).
+	(inspectors, stat cards) can place it freely via position/size).
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

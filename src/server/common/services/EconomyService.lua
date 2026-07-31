@@ -1,7 +1,7 @@
 --[[
 	EconomyService
 	Two-currency logic over the profile's `economy` section (GDD §10):
-	calories (soft, wiped on rebirth) and gems (hard, persistent).
+	calories (soft, spent on upgrades) and gems (hard, persistent).
 	R2: logic only; state lives in the profile.
 
 	R3: this service does not talk to other services and does not replicate —
@@ -65,6 +65,21 @@ function EconomyService.AddGems(userId: number, amount: number): number?
 end
 
 --API
+-- Wipes the spendable calorie balance (RUN currency — see features/economy.md
+-- and ADR-0013). `progress.lifetimeCalories` is a SEPARATE permanent stat and is
+-- deliberately untouched: the leaderboard reads that one, so a per-run reset
+-- must not roll it back.
+-- Returns the new balance (0), or nil if the profile isn't loaded.
+function EconomyService.ResetCalories(userId: number): number?
+	local section = economy(userId)
+	if not section then
+		return nil
+	end
+	section.calories = 0
+	return 0
+end
+
+--API
 function EconomyService.TrySpendCalories(userId: number, amount: number): (boolean, number?)
 	local section = economy(userId)
 	if not section then
@@ -80,17 +95,6 @@ function EconomyService.TrySpendGems(userId: number, amount: number): (boolean, 
 		return false, nil
 	end
 	return trySpend(section, "gems", amount)
-end
-
---API
--- Rebirth wipe (Food Coma): calories reset to 0, gems untouched.
-function EconomyService.ResetCalories(userId: number): boolean
-	local section = economy(userId)
-	if not section then
-		return false
-	end
-	section.calories = 0
-	return true
 end
 
 return EconomyService

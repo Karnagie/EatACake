@@ -11,14 +11,12 @@
 | `EatAt` | `CakeSubs` | `features/cake-sim.md` |
 | `GymTap` | `BodySubs` | `features/body-gym.md` |
 | `ReturnToCheckpoint` | `CakeSubs` | `features/checkpoint.md` |
-| `BuyUpgrade` | `UpgradeSubs` | `features/upgrades.md` |
+| `BuyUpgrade` | `UpgradeSubs` (common — both places) | `features/upgrades.md` |
 | `EquipPet` | `PetSubs` | `features/pets.md` |
-| `DoRebirth` | `RebirthSubs` | `features/rebirth.md` |
-| `ClaimQuest` | `QuestsSubs` | `features/quests.md` |
 | `ClaimDailyReward` | `RewardsSubs` | `features/daily-rewards.md` |
-| `ClaimTimeReward` | `RewardsSubs` | `features/time-rewards.md` |
 | `ClaimGroupReward` | `GroupRewardSubs` | `features/group-reward.md` |
 | `RequestPurchase` | `ShopSubs` | `features/shop.md` |
+| `RequestGemPurchase` | `ShopSubs` | `features/shop.md` |
 | `RequestGamepass` | `ShopSubs` | `features/shop.md` |
 | `RedeemCode` | `CodesSubs` | `features/promo-codes.md` |
 | `SetSetting` | `SettingsSubs` | `features/settings.md` |
@@ -32,17 +30,14 @@
 | `CurrencyUpdate` | `EconomySubs` / grant handlers | `features/economy.md` |
 | `CakeSnapshotUpdate` | `CakeSubs` / `CakeCycleSubs` | `features/cake-sim.md` |
 | `CakeDeltaUpdate` (Unreliable) | `CakeSimulationSubs` | `features/cake-sim.md` |
-| `CakeCycleUpdate` | `CakeCycleSubs` | `features/cake-cycle.md` |
+| `CakeCycleUpdate` | `CakeCycleSubs` | `features/cake-cycle.md` — ⚠ payload is PER-RECIPIENT while a boss prize exists (`pendingPet`), not a broadcast |
 | `StomachUpdate` | `CakeSubs` / `BodySubs` | `features/body-gym.md` |
 | `GymUpdate` | `BodySubs` | `features/body-gym.md` |
 | `UpgradesUpdate` | `UpgradeSubs` | `features/upgrades.md` |
 | `PetsUpdate` | `PetSubs` | `features/pets.md` |
 | `PetRollUpdate` | `PetSubs` | `features/pets.md` |
 | `TreasureUpdate` | `CakeSimulationSubs` | `features/treasures.md` |
-| `RebirthUpdate` | `RebirthSubs` | `features/rebirth.md` |
-| `QuestsUpdate` | `QuestsSubs` | `features/quests.md` |
 | `DailyRewardUpdate` | `RewardsSubs` | `features/daily-rewards.md` |
-| `TimeRewardUpdate` | `RewardsSubs` | `features/time-rewards.md` |
 | `GroupRewardUpdate` | `GroupRewardSubs` | `features/group-reward.md` |
 | `ShopUpdate` | `ShopSubs` | `features/shop.md` |
 | `CodeResultUpdate` | `CodesSubs` | `features/promo-codes.md` |
@@ -55,5 +50,6 @@
 |---|---|---|
 | `StomachFill` | `BodySubs` | 0..1 belly fullness (morph driver) |
 | `EquippedPets` | `PetSubs` | csv of equipped petIds (followers) |
+| `BiteRadiusMult` | `BoostSubs` | live bite-radius boost multiplier (`features/boosts.md`) — the ONLY channel carrying it to the client |
 | `AutoEat` / `AutoGym` | `PassOwnershipSubs` | gamepass perk flags |
 | `Teleporting` | `TeleportSubs` | source-place handoff/input guard |

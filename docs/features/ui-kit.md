@@ -35,6 +35,19 @@ To update React: replace the `.rbxmx` (re-export the jsdotlua packages under a
 - Mounting: feature root components are rendered through `UiRoot.Render(...)`.
   One React root; windows toggle via state (`openPanel` pattern, panels
   `zIndex = 50`, HUD `zIndex = 1`) — see `UIKit.Demos.HudDemo`.
+- **The root ScreenGui is FULL-BLEED** (`IgnoreGuiInset = true`,
+  `ScreenInsets = DeviceSafeInsets`, 2026-07-30). It was inset by the CoreUI
+  topbar, which shrank the entire tree — so every modal SCRIM stopped ~36 px short
+  of the top and a "modal" left the world visible in that strip. Consequences any
+  UI work must respect:
+  - anything that must not slide under the topbar insets ITSELF by
+    `GuiService:GetGuiInset()`; `AppRoot`'s `Hud` layer does this and reproduces
+    the old space exactly (`features/app-root.md`);
+  - **pointer coordinates**: `InputObject.Position` (from `InputBegan` etc.) is in
+    the same space as `AbsolutePosition` in EITHER inset mode — use it. Do NOT
+    write `GetMouseLocation() - GuiService:GetGuiInset()`; that assumes an inset
+    root and silently breaks by the topbar height. `ScrollPane`'s track click had
+    to be converted; `HexTreeOverlay` already used the safe convention.
 - Wiring: callbacks passed into props; remotes/state subscriptions live in
   `subscriptions/` (R4). React-internal events are library-internal (R4
   exemption, same as ProfileStore signals — ADR-0001 precedent).
@@ -93,6 +106,15 @@ PanelOpenTween` that `PanelShell` actually reads. Add them WITH a caller.
   zone. Icon zones should be near-square, and `IconInset` IS the drawn size:
   0.06 means the art fills 88% of its plate. Measure with
   `min(icon.AbsoluteSize.X, icon.AbsoluteSize.Y)`, never by eye.
+  Corollary: art of MIXED aspect ratios (a tall flame, a wide egg cluster, a
+  square pack) drawn straight onto a face renders at wildly different visual
+  sizes. Give them a shared art window and they normalise — that is the job the
+  shop card's window does (`features/shop.md`).
+- **A card is not a recoloured button.** `style-rules.md` §2's thickness table
+  is the BUTTON recipe (bottom lip 2x+); §2b is the CARD one (even outline,
+  internal zones, portrait). Applying §2 to a card is how the shop twice
+  shipped cells the user called "stretched-out buttons" — measure the split off
+  the live instances, it reads as a drop shadow in a whole-panel screenshot.
 - **A grid zone taller than one row of cards is dead space, not breathing room.**
   N columns across a fixed canvas caps the card WIDTH regardless of height, so
   "cards too small in a big panel" is fixed by fewer columns over more rows, not

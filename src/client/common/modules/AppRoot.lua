@@ -4,11 +4,13 @@
 	over HUD zIndex 1, hidden panels stay MOUNTED with visible = false).
 
 	Eat the Cake composition:
-	  HUD: calories + gems StatPills, menu column (8 icon+label buttons, no bg),
+	  HUD: calories + gems StatPills; LOBBY meta menu (5 icon+label buttons, no
+	       bg) / GAME single Upgrades button in the same slot (the tree is
+	       RUN-scoped, ADR-0013 — there is nothing to spend in the lobby);
 	       CakeBar (top center), BellyBar (bottom center), ComboBadge,
-	       AnnounceBanner
-	  Panels (zIndex 50): Pets (inspect), Rebirth, Quests, Shop,
-	       DailyRewards, TimeRewards, Codes, Settings, Matchmaking
+	       AnnounceBanner, BossPrizeCard (boss phase)
+	  Panels (zIndex 50): Pets (inspect), Shop, DailyRewards, Codes,
+	       Settings, Matchmaking
 	  Overlays: GymOverlay (40), Upgrades hex-tree (60, lobby UpgradeStation
 	       opener pending — no HUD button), PetRevealOverlay (90)
 
@@ -17,12 +19,12 @@
 	with AppRoot.SetCallbacks (wired to remotes in subscriptions, R4). Both
 	work before AND after mount.
 
-	State fields: openPanel, calories, gems, settings, daily, time, shop,
+	State fields: openPanel, calories, gems, settings, daily, shop,
 	group, codesStatus, cake, stomach, gym, upgrades, pets, petReveal,
-	petRevealCount, rebirth, quests, combo, announceKey, matchmaking.
-	Callbacks: onClaimDaily(day), onClaimTime(index), onToggleSetting(id, v),
+	petRevealCount, combo, announceKey, matchmaking.
+	Callbacks: onClaimDaily(day), onToggleSetting(id, v),
 	onShopActivated(rowId), onRedeem(code), onBuyUpgrade(id),
-	onEquipPet(petId, equip), onDoRebirth(), onClaimQuest(id), onGymTap(),
+	onEquipPet(petId, equip), onToggleUpgrades(), onGymTap(),
 	onDismissReveal(), onEatDown(input), onEatUp(input), onReturnCheckpoint(),
 	onConfigureMatch(difficulty, maxPlayers), onCancelMatch(),
 	onPanelChanged(panel|nil) — fired whenever `openPanel` changes (never on
@@ -32,6 +34,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
+local GuiService = game:GetService("GuiService")
 
 -- Touch-only HUD: the hold-to-eat button shows on phones/tablets (no physical
 -- keyboard). PC eats via mouse-hold anywhere (CakeSubsClient), so it needs no
@@ -40,7 +43,6 @@ local IS_TOUCH = UserInputService.TouchEnabled and not UserInputService.Keyboard
 
 local React = require(ReplicatedStorage.Packages.React)
 local UIKit = require(ReplicatedStorage.Shared.UIKit)
-local UpgradeConfig = require(ReplicatedStorage.Shared.config.UpgradeConfig)
 local CakeConfig = require(ReplicatedStorage.Shared.config.CakeConfig)
 local MatchConfig = require(ReplicatedStorage.Shared.config.MatchConfig)
 local LocalRewardsService = require(script.Parent.LocalRewardsService)
@@ -54,6 +56,11 @@ local Components = UIKit.Components
 
 local AppRoot = {}
 
+-- ONE shared, frozen empty table for the closed shop's balance row: a fresh `{}`
+-- each render would fail React.memo's shallow compare exactly like the live table
+-- does, which is the thing this constant exists to avoid.
+local EMPTY_BALANCES = table.freeze({})
+
 local locale
 local showGame = true
 local showLobby = true
@@ -66,7 +73,6 @@ local current = {
 	gems = 0,
 	settings = nil,
 	daily = nil,
-	time = nil,
 	shop = nil,
 	group = nil,
 	codesStatus = nil,
@@ -77,8 +83,6 @@ local current = {
 	pets = nil,
 	petReveal = false,
 	petRevealCount = 0,
-	rebirth = nil,
-	quests = nil,
 	combo = nil,
 	announceKey = false,
 	matchmaking = false,
@@ -148,7 +152,7 @@ end
 -- abbreviated. A HUD pill is ~128 nominal px wide — "1,284,930" renders at a
 -- size a player cannot read at a glance, and in this genre the leading digits
 -- are the only part that carries meaning anyway. The 10K floor keeps small,
--- countable values (quest progress, early calories) exact.
+-- countable values (find counts, early calories) exact.
 -- { switchAt, divisor, suffix } — the two numbers are NOT the same: K switches on
 -- at 10,000 (below that the exact figure still reads fine) but divides by 1,000.
 local ABBREV = {
@@ -225,37 +229,6 @@ end
 
 local RARITY_RANK = { Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5, Secret = 6 }
 
--- View-model: quest panel rows from the QuestsUpdate payload.
-local function buildQuestRows(quests)
-	local rows = {}
-	for _, quest in ipairs(quests or {}) do
-		local rewardText
-		if quest.reward and quest.reward.kind == "gems" then
-			rewardText = locale.T("quest-reward-gems", { n = quest.reward.amount })
-		else
-			rewardText = locale.T("quest-reward-egg")
-		end
-		local state
-		if quest.claimed then
-			state = "claimed"
-		elseif quest.progress >= quest.target then
-			state = "claim"
-		else
-			state = "progress"
-		end
-		table.insert(rows, {
-			id = quest.id,
-			name = locale.T(`quest-{quest.id}`),
-			progress01 = math.clamp(quest.progress / math.max(1, quest.target), 0, 1),
-			progressText = `{formatNumber(quest.progress)}/{formatNumber(quest.target)}`,
-			rewardText = rewardText,
-			buttonText = if quest.claimed then locale.T("btn-done") else locale.T("btn-claim"),
-			state = state,
-		})
-	end
-	return rows
-end
-
 -- View-model: CakeBar text + fill by cycle phase.
 local function cakeBarModel(cake)
 	if cake == nil then
@@ -271,6 +244,17 @@ local function cakeBarModel(cake)
 		local delay = CakeConfig.cycle.newCakeDelay
 		local left = math.clamp(cake.timer or 0, 0, delay)
 		return 1 - left / delay, locale.T("cake-spawning", { timer = math.floor(left) }), "eating"
+	end
+	-- EATING is ~all of the playtime, and the cake % bar is deliberately hidden
+	-- then (it barely moves, 2026-07-19). Show the per-cake FIND GOAL instead —
+	-- a countable set is what gives a long run something to aim at (Drain the
+	-- Lake). Falls back to the % bar if the server sent no counts.
+	local finds = cake.finds
+	if type(finds) == "table" and (finds.total or 0) > 0 then
+		local found = math.clamp(finds.found or 0, 0, finds.total)
+		return found / finds.total,
+			locale.T("cake-finds", { found = found, total = finds.total }),
+			"eating"
 	end
 	local progress = math.clamp(cake.progress or 0, 0, 1)
 	return progress, locale.T("cake-progress", { pct = math.floor(progress * 100) }), "eating"
@@ -295,9 +279,6 @@ local function App()
 	local petsScale, setPetsScale = React.useState(function()
 		return calculateScale(Theme.PetsInspectLayout.PanelAspect, Theme.PetsInspectLayout.PanelMaxViewportFraction)
 	end)
-	local rebirthScale, setRebirthScale = React.useState(function()
-		return calculateScale(Theme.RebirthLayout.PanelAspect, Theme.RebirthLayout.PanelMaxViewportFraction)
-	end)
 	local matchScale, setMatchScale = React.useState(function()
 		return calculateScale(
 			Theme.MatchmakingLayout.PanelAspect,
@@ -309,10 +290,15 @@ local function App()
 	local shopScale, setShopScale = React.useState(function()
 		return calculateScale(Theme.ShopLayout.PanelAspect, Theme.ShopLayout.PanelMaxViewportFraction)
 	end)
+	-- Topbar inset in px. The root gui is full-bleed (UiRoot), so the HUD layer
+	-- applies this itself. Not a constant: it is 0 in some contexts, and it
+	-- changes when the topbar shows/hides.
+	local topInset, setTopInset = React.useState(function()
+		return GuiService:GetGuiInset().Y
+	end)
 	local codeInput, setCodeInput = React.useState("")
 	local selectedPetId, setSelectedPetId = React.useState(nil :: string?)
 	local sortByRarity, setSortByRarity = React.useState(true)
-	local _tick, setTick = React.useState(0)
 	-- Upgrades hex-tree navigation stack (top = the tree currently shown).
 	local treeStack, setTreeStack = React.useState({ "root" })
 
@@ -351,15 +337,29 @@ local function App()
 		end
 	end, { openPanelDep })
 
+	-- Topbar inset tracking for the HUD layer. Separate effect from the viewport
+	-- refit below: the inset changes on its own signal (the topbar can hide), and
+	-- the refit's per-panel scales do not depend on it.
+	React.useEffect(function()
+		local function syncInset()
+			setTopInset(GuiService:GetGuiInset().Y)
+		end
+		syncInset()
+		local connection = GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(syncInset)
+		return function()
+			connection:Disconnect()
+		end
+	end, {})
+
 	-- Viewport re-fit (kit checklist: aspect held at any window size).
 	React.useEffect(function()
 		local viewportConnection, cameraConnection
 		local function refit()
+			setTopInset(GuiService:GetGuiInset().Y)
 			setPortraitScale(calculateScale(Theme.Layout.PanelAspect, Theme.Layout.PanelMaxViewportFraction))
 			setWideScale(calculateScale(Theme.RewardsLayout.PanelAspect, Theme.RewardsLayout.PanelMaxViewportFraction))
 			setCodesScale(calculateScale(Theme.CodesLayout.PanelAspect, Theme.CodesLayout.PanelMaxViewportFraction))
 			setPetsScale(calculateScale(Theme.PetsInspectLayout.PanelAspect, Theme.PetsInspectLayout.PanelMaxViewportFraction))
-			setRebirthScale(calculateScale(Theme.RebirthLayout.PanelAspect, Theme.RebirthLayout.PanelMaxViewportFraction))
 			setMatchScale(calculateScale(
 				Theme.MatchmakingLayout.PanelAspect,
 				Theme.MatchmakingLayout.PanelMaxViewportFraction
@@ -392,27 +392,6 @@ local function App()
 		end
 	end, {})
 
-	-- 1s countdown ticker while the time panel is open (live countdowns).
-	-- Deps: BOOLEAN, never the raw panel name (jsdotlua nil-in-deps footgun).
-	local timePanelOpen = state.openPanel == "TimeRewards"
-	React.useEffect(function()
-		if not timePanelOpen then
-			return
-		end
-		local alive = true
-		task.spawn(function()
-			while alive do
-				task.wait(1)
-				if alive then
-					setTick(os.clock())
-				end
-			end
-		end)
-		return function()
-			alive = false
-		end
-	end, { timePanelOpen })
-
 	-- Fat-burn overlay: active while a session is open; `remain01` is the
 	-- server-streamed remaining-fat fraction (1 = untouched, 0 = empty).
 	local gymActive = state.gym ~= nil and state.gym.active == true
@@ -430,14 +409,11 @@ local function App()
 	-- rebuild pets/shop/rewards tables ~14x/s on a phone. Deps use
 	-- `or false` — nil in jsdotlua dep arrays breaks the compare.
 	local rewardCards = React.useMemo(function()
-		local dailyCards, dailyFooter = LocalRewardsService.BuildDailyCards(state.daily)
-		local timeCards, timeFooter = LocalRewardsService.BuildTimeCards(state.time)
-		return { dailyCards = dailyCards, dailyFooter = dailyFooter, timeCards = timeCards, timeFooter = timeFooter }
-	end, { state.daily or false, state.time or false, _tick })
+		local cards, footer = LocalRewardsService.BuildDailyCards(state.daily)
+		return { dailyCards = cards, dailyFooter = footer }
+	end, { state.daily or false })
 	local dailyCards, dailyFooter = rewardCards.dailyCards, rewardCards.dailyFooter
-	local timeCards, timeFooter = rewardCards.timeCards, rewardCards.timeFooter
 	local dailyBadge = state.daily ~= nil and state.daily.claimable == true
-	local timeBadge = LocalRewardsService.AnyTimeClaimable(state.time)
 
 	local petsProps = React.useMemo(function()
 		local props = LocalPetsService.BuildPanelProps(state.pets, selectedPetId)
@@ -476,18 +452,45 @@ local function App()
 		end
 		return LocalUpgradeTree.BuildTree(currentTree, state.upgrades, state.calories)
 	end, { upgradesOpen, currentTree, state.upgrades or false, state.calories })
-	local questRows = React.useMemo(function()
-		return buildQuestRows(state.quests)
-	end, { state.quests or false })
-	local shopSections = React.useMemo(function()
-		return LocalShopService.BuildSections(state.shop, state.group)
-	end, { state.shop or false, state.group or false })
+	-- The GEM BALANCE is a real input here, not just a HUD number: a gem-priced
+	-- card renders grey and unclickable until the player can afford it, so
+	-- `state.gems` MUST be in the deps — leave it out and the shop keeps saying
+	-- "you can't afford this" after the find that paid for it.
+	local shopTabs = React.useMemo(function()
+		return LocalShopService.BuildTabs(state.shop, state.group, state.gems)
+	end, { state.shop or false, state.group or false, state.gems })
+	-- ShopPanel is React.memo'd and its tree is ~700 elements. A fresh closure
+	-- in its props defeats the shallow compare outright, so the memo has to be
+	-- paired with stable handlers or it is pure overhead. Empty deps are safe:
+	-- `callbacks` is a module-level table read at call time, and AppRoot.Open
+	-- is a module function.
+	local onShopActivated = React.useCallback(function(rowId)
+		if callbacks.onShopActivated then
+			callbacks.onShopActivated(rowId)
+		end
+	end, {})
+	local closeShop = React.useCallback(function()
+		AppRoot.Open(nil)
+	end, {})
+	-- CALORIES CHANGE EVERY BITE, and ShopPanel is React.memo'd over a ~700-element
+	-- tree that stays MOUNTED (visible = false) while closed. A balances table
+	-- rebuilt at bite rate fails the shallow compare and reconciles the whole panel
+	-- for the entire eating phase — the exact cost the memo exists to avoid. So the
+	-- table is only rebuilt while the shop is actually OPEN; closed, the panel keeps
+	-- one frozen reference and re-renders on nothing.
+	local shopOpen = state.openPanel == "Shop"
 	local shopBalances = React.useMemo(function()
+		if not shopOpen then
+			return EMPTY_BALANCES
+		end
+		-- Same names as the HUD pills (Theme.AppHud.PillIcons): the shop can open
+		-- over the HUD, so a currency showing two different glyphs at once reads as
+		-- two different currencies.
 		return {
-			{ iconName = "UiGem", value = formatNumber(state.gems) },
-			{ iconName = "UiCoins", value = formatNumber(state.calories) },
+			{ iconName = Theme.AppHud.PillIcons.Gems, value = formatNumber(state.gems) },
+			{ iconName = Theme.AppHud.PillIcons.Calories, value = formatNumber(state.calories) },
 		}
-	end, { state.gems, state.calories })
+	end, { shopOpen, shopOpen and state.gems or 0, shopOpen and state.calories or 0 })
 	local oddsText = React.useMemo(LocalPetsService.OddsText, {})
 
 	local matchmaking = if type(state.matchmaking) == "table" then state.matchmaking else nil
@@ -541,19 +544,15 @@ local function App()
 		then math.max(math.floor(matchmaking.currentPlayers), 0)
 		else 1
 
-	local questsBadge = false
-	for _, row in ipairs(questRows) do
-		if row.state == "claim" then
-			questsBadge = true
-			break
-		end
-	end
-
 	local cakeFill, cakeText, cakeMode = cakeBarModel(state.cake)
 	-- Hide the top-center bar during normal eating (no more "CAKE 45%"); keep it
 	-- for boss fights (HP/timer) and the new-cake countdown / reward flash.
 	local cakePhase = if state.cake ~= nil then (state.cake.phase or "eating") else "eating"
+	-- Visible during EATING too now, because it carries the find goal there
+	-- (cakeBarModel) — the loop used to run with no progress signal at all.
+	local cakeFinds = state.cake and state.cake.finds
 	local cakeVisible = cakePhase ~= "eating"
+		or (type(cakeFinds) == "table" and (cakeFinds.total or 0) > 0)
 	-- Touch hold-to-eat button: shown only while there's cake to eat (eating /
 	-- boss phases), never while the gym overlay or a panel is up (you're not
 	-- eating then, and it would sit under/beside them). Touch devices only.
@@ -571,31 +570,40 @@ local function App()
 		elseif glutton then locale.T("belly-glutton")
 		else locale.T("belly-label", { fill = math.floor(stomach.fill or 0), cap = math.floor(capacity) })
 
-	local rebirth = state.rebirth
-	local canRebirth = rebirth ~= nil
-		and rebirth.nextCost ~= nil
-		and state.calories >= rebirth.nextCost
-
 	local reveal = if type(state.petReveal) == "table" then LocalPetsService.BuildReveal(state.petReveal) else nil
 
+	-- The squishy on offer for beating the boss. Server-decided and attached to
+	-- this player's cycle update while the fight is live (features/cake-cycle.md);
+	-- it clears on win/loss, so the card's lifetime is the fight's.
+	local bossPrize = React.useMemo(function()
+		local cake = state.cake
+		return if type(cake) == "table" then LocalPetsService.BuildPrize(cake.pendingPet) else nil
+	end, { (state.cake ~= nil and state.cake.pendingPet ~= nil and state.cake.pendingPet.petId) or false })
+
 	-- ── menu ─────────────────────────────────────────────────────────────
-	-- NOTE: no "Upgrades" button — the lobby's authored UpgradeStation opener is
-	-- pending (UpgradesSubsClient); the game checkpoint prompt is inactive.
+	-- The META menu is LOBBY-only (its handlers are lobby subs). UPGRADES is NOT
+	-- in it any more (2026-07-30, by request): the tree is RUN-scoped (ADR-0013),
+	-- so there is nothing to spend in the lobby — a run starts at tier 0 with an
+	-- empty calorie balance and buys the whole tree back inside the cake. It gets
+	-- its own button in the GAME HUD below instead, which is also where it was
+	-- MISSING: this frame is `Visible = showLobby`, so before this change the tree
+	-- had a button in the one place it was useless and none in the one place the
+	-- pacing depends on it. The authored `UpgradeStation` prompt at the game
+	-- checkpoint still opens it too (features/upgrades.md).
 	local menu = {
 		{ name = "Pets", label = locale.T("menu-pets"), badge = false },
-		{ name = "Rebirth", label = locale.T("menu-rebirth"), badge = canRebirth },
-		{ name = "Quests", label = locale.T("menu-quests"), badge = questsBadge },
 		{ name = "Shop", label = locale.T("menu-shop"), badge = false },
 		{ name = "DailyRewards", label = locale.T("menu-daily"), badge = dailyBadge },
-		{ name = "TimeRewards", label = locale.T("menu-time"), badge = timeBadge },
 		{ name = "Codes", label = locale.T("menu-codes"), badge = false },
 		{ name = "Settings", label = locale.T("menu-settings"), badge = false },
 	}
 	local hud = Theme.AppHud
 	local menuCount = #menu
 	-- Icon GRID: buttons flow left-to-right, wrapping after MenuColumns, so the
-	-- 8 buttons form a compact block (2x4) instead of a column running to the
-	-- bottom of the screen. Cell size/padding are fractions of this frame.
+	-- buttons form a compact block (2 columns, currently 3 rows with the last
+	-- cell empty) instead of a column running to the bottom of the screen. Cell
+	-- size/padding are fractions of this frame, both derived from menuCount —
+	-- adding or removing an entry needs no constant here.
 	local menuColumns = math.max(hud.MenuColumns or 1, 1)
 	local menuRows = math.ceil(menuCount / menuColumns)
 	local menuTotalHeight = hud.MenuButtonHeight * menuRows + hud.MenuGap * (menuRows - 1)
@@ -623,18 +631,29 @@ local function App()
 			layoutOrder = index,
 			zIndex = 1,
 			onActivated = function()
-				togglePanel(item.name)
+				-- DEAD BRANCH ON PURPOSE (a guard, not a live path): no menu entry is
+				-- named "Upgrades" any more — the tree opens only from the checkpoint
+				-- prompt. Kept because the hex tree is a MODAL overlay (world blur,
+				-- frozen camera, movement lock, world prompts off) owned by
+				-- UpgradesSubsClient, so anyone re-adding it to the menu MUST route
+				-- through onToggleUpgrades; falling through to togglePanel would open
+				-- the tree with none of that wiring.
+				if item.name == "Upgrades" and callbacks.onToggleUpgrades then
+					callbacks.onToggleUpgrades()
+				else
+					togglePanel(item.name)
+				end
 			end,
 		})
 	end
 
-	return React.createElement("Frame", {
-		Name = "App",
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-	}, {
-		-- ── HUD ──────────────────────────────────────────────────────────
+	-- ── HUD ──────────────────────────────────────────────────────────────
+	-- These all live in the `Hud` layer built at the bottom of this function,
+	-- which is inset from the top by Roblox's topbar. Positions here are in the
+	-- SAME coordinate space the root ScreenGui used to provide (it was inset;
+	-- it is full-bleed now so modals can dim the whole screen — UiRoot), so
+	-- nothing in this table had to move.
+	local hudChildren = {
 		CaloriesPill = React.createElement("Frame", {
 			Name = "CaloriesPill",
 			Visible = showGame,
@@ -647,7 +666,10 @@ local function App()
 			Aspect = React.createElement("UIAspectRatioConstraint", { AspectRatio = hud.PillAspect }),
 			Pill = React.createElement(Components.StatPill, {
 				value = formatNumber(state.calories),
-				icon = "bolt",
+				-- Registry art, not StatPill's legacy hand-vectored `bolt` shape (the
+				-- game HUD was the last thing still drawing those). Names live in
+				-- Theme.AppHud.PillIcons so the shop's balance row matches.
+				iconImage = Theme.Icon(hud.PillIcons.Calories),
 				valueGradient = Theme.Hud.EnergyTextGradient,
 				valueOutline = Theme.Hud.EnergyTextOutline,
 				zIndex = 1,
@@ -665,7 +687,9 @@ local function App()
 			Aspect = React.createElement("UIAspectRatioConstraint", { AspectRatio = hud.PillAspect }),
 			Pill = React.createElement(Components.StatPill, {
 				value = formatNumber(state.gems),
-				icon = "coin",
+				-- Was StatPill's legacy `coin` shape: the GEMS pill wore a COIN while
+				-- the shop showed the same balance beside a GEM.
+				iconImage = Theme.Icon(hud.PillIcons.Gems),
 				valueGradient = Theme.Hud.CoinTextGradient,
 				valueOutline = Theme.Hud.CoinTextOutline,
 				zIndex = 1,
@@ -682,6 +706,12 @@ local function App()
 			BorderSizePixel = 0,
 			ZIndex = 1,
 		}, menuChildren),
+		-- ⚠ NO Upgrades button, in EITHER place. The tree's only entry point is the
+		-- authored `UpgradeStation` ProximityPrompt on the checkpoint's computer
+		-- (built by MapService, opened by UpgradesSubsClient) — you are stood at the
+		-- checkpoint after every belly burn anyway, so a HUD button is a second door
+		-- into the same room. `onToggleUpgrades` stays on the callback table for the
+		-- prompt path; nothing in the HUD calls it.
 		CakeBar = React.createElement(Components.CakeBar, {
 			name = "CakeBar",
 			visible = showGame and cakeVisible,
@@ -765,6 +795,24 @@ local function App()
 			visible = showGame and state.combo ~= nil and (state.combo.value or 0) > 1,
 			zIndex = 1,
 		}),
+		-- What the boss fight is FOR. Top-right, level with the calories pill on the
+		-- left (same 22px reference margin), which is the one corner nothing else
+		-- uses during a boss: the top-centre band is the HP bar + announce banner,
+		-- and the bottom-right is the touch EAT button.
+		BossPrize = if bossPrize ~= nil
+			then React.createElement(Components.BossPrizeCard, {
+				name = "BossPrize",
+				visible = showGame and cakePhase == "boss",
+				anchorPoint = Vector2.new(1, 0),
+				position = UDim2.fromScale(hud.BossPrizePosition.X, hud.BossPrizePosition.Y),
+				size = UDim2.fromScale(0.5, hud.BossPrizeHeight),
+				captionText = locale.T("boss-prize-caption"),
+				petName = bossPrize.petName,
+				rarity = bossPrize.rarity,
+				iconName = bossPrize.iconName,
+				zIndex = 2,
+			})
+			else nil,
 		Announce = React.createElement(Components.AnnounceBanner, {
 			name = "Announce",
 			anchorPoint = Vector2.new(0.5, 0),
@@ -775,6 +823,28 @@ local function App()
 				else nil,
 			zIndex = 2,
 		}),
+	}
+
+	return React.createElement("Frame", {
+		Name = "App",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+	}, {
+		-- The root gui is FULL-BLEED so panels/overlays and their scrims cover the
+		-- whole screen including the topbar strip (UiRoot). The HUD must still not
+		-- slide UNDER the topbar, so it gets its own layer occupying exactly the
+		-- region the root gui used to: offset down by the gui inset, shortened by
+		-- the same amount. That is an identity transform on every HUD position
+		-- above — which is the point: the inset fix moved no HUD element.
+		Hud = React.createElement("Frame", {
+			Name = "Hud",
+			Position = UDim2.new(0, 0, 0, topInset),
+			Size = UDim2.new(1, 0, 1, -topInset),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			ZIndex = 1,
+		}, hudChildren),
 
 		-- ── panels (zIndex 50) ───────────────────────────────────────────
 		Pets = React.createElement(Components.PetsInspectPanel, {
@@ -829,7 +899,7 @@ local function App()
 		}),
 		Upgrades = React.createElement(Components.HexTreeOverlay, {
 			name = "UpgradesOverlay",
-			visible = showLobby and state.openPanel == "Upgrades",
+			visible = state.openPanel == "Upgrades",
 			zIndex = 60,
 			treeKey = currentTree,
 			nodes = upgradeTree.nodes,
@@ -866,58 +936,6 @@ local function App()
 				end
 			end,
 		}),
-		Rebirth = React.createElement(Components.RebirthPanel, {
-			name = "RebirthPanel",
-			title = locale.T("title-rebirth"),
-			visible = state.openPanel == "Rebirth",
-			size = UDim2.fromScale(rebirthScale.X, rebirthScale.Y),
-			zIndex = 50,
-			stats = {
-				{ label = locale.T("rebirth-stat-count"), value = tostring(rebirth and rebirth.rebirths or 0) },
-				{
-					label = locale.T("rebirth-stat-mult"),
-					value = `+{math.floor((rebirth and rebirth.rebirths or 0) * UpgradeConfig.rebirth.multPerLevel * 100)}%`,
-				},
-				{
-					label = locale.T("rebirth-stat-biome"),
-					-- "Next Biome" = the biome UNLOCKED BY this rebirth:
-					-- biomes[rebirths + 2] (server's `biome` is the current one).
-					value = locale.T(
-						`biome-{UpgradeConfig.rebirth.biomes[math.clamp((rebirth and rebirth.rebirths or 0) + 2, 1, #UpgradeConfig.rebirth.biomes)]}`
-					),
-				},
-			},
-			warnText = locale.T("rebirth-warning"),
-			costText = if rebirth and rebirth.nextCost
-				then locale.T("rebirth-cost", { n = formatNumber(rebirth.nextCost) })
-				else "",
-			buttonText = locale.T("btn-rebirth"),
-			canAfford = canRebirth,
-			onRebirth = function()
-				if callbacks.onDoRebirth then
-					callbacks.onDoRebirth()
-				end
-			end,
-			onClose = function()
-				AppRoot.Open(nil)
-			end,
-		}),
-		Quests = React.createElement(Components.QuestsPanel, {
-			name = "QuestsPanel",
-			title = locale.T("title-quests"),
-			visible = state.openPanel == "Quests",
-			size = UDim2.fromScale(portraitScale.X, portraitScale.Y),
-			zIndex = 50,
-			quests = questRows,
-			onClaim = function(id)
-				if callbacks.onClaimQuest then
-					callbacks.onClaimQuest(id)
-				end
-			end,
-			onClose = function()
-				AppRoot.Open(nil)
-			end,
-		}),
 		DailyRewards = React.createElement(Components.RewardsPanel, {
 			name = "DailyRewardsPanel",
 			title = locale.T("title-daily-rewards"),
@@ -935,41 +953,18 @@ local function App()
 				AppRoot.Open(nil)
 			end,
 		}),
-		TimeRewards = React.createElement(Components.RewardsPanel, {
-			name = "TimeRewardsPanel",
-			title = locale.T("title-time-rewards"),
-			visible = state.openPanel == "TimeRewards",
-			size = UDim2.fromScale(wideScale.X, wideScale.Y),
-			zIndex = 50,
-			cards = timeCards,
-			footerText = timeFooter,
-			onClaim = function(index)
-				if callbacks.onClaimTime then
-					callbacks.onClaimTime(index)
-				end
-			end,
-			onClose = function()
-				AppRoot.Open(nil)
-			end,
-		}),
 		Shop = React.createElement(Components.ShopPanel, {
 			name = "ShopPanel",
 			title = locale.T("title-shop"),
 			visible = state.openPanel == "Shop",
 			size = UDim2.fromScale(shopScale.X, shopScale.Y),
 			zIndex = 50,
-			sections = shopSections,
+			tabs = shopTabs,
 			-- The shop shows what you can spend. Gem packs with no balance
 			-- anchor next to them are just numbers.
 			balances = shopBalances,
-			onActivated = function(rowId)
-				if callbacks.onShopActivated then
-					callbacks.onShopActivated(rowId)
-				end
-			end,
-			onClose = function()
-				AppRoot.Open(nil)
-			end,
+			onActivated = onShopActivated,
+			onClose = closeShop,
 		}),
 		Matchmaking = React.createElement(Components.MatchmakingPanel, {
 			name = "MatchmakingPanel",

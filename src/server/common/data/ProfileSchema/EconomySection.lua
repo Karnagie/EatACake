@@ -1,7 +1,7 @@
 --[[
 	Profile section: economy — the two currencies (GDD §10):
-	  calories — soft, earned in the gym, spent on upgrades, wiped on rebirth
-	  gems     — hard, persistent, from finds / quests / Robux
+	  calories — soft, earned in the gym, spent on upgrades (never reset)
+	  gems     — hard, persistent, from finds / rewards / Robux
 
 	v2 migration: the template's single `gold` became `gems` (hard currency).
 ]]

@@ -6,7 +6,7 @@ Tags: lobby, matchmaking, teleport, persistence, cake-cycle, ui-kit, shop, split
 
 Entering any authored lobby GroupToucher must open easy/medium/hard + 1–4
 selection, show party/countdown on its world labels, and send the standing party
-to game place `91726662453442` after 30 seconds. Win/loss returns to lobby;
+to game place `136881957250247` after 30 seconds. Win/loss returns to lobby;
 touching the authored chocolate opens Shop; gameplay HUD/input is hidden in lobby.
 
 ## Context

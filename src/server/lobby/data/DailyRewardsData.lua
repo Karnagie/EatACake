@@ -18,14 +18,25 @@ local DailyRewardsData = {}
 DailyRewardsData.daysCount = 7
 
 -- day (1..daysCount) -> reward descriptor. Day 7 = guaranteed Epic+ pet
--- (GDD §12.2 — the streak's headline prize).
+-- (GDD §12.2 — the streak's headline prize) and is deliberately untouched.
+--
+-- GEM AMOUNTS ARE A RATIO, NOT A FEEL. The old week paid 90 gems against a
+-- cake worth ~196; the find table now pays ~496 per solo cake, so leaving the
+-- old numbers in place would have quietly devalued the login track to a fifth
+-- of its former weight. 250 across the week holds the original ratio (~0.5 of
+-- a cake) — which is also half of one 500-gem boost, so a full week of logins
+-- is a real step toward one rather than a rounding error.
+--
+-- The two BOOST days spend the track's variety budget on the boosts a new
+-- player has no other way to try: bigger bites (day 2, while the tree is still
+-- empty) and x2 calories (day 5, once there is a run worth doubling).
 DailyRewardsData.days = {
-	[1] = { kind = "gems", amount = 10 },
-	[2] = { kind = "gems", amount = 15 },
-	[3] = { kind = "boost", boostId = "golden-slice" },
-	[4] = { kind = "gems", amount = 25 },
-	[5] = { kind = "egg", eggType = "cycle" },
-	[6] = { kind = "gems", amount = 40 },
+	[1] = { kind = "gems", amount = 25 },
+	[2] = { kind = "boost", boostId = "bite-15m" }, -- Extra Bite Size
+	[3] = { kind = "gems", amount = 50 },
+	[4] = { kind = "gems", amount = 75 },
+	[5] = { kind = "boost", boostId = "boost-15m" }, -- x2 Calories
+	[6] = { kind = "gems", amount = 100 },
 	[7] = { kind = "egg", eggType = "epic7" },
 }
 

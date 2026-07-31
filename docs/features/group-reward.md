@@ -27,7 +27,7 @@ seconds).
 
 ## UI
 No dedicated window: a row in the Shop panel's "Free" section
-(`LocalShopService.BuildSections`), FREE button, owned-dim when claimed.
+(`LocalShopService.BuildTabs`), FREE button, owned-dim when claimed.
 
 ## Files
 Server: `SocialData`, `SocialSection`, `SocialService`, `GroupRewardSubs`.

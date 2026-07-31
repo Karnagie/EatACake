@@ -33,6 +33,9 @@ was skipped — that is a failure, not reuse.
    pixel grid). Inside a component, frames are built per that recipe — what's
    forbidden is ad-hoc UI that ignores the recipe and Theme, and re-inventing
    an element that already exists in the catalog.
+   ⚠ **§2's thickness table is the BUTTON recipe. Cards use §2b** — even
+   outline + internal zones. Applying the button bevel (bottom lip 2x+) to a
+   card is exactly how the shop shipped cells that read as stretched buttons.
 4. **Scale only. Zero `Offset` anywhere.** Every self-contained element holds
    its proportions with its own `UIAspectRatioConstraint`.
 5. **All gradients are vertical** (`Rotation = 90`). On rotated parts,
@@ -92,7 +95,10 @@ With Studio MCP connected: start play mode, screenshot, zoom into each new
 element, and check against this list; exercise every interaction (instance-path
 clicks via `user_mouse_input` work well: `LocalPlayer.PlayerGui.UiRoot...`).
 
-- [ ] Dark outline visibly THICKER at the bottom (~2x top) on buttons/cards
+- [ ] Dark outline visibly THICKER at the bottom (~2x top) on BUTTONS; on CARDS
+      it is EVEN (≤1.5x) — **measure it off the live instances** (`Face.AbsolutePosition
+      - Outer.AbsolutePosition` vs the same at the bottom), do not eyeball a
+      whole-panel screenshot, where a 30px lip reads as a drop shadow
 - [ ] Bright rim flash at the TOP edge of buttons/headers
 - [ ] Face gradient darkens sharply near the bottom edge (dark "lip")
 - [ ] Panel: shadow slab pokes out below the body; header overlaps body top

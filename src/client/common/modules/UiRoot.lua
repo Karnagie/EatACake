@@ -32,8 +32,20 @@ function UiRoot.Init()
 		screenGui = Instance.new("ScreenGui")
 		screenGui.Name = "UiRoot"
 		screenGui.ResetOnSpawn = false
-		screenGui.IgnoreGuiInset = false
-		screenGui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
+		-- FULL-BLEED (2026-07-30). This used to be CoreUISafeInsets, which shrank
+		-- the whole tree to below Roblox's ~36 px topbar — so every modal scrim
+		-- (the hex-tree dim, panel shells, the gym and reveal overlays) stopped
+		-- short of the top of the screen and the world stayed bright in that strip.
+		-- A modal that does not cover the screen is not modal. DeviceSafeInsets
+		-- still respects notches/rounded corners; only the CoreUI topbar is
+		-- ignored, which is exactly the inset that was in the way.
+		-- ⚠ Anything that must NOT slide under the topbar (the HUD) insets itself
+		-- by GuiService:GetGuiInset() — AppRoot's `Hud` layer does this, which
+		-- reproduces this gui's former coordinate space exactly, so no HUD element
+		-- moved. Input math that mixed the two spaces was fixed with this change
+		-- (see ScrollPane's scrollbar drag).
+		screenGui.IgnoreGuiInset = true
+		screenGui.ScreenInsets = Enum.ScreenInsets.DeviceSafeInsets
 		screenGui.SafeAreaCompatibility = Enum.SafeAreaCompatibility.FullscreenExtension
 		screenGui.ClipToDeviceSafeArea = true
 		screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling

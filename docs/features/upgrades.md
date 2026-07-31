@@ -11,29 +11,74 @@ honeycomb** UI (GDD §10), grouped in three categories:
 
 `upgrades.levels[id]` = tiers OWNED (0 = none, `#tiers` = maxed). Tier values +
 costs ONLY in `Shared/config/UpgradeConfig`; ALL derived numbers come from
-`StatsService` (server) / `LocalStatsService` (client mirror). The tree is a
-full-screen lobby overlay reserved for an authored `UpgradeStation`, NOT a HUD
-button; that lobby station is not placed yet, so the published opener remains
-intentionally unavailable (ADR-0009 Remaining).
+`StatsService` (server) / `LocalStatsService` (client mirror).
+⚠ The tier is no longer the whole story: `StatsService` also multiplies
+biteRadius / walkSpeed / capacity by any live timed BOOST, and the client mirror
+only learns about the bite one through a player attribute
+(`features/boosts.md`).
 
-## Progression (easy-mode retune 2026-07-19)
+## RUN-SCOPED (2026-07-30, ADR-0013) — the tree is not permanent meta
+Every profile load wipes `upgrades.levels` (all tiers → 0), `economy.calories`
+and the belly — which covers both halves of the rule "reset on entering the lobby
+AND on starting a new run", because the lobby↔game handoff reloads the profile on
+each teleport (ADR-0009). A run starts as a base eater and buys the WHOLE tree
+back inside one cake. Owner: common `RunResetSubs`, fired from
+`PlayerLifecycleSubs`'s `OnProfileLoaded` hook (BEFORE any state is replicated —
+see `features/persistence.md`); flags in `UpgradeConfig.run`
+(`resetOnLoad`/`resetBelly`). Meta that survives: gems, squishies, daily rewards,
+shop purchases + gamepasses, timed boosts (`features/boosts.md` — the whole
+reason a lobby purchase is worth anything), `progress.lifetime*`.
+⚠ `progress.lifetimeCalories` is a DIFFERENT field from `economy.calories` (only
+the leaderboard reads it) and is never reset.
+
+## The ONLY entry point is the checkpoint prompt
+There is **no Upgrades button in the HUD, in either place** (removed 2026-07-30).
+The tree opens from the authored `UpgradeStation` **ProximityPrompt** on the
+checkpoint's computer — built by `MapService.buildCheckpoint` (`ActionText
+"Upgrades"`, `HoldDuration 0`, range `MapConfigData.checkpoint.upgradePromptRange`,
+enabled from creation) and handled by `UpgradesSubsClient`'s
+`ProximityPromptService.PromptTriggered`. You stand at the checkpoint after every
+belly burn, so that is already where the purchase decision happens; a HUD button
+is a second door into the same room.
+⚠ Do not re-read the pre-2026-07-30 claim that the tree "was reachable from
+NOWHERE" and needed a HUD button — the game checkpoint's prompt was live the whole
+time. `AppRoot`'s meta menu is `Visible = showLobby`, so that button only ever
+existed in the LOBBY, where a run-scoped tree has nothing to spend.
+`LocalUpgradeTree.AnyAffordable` (the old badge feed) now has no caller and is
+kept, not wired. Service + subs + `UpgradesUiData` stay COMMON.
+
+## Progression (re-priced 2026-07-30, ADR-0013)
 Each stat is ~5 tiers (`instantBurn` 4). `StatsService.upgradeValue` returns
-`tier==0 and def.base or def.tiers[min(tier,#tiers)].value`. Values + costs were
-retuned for the EASY-MODE loop (`2026-07-19_easy-mode-balance.md`), NOT to
-reproduce the old per-level formula:
-- **`capacity` base 150 → 2600** — the belly holds ~50–160 BITES (was ~4), so a
-  full belly is ~50 s of eating; THE fix for "1 bite = full".
-- **Eating stats flattened**: `biteDepth` max 26 → 1.8, `biteRadius` 12 → 4.2,
-  `eatSpeed` 41 → 5.2 — total eating power grows ~4× over the tree (was ~2000×),
-  so endgame no longer eats the whole cake in a handful of bites ("reduce final
-  sizes").
-- **`gymEff` max 4.32 → 2.35**; gym drain stats (`burnSpeed`/`burnPerTap`/
-  `instantBurn`) keep their VALUES, only costs rescaled.
-- **Costs pace the ~5-tier ramp across the full ~40-min solo cake.**
+`tier==0 and def.base or def.tiers[min(tier,#tiers)].value`.
+- **`capacity` base 84000** — the belly is in FOOD units (`removed × the band's
+  density`), and 84000 ≈ 90 s of eating per fill at every depth.
+- **`biteRadius` base 3.4 is the strongest eating stat**: a bite clears to the
+  layer floor, so clear time scales with bite AREA. It is multiplied by the
+  band's `scoop` (2.23 icing → 0.558 core), so a base eater takes a ~7.6-stud
+  spoonful of frosting and a ~1.9-stud chip of the core.
+- **`biteDepth` is bite STRENGTH** against `sim.biteClearRefDepth`: it widens the
+  fully-cleared core of the scoop (and lets you take a dense band in one bite
+  instead of three).
+- **`runSpeed` base 20 matters more than it looks**: on the wide top layers the
+  scoop clears cake faster than you can walk over it.
+
+**Costs — the whole tree is 772,250 calories** (was 16,019,500; VALUES unchanged,
+only prices). Target: every tier owned by the time HALF the cake is eaten.
+Measured by `tools/balance-model/pacing.py --candidate` (5 seeds, solo easy):
+clear **38.9 min**, tree complete at **46% of the cake** (5/5 seeds) around the
+27-minute mark, ~18 gym trips. Total eating power still grows ~2.4× end to end.
+⚠ `instantBurn` is priced at ~0.35× the others' scale: at a flat scale its 4 tiers
+were 48% of the whole tree, so one gym-convenience stat crowded out every stat
+that touches the cake.
+⚠ **Cost changes are coupled to the 50%-of-cake target** — re-measure with the
+model, don't eyeball. The old numbers were calibrated against a simulation that
+never bought tiers mid-run, which is how a documented "40 min" shipped as a real
+1 h 01 m.
 
 Tier COUNT and the remote contract are unchanged → **no profile migration** (a
-returning save's `levels[id]` still means tier count). Rebirth block
-(`UpgradeConfig.rebirth`) unchanged (still resets these ids).
+returning save's `levels[id]` still means tier count; the run reset only changes
+values, not shape — P2). The `UpgradeConfig.rebirth` block is GONE with the
+rebirth system; what resets tiers now is the run reset above.
 
 ## Honeycomb (UpgradeTreeConfig + LocalUpgradeTree)
 - **root** tree: centre LOGO hex + one CATEGORY hex per group (eating / body /
@@ -63,7 +108,7 @@ one tier). Costs recomputed client-side — only levels travel. **Remote contrac
 UNCHANGED** by the tier rework (still `BuyUpgrade(statId)`).
 
 ## Open/close + modal (UpgradesSubsClient — R4)
-The station `ProximityPrompt` ("UpgradeStation") fires client-side →
+The station `ProximityPrompt` ("UpgradeStation") — the sole opener — fires client-side →
 `ProximityPromptService.PromptTriggered` → `AppRoot.Open("Upgrades")`. Opening a
 menu is LOCAL UI — no server round-trip. On open it becomes MODAL: the cloned
 `Shared.UIKit.Templates.UpgradeTreeBlur` dims the world, the camera is frozen
@@ -77,11 +122,12 @@ top-right closes (restores camera/prompts and releases only its own movement
 lock; an active teleport lock remains). Reopening resets the
 nav-stack to root (AppRoot effect on `openPanel=="Upgrades"`).
 
-**Place-split status:** the subscription, overlay, and server handler are
-lobby-only, but the authored `LobbyEnvironment` does not yet contain an
-`UpgradeStation` prompt. Therefore the published lobby currently has no world
-opener; the old game checkpoint prompt is intentionally inactive. Re-author the
-station in the lobby before advertising this entry point (ADR-0009 Remaining).
+**Place status:** subscription, overlay and server handler are COMMON, so the
+overlay would *work* in either place, but only the GAME place authors an
+`UpgradeStation` prompt (the checkpoint computer), so in practice the tree is
+match-only — which matches the run-scoped design. Authoring a prompt in
+`LobbyEnvironment` would add a lobby entry point; don't, unless the tree stops
+being run-scoped.
 
 ## GUI contract
 `HexTreeOverlay` (zIndex 60, above panels): dim scrim + a clipped square
@@ -128,14 +174,16 @@ bulletproof alternative (if ever needed) is to store tiers under a NEW key so ol
 servers see it absent.
 
 ## Files
-Server: `ProfileSchema/UpgradesSection` (v2), `services/UpgradeService`,
-`StatsService`, `subscriptions/UpgradeSubs`; `data/MapConfigData` (station),
+Server (all COMMON): `ProfileSchema/UpgradesSection` (v2),
+`services/UpgradeService` (+`ResetTiers`), `StatsService`,
+`subscriptions/UpgradeSubs`, `subscriptions/RunResetSubs` (the run wipe);
+`data/MapConfigData` (station),
 `services/MapService` (builds/rides the computer). Shared:
 `config/UpgradeConfig` (tiers), `config/UpgradeTreeConfig` (honeycomb), `HexUtil`
 (axial math), `UIKit/Theme` (`HexTree`), `UIKit/Components/HexNode` +
 `HexTreeOverlay`. Client: `LocalStatsService`, `LocalUpgradeTree` (view-model),
-`AppRoot` (overlay + nav-stack), `subscriptions/UpgradesSubsClient` (prompt
-open/close), lobby `LobbyUiData` (modal config/state),
+`AppRoot` (overlay + nav-stack; NO HUD button), `subscriptions/UpgradesSubsClient`
+(HUD/prompt open/close), common `data/UpgradesUiData` (modal config/state),
 `PlayerControlData`/`PlayerControlService`, `UIKit/Templates/UpgradeTreeBlur`,
 `data/LocaleData` (`hex-*`, `cat-*`, `upgrade-*-desc`).
 The old flat `UIKit/UpgradesPanel`/`UpgradeRow` are now UNUSED (kept, not wired).

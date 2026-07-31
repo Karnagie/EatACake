@@ -1,18 +1,14 @@
 --[[
-	RewardsSubs — login/playtime reward domain (R4): Daily Rewards + Time
-	Rewards. Wires ClaimDailyReward / ClaimTimeReward: validates via the
-	services (R3 — they return what's owed), grants via RewardGrantSubs, then
-	pushes fresh state with a `granted` descriptor for the claim toast.
+	RewardsSubs — login reward domain (R4): Daily Rewards. Wires
+	ClaimDailyReward: validates via the service (R3 — it returns what's owed),
+	grants via RewardGrantSubs, then pushes fresh state with a `granted`
+	descriptor for the claim toast.
 
-	SendDaily/SendTime push initial state on join (called by
-	PlayerLifecycleSubs). Node/claimed lists are sent as ARRAYS (RemoteEvents
-	stringify a dict's integer keys); each node carries its own day/index.
-
-	Owns the periodic playtime flush loop: persisted `today` stays fresh so
-	ProfileStore's auto-save always snapshots a near-current value.
+	SendDaily pushes initial state on join (called by PlayerLifecycleSubs).
+	The node list is sent as an ARRAY (RemoteEvents stringify a dict's integer
+	keys); each node carries its own day.
 ]]
 
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Net = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Net"))
 local Log = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Log"))
@@ -23,8 +19,28 @@ local RewardGrantSubs
 
 local RewardsSubs = {}
 
-local DailyRewardService, TimeRewardService, PersistenceService
-local uDaily, uTime
+local DailyRewardService, PersistenceService
+local uDaily
+local boostDefs -- TreasureConfig.boosts (see grantable)
+
+local SCOPE = "RewardsSubs"
+
+-- Can this descriptor actually be paid out? `HasHandler` alone is not enough for
+-- a `boost`: StatsService.GrantBoost answers an unknown boostId with `false`, so
+-- a typo'd id passes the handler check, CONSUMES the day, and grants nothing.
+-- DailyRewardsData shipped `boostId = "golden-slice"` — a FIND id — once already.
+local function grantable(reward): (boolean, string?)
+	if type(reward) ~= "table" then
+		return false, "not a table"
+	end
+	if not RewardGrantSubs.HasHandler(reward.kind) then
+		return false, `kind '{tostring(reward.kind)}' has no grant handler`
+	end
+	if reward.kind == "boost" and boostDefs ~= nil and boostDefs[tostring(reward.boostId)] == nil then
+		return false, `boostId '{tostring(reward.boostId)}' is not a TreasureConfig.boosts def`
+	end
+	return true
+end
 
 local function dailyPayload(userId: number, granted)
 	local state = DailyRewardService.GetState(userId)
@@ -45,29 +61,6 @@ local function dailyPayload(userId: number, granted)
 	return { day = state.day, claimable = state.claimable, nodes = nodes, granted = granted }
 end
 
-local function timePayload(userId: number, granted)
-	local state = TimeRewardService.GetState(userId)
-	if not state then
-		return nil
-	end
-	local nodes = {}
-	for index = 1, state.count do
-		local milestone = state.milestones[index]
-		if milestone then
-			local node = table.clone(milestone.reward)
-			node.index = index
-			node.seconds = milestone.seconds
-			table.insert(nodes, node)
-		end
-	end
-	local claimed = {}
-	for index in pairs(state.claimed) do
-		table.insert(claimed, index)
-	end
-	table.sort(claimed)
-	return { secondsToday = state.secondsToday, claimed = claimed, nodes = nodes, granted = granted }
-end
-
 --API
 function RewardsSubs.SendDaily(player: Player)
 	if uDaily == nil then
@@ -83,35 +76,21 @@ function RewardsSubs.SendDaily(player: Player)
 end
 
 --API
-function RewardsSubs.SendTime(player: Player)
-	if uTime == nil then
-		Log.Warn("RewardsSubs", `SendTime({player.Name}) before Start ran — push dropped`)
-		return
-	end
-	local payload = timePayload(player.UserId)
-	if payload then
-		uTime:FireClient(player, payload)
-	else
-		Log.Warn("RewardsSubs", `SendTime({player.Name}): profile not loaded — push dropped`)
-	end
-end
-
---API
 -- Join-state hook: PlayerLifecycleSubs calls this after profile load + ClientReady.
 function RewardsSubs.PushInitialState(player: Player)
 	RewardsSubs.SendDaily(player)
-	RewardsSubs.SendTime(player)
 end
 
 function RewardsSubs.Start(data, services, subscriptions)
 	RewardGrantSubs = subscriptions.RewardGrantSubs
 	local dailyData = data.DailyRewardsData
-	local timeData = data.TimeRewardsData
 	DailyRewardService = services.DailyRewardService
-	TimeRewardService = services.TimeRewardService
 	PersistenceService = services.PersistenceService
+	boostDefs = data.CakeConfigData and data.CakeConfigData.treasures and data.CakeConfigData.treasures.boosts
+	if boostDefs == nil then
+		Log.Warn(SCOPE, "TreasureConfig.boosts missing — a boost day with a typo'd id will consume the claim and grant nothing")
+	end
 	uDaily = Net.Update("DailyRewardUpdate")
-	uTime = Net.Update("TimeRewardUpdate")
 
 	Net.Remote("ClaimDailyReward").OnServerEvent:Connect(function(player)
 		local userId = player.UserId
@@ -120,11 +99,14 @@ function RewardsSubs.Start(data, services, subscriptions)
 			return -- profile not loaded
 		end
 		local upcoming = state.days[state.day]
-		if upcoming and not RewardGrantSubs.HasHandler(upcoming.kind) then
-			-- Mistuned data (kind with no registered handler): do NOT consume
-			-- the claim — the player would lose the day for nothing.
-			warn(`[RewardsSubs] days[{state.day}] kind '{tostring(upcoming.kind)}' has no grant handler`)
-			return
+		if upcoming ~= nil then
+			local ok, why = grantable(upcoming)
+			if not ok then
+				-- Mistuned data: do NOT consume the claim — the player would lose
+				-- the day for nothing.
+				Log.Warn(SCOPE, `days[{state.day}] cannot be granted ({tostring(why)}) — claim REFUSED rather than consumed`)
+				return
+			end
 		end
 		local reward, day = DailyRewardService.Claim(userId)
 		if not reward then
@@ -139,72 +121,23 @@ function RewardsSubs.Start(data, services, subscriptions)
 		PersistenceService.Save(userId)
 	end)
 
-	Net.Remote("ClaimTimeReward").OnServerEvent:Connect(function(player, index)
-		if type(index) ~= "number" or index ~= index then
-			return
-		end
-		index = math.floor(index)
-		local userId = player.UserId
-		local state = TimeRewardService.GetState(userId)
-		if not state then
-			return -- profile not loaded
-		end
-		local milestone = state.milestones[index]
-		if milestone and not RewardGrantSubs.HasHandler(milestone.reward.kind) then
-			Log.Warn("RewardsSubs", `milestones[{index}] kind '{tostring(milestone.reward.kind)}' has no grant handler`)
-			return
-		end
-		local reward = TimeRewardService.Claim(userId, index)
-		if not reward then
-			RewardsSubs.SendTime(player) -- resync (not reached / already claimed)
-			return
-		end
-		local granted = RewardGrantSubs.Grant(player, reward, "time")
-		if granted then
-			granted.index = index
-		end
-		uTime:FireClient(player, timePayload(userId, granted))
-		PersistenceService.Save(userId)
-	end)
-
-	-- Playtime flush loop: fold live session time into the profile so
-	-- ProfileStore's ~300s auto-save persists a near-current `today`.
-	task.spawn(function()
-		while true do
-			task.wait(timeData.flushInterval)
-			for _, player in ipairs(Players:GetPlayers()) do
-				TimeRewardService.FlushSession(player.UserId)
-			end
-		end
-	end)
-
 	-- Config validation — deferred so it runs AFTER every subscription's
 	-- Start has registered its reward kinds (bootstrap runs without yields).
 	task.defer(function()
 		for day = 1, dailyData.daysCount do
 			local reward = dailyData.days[day]
 			if type(reward) ~= "table" then
-				warn(`[RewardsSubs] DailyRewardsData.days[{day}] is missing (daysCount = {dailyData.daysCount})`)
-			elseif not RewardGrantSubs.HasHandler(reward.kind) then
-				warn(`[RewardsSubs] DailyRewardsData.days[{day}] kind '{tostring(reward.kind)}' has no grant handler`)
+				Log.Warn(SCOPE, `DailyRewardsData.days[{day}] is missing (daysCount = {dailyData.daysCount})`)
+			else
+				local ok, why = grantable(reward)
+				if not ok then
+					Log.Warn(SCOPE, `DailyRewardsData.days[{day}] is not grantable: {tostring(why)} — that day would refuse to claim`)
+				end
 			end
 		end
 		for day in pairs(dailyData.days) do
 			if type(day) ~= "number" or day < 1 or day > dailyData.daysCount then
-				warn(`[RewardsSubs] DailyRewardsData.days[{tostring(day)}] is outside 1..{dailyData.daysCount} and unreachable`)
-			end
-		end
-		for index = 1, timeData.count do
-			local milestone = timeData.milestones[index]
-			if type(milestone) ~= "table" or type(milestone.seconds) ~= "number" or type(milestone.reward) ~= "table" then
-				warn(`[RewardsSubs] TimeRewardsData.milestones[{index}] is missing/invalid (count = {timeData.count})`)
-			elseif not RewardGrantSubs.HasHandler(milestone.reward.kind) then
-				warn(`[RewardsSubs] TimeRewardsData.milestones[{index}] kind '{tostring(milestone.reward.kind)}' has no grant handler`)
-			end
-		end
-		for index in pairs(timeData.milestones) do
-			if type(index) ~= "number" or index < 1 or index > timeData.count then
-				warn(`[RewardsSubs] TimeRewardsData.milestones[{tostring(index)}] is outside 1..{timeData.count} and unreachable`)
+				Log.Warn(SCOPE, `DailyRewardsData.days[{tostring(day)}] is outside 1..{dailyData.daysCount} and unreachable`)
 			end
 		end
 	end)

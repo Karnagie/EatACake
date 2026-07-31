@@ -1,18 +1,29 @@
 --[[
-	ProgressService — lifetime stats + rebirth ("Food Coma") logic over
-	profile section `progress` (GDD §9). R3: spending the rebirth cost and
-	resetting upgrades belong to EconomyService / UpgradeService — the
-	subscription orchestrates; this service owns only the progress section.
+	ProgressService — lifetime stats over profile section `progress` (GDD §9).
+
+	⚠ REBIRTH REMOVED (2026-07-26, by request). `RebirthCost` / `ApplyRebirth`
+	are gone with the rest of the system (docs/flow/2026-07-26_cake-pacing-
+	rebalance.md). The profile still CARRIES `progress.rebirths` (always 0) so
+	no schema version bump / migration was needed, and `GetRebirths` still reads
+	it for the leaderstat. Progression now lives in the persistent upgrade tree
+	and the difficulty ladder instead.
+
+	Biomes were unlocked by rebirth level; with no rebirths every cake uses the
+	FIRST biome (`biomes[1]`). `BiomeFor` keeps its signature so the cake-spawn
+	path is unchanged and re-introducing an unlock rule stays a one-liner.
 ]]
 
 local ProgressService = {}
 
 local profileData
-local upgradeCfg -- CakeConfigData.upgrades (rebirth block)
+local cakeCfg -- CakeConfigData.cake (biomeOrder)
+
+-- Fallback only if the shared config never resolves (never crash a spawn).
+local DEFAULT_BIOME = "factory"
 
 function ProgressService.Init(data)
 	profileData = data.PlayerProfileData
-	upgradeCfg = data.CakeConfigData.upgrades
+	cakeCfg = data.CakeConfigData and data.CakeConfigData.cake
 end
 
 local function progress(userId: number)
@@ -30,42 +41,60 @@ function ProgressService.AddStat(userId: number, key: string, amount: number)
 end
 
 --API
+-- How many DISTINCT buried-find kinds this player has ever dug up. The set, not
+-- the count of pickups — a countable collection is what gives a long run a goal
+-- (features/treasures.md).
+function ProgressService.CountFindKinds(userId: number): number
+	local section = progress(userId)
+	if section == nil or type(section.foundKinds) ~= "table" then
+		return 0
+	end
+	local n = 0
+	for _ in pairs(section.foundKinds) do
+		n += 1
+	end
+	return n
+end
+
+--API
+-- Records that this player has now dug up `findId` at least once. Returns TRUE
+-- only the FIRST time — that return value IS the "new discovery!" moment
+-- (features/treasures.md). Safe to call on every collect.
+function ProgressService.MarkFindDiscovered(userId: number, findId: string): boolean
+	local section = progress(userId)
+	if section == nil or type(findId) ~= "string" then
+		return false
+	end
+	if type(section.foundKinds) ~= "table" then
+		section.foundKinds = {}
+	end
+	if section.foundKinds[findId] then
+		return false
+	end
+	section.foundKinds[findId] = true
+	return true
+end
+
+--API
+-- Always 0 now that rebirth is removed; kept for the leaderstat + summary.
 function ProgressService.GetRebirths(userId: number): number?
 	local section = progress(userId)
 	return section and section.rebirths
 end
 
 --API
--- Cost of the player's NEXT rebirth in calories.
-function ProgressService.RebirthCost(userId: number): number?
-	local section = progress(userId)
-	if not section then
-		return nil
+-- Biome for a rebirth level. Rebirth is gone, so this is always the first
+-- biome; the argument is kept so callers (CakeCycleSubs) need no change.
+function ProgressService.BiomeFor(_rebirths: number): string
+	local order = cakeCfg and cakeCfg.biomeOrder
+	if type(order) == "table" and order[1] ~= nil then
+		return order[1]
 	end
-	return math.floor(upgradeCfg.rebirth.baseCost * upgradeCfg.rebirth.growth ^ section.rebirths)
+	return DEFAULT_BIOME
 end
 
 --API
--- Biome unlocked at the player's rebirth level.
-function ProgressService.BiomeFor(rebirths: number): string
-	local biomes = upgradeCfg.rebirth.biomes
-	return biomes[math.clamp(rebirths + 1, 1, #biomes)]
-end
-
---API
--- Applies the rebirth AFTER the subscription spent the cost and reset the
--- upgrades. Returns the new rebirth count.
-function ProgressService.ApplyRebirth(userId: number): number?
-	local section = progress(userId)
-	if not section then
-		return nil
-	end
-	section.rebirths += 1
-	return section.rebirths
-end
-
---API
--- Snapshot for the client (rebirth panel + leaderboards).
+-- Snapshot for the client (HUD stats + leaderboards).
 function ProgressService.Summary(userId: number)
 	local section = progress(userId)
 	if not section then
@@ -76,8 +105,8 @@ function ProgressService.Summary(userId: number)
 		lifetimeCalories = section.lifetimeCalories,
 		cakesEaten = section.cakesEaten,
 		findsCollected = section.findsCollected,
+		findKindsFound = ProgressService.CountFindKinds(userId),
 		biggestBelly = section.biggestBelly,
-		nextCost = ProgressService.RebirthCost(userId),
 		biome = ProgressService.BiomeFor(section.rebirths),
 	}
 end

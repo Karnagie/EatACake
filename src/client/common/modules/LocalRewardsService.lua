@@ -1,8 +1,10 @@
 --[[
-	LocalRewardsService — view-model mapping for the reward windows (R2,
+	LocalRewardsService — view-model mapping for the daily reward window (R2,
 	logic only, no React, no .Connect). Turns server payload snapshots into
 	DayCard props for UIKit.RewardsPanel; AppRoot renders them.
-	Each card carries an `iconName` (Theme.Icons key) for its reward kind.
+	Each card carries an `iconName` (Theme.Icons key) for its reward kind — and
+	for a BOOST, for its specific boostId: the track hands out several different
+	boosts now, so one generic "x2 Boost" label would advertise the wrong perk.
 
 	Daily state machine (per card):
 	  claimable — day == current and claimable
@@ -11,30 +13,19 @@
 	              across the Day N -> Day 1 loop boundary
 	  tomorrow  — the day that unlocks on the next UTC day
 	  locked    — everything else
-
-	Time cards: claimed / claimable (elapsed >= threshold) / locked with a
-	live countdown (AppRoot ticks a re-render each second while open).
 ]]
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Log = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Log"))
+
 local LocalRewardsService = {}
+
+local SCOPE = "LocalRewardsService"
 
 local locale
 
 function LocalRewardsService.Init(data)
 	locale = data.LocaleData
-end
-
---API
--- "m:ss" under an hour, "h:mm:ss" above.
-function LocalRewardsService.FormatClock(seconds: number): string
-	seconds = math.max(0, math.floor(seconds))
-	local h = seconds // 3600
-	local m = (seconds % 3600) // 60
-	local s = seconds % 60
-	if h > 0 then
-		return string.format("%d:%02d:%02d", h, m, s)
-	end
-	return string.format("%d:%02d", m, s)
 end
 
 -- Reward kind -> Theme.Icons name. Art carries the reward far faster than
@@ -45,12 +36,50 @@ local REWARD_ICON = {
 	boost = "UiBoost",
 }
 
+-- boostId -> the label key + art for ITS card. There used to be one boost in
+-- the game and every "boost" descriptor rendered as one generic "x2 Boost" with
+-- one icon; with four of them the login track would advertise the wrong perk.
+-- Ids are TreasureConfig.boosts keys (ShopData grants them by the same id), and
+-- an unknown one falls back to the generic label rather than rendering a blank.
+--
+-- `key` is the DAY-CARD label, which is not always the boost's canonical name:
+-- the reward line lives in a 96px zone beside the art, so ~9 characters is the
+-- budget. "boost-15m" therefore points at the generic `label-boost` ("x2
+-- Boost", 8) rather than its own `boost-15m` ("x2 Calories", 11) — the same
+-- perk, three characters cheaper.
+local BOOST_CARD = {
+	["boost-15m"] = { key = "label-boost", icon = "UiBoost" },
+	["bite-15m"] = { key = "boost-bite", icon = "UiStrength" },
+	["speed-15m"] = { key = "boost-speed", icon = "PassSpeed" },
+	["capacity-15m"] = { key = "boost-capacity", icon = "PassStorageX2" },
+}
+
+local function boostCard(desc)
+	local card = BOOST_CARD[desc.boostId]
+	if card == nil then
+		-- R8: the card still renders (generic label + generic art), but a boost
+		-- the reward tables can hand out and this table has never heard of is a
+		-- config drift someone has to fix.
+		Log.Once(
+			SCOPE,
+			`boost-unmapped-{tostring(desc.boostId)}`,
+			`reward boost '{tostring(desc.boostId)}' has no entry in BOOST_CARD — the card shows the generic `
+				.. "x2 boost label and icon. Add it here when adding a boost to TreasureConfig.boosts."
+		)
+	end
+	return card
+end
+
 local function rewardIcon(desc): string?
 	if type(desc) ~= "table" then
 		return nil
 	end
 	if desc.kind == "egg" then
 		return if desc.eggType == "epic7" then "Egg7" else "Egg1"
+	end
+	if desc.kind == "boost" then
+		local card = boostCard(desc)
+		return if card then card.icon else REWARD_ICON.boost
 	end
 	return REWARD_ICON[desc.kind]
 end
@@ -69,7 +98,8 @@ local function rewardText(desc): string
 		return locale.T(if desc.eggType == "epic7" then "label-egg-epic" else "label-egg")
 	end
 	if desc.kind == "boost" then
-		return locale.T("label-boost")
+		local card = boostCard(desc)
+		return locale.T(if card then card.key else "label-boost")
 	end
 	return locale.Tr(desc.name) or tostring(desc.kind)
 end
@@ -122,70 +152,6 @@ function LocalRewardsService.BuildDailyCards(daily)
 
 	local footer = if daily.claimable then locale.T("footer-daily-claim") else locale.T("footer-daily-tomorrow")
 	return cards, footer
-end
-
---API
--- Elapsed-today seconds from a payload snapshot + the receive-time clock.
-function LocalRewardsService.ElapsedToday(time): number
-	if type(time) ~= "table" then
-		return 0
-	end
-	return (time.secondsToday or 0) + math.max(0, os.clock() - (time.receivedClock or os.clock()))
-end
-
---API
--- time = { secondsToday, receivedClock, claimed = {[index]=true},
---          nodes = {[index]=desc(+seconds)} } -> (cards, footerText)
-function LocalRewardsService.BuildTimeCards(time)
-	local cards = {}
-	if type(time) ~= "table" then
-		return cards, ""
-	end
-	local elapsed = LocalRewardsService.ElapsedToday(time)
-	local count = 0
-	for index in pairs(time.nodes or {}) do
-		count = math.max(count, index)
-	end
-	for index = 1, count do
-		local desc = time.nodes[index]
-		local threshold = desc and desc.seconds or 0
-		local state, sub
-		if time.claimed[index] then
-			state = "claimed"
-			sub = locale.T("btn-claimed")
-		elseif elapsed >= threshold then
-			state = "claimable"
-			sub = locale.T("btn-claim")
-		else
-			state = "locked"
-			sub = LocalRewardsService.FormatClock(threshold - elapsed)
-		end
-		table.insert(cards, {
-			id = index,
-			title = LocalRewardsService.FormatClock(threshold),
-			rewardText = rewardText(desc),
-			iconName = rewardIcon(desc),
-			subText = sub,
-			state = state,
-		})
-	end
-	local footer = locale.T("footer-time-today", { t = LocalRewardsService.FormatClock(elapsed) })
-	return cards, footer
-end
-
---API
--- Any milestone reached and unclaimed right now? (HUD badge.)
-function LocalRewardsService.AnyTimeClaimable(time): boolean
-	if type(time) ~= "table" then
-		return false
-	end
-	local elapsed = LocalRewardsService.ElapsedToday(time)
-	for index, desc in pairs(time.nodes or {}) do
-		if not time.claimed[index] and elapsed >= (desc.seconds or math.huge) then
-			return true
-		end
-	end
-	return false
 end
 
 return LocalRewardsService

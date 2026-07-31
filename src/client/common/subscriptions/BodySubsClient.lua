@@ -3,7 +3,9 @@
 	  * StomachUpdate -> HUD state + floating calorie numbers (§7.3)
 	  * GymUpdate -> fat-burn overlay state (started/progress/result/stopped) +
 	    deflate celebration (coins, whoosh)
-	  * drives BallRollController (full-belly tumble) + PetFollowers per frame
+	  * drives BallRollController (full-belly tumble) per frame (the equipped
+	    squishies are stepped by PetsSubsClient instead — COMMON, so they also
+	    fly in the lobby, where this Start returns early)
 	  * gym taps: AppRoot's onGymTap callback -> GymTap remote (+ per-tap sound)
 	  * return to checkpoint: F key (ContextActionService) + AppRoot's
 	    onReturnCheckpoint callback -> ReturnToCheckpoint remote (server teleports
@@ -38,7 +40,6 @@ function BodySubsClient.Start(data, modules)
 	local SoundPool = modules.SoundPool
 	local ParticlePool = modules.ParticlePool
 	local BallRollController = modules.BallRollController
-	local PetFollowers = modules.PetFollowers
 	local PlayerControlService = modules.PlayerControlService
 
 	local player = Players.LocalPlayer
@@ -240,7 +241,6 @@ function BodySubsClient.Start(data, modules)
 
 	RunService.RenderStepped:Connect(function(dt)
 		BallRollController.Step(dt) -- full-belly -> tumble roll (every character)
-		PetFollowers.Step(dt)
 		checkAccum += dt
 		if checkAccum >= 0.2 then -- ~5 Hz poll (checkpoint button + gym prompt show/hide)
 			checkAccum = 0

@@ -3,8 +3,13 @@
 
 	ShopUpdate -> AppRoot.shop; GroupRewardUpdate -> AppRoot.group (the group
 	row lives in the shop's Free section). Row activation routes by id
-	prefix: "product:<key>" -> RequestPurchase, "pass:<key>" ->
-	RequestGamepass, "group" -> ClaimGroupReward.
+	prefix: "product:<key>" -> RequestPurchase or RequestGemPurchase depending
+	on the product's CURRENCY, "pass:<key>" -> RequestGamepass, "group" ->
+	ClaimGroupReward.
+
+	The currency lookup is rebuilt from every ShopUpdate rather than carried on
+	the cell: ShopPanel passes the row ID and nothing else to onActivated, so a
+	`currency` field on the view-model cell could never reach this handler.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -16,8 +21,14 @@ function ShopSubsClient.Start(data, modules)
 	local AppRoot = modules.AppRoot
 	local SoundPool = modules.SoundPool
 	local rPurchase = Net.Remote("RequestPurchase")
+	local rGemPurchase = Net.Remote("RequestGemPurchase")
 	local rGamepass = Net.Remote("RequestGamepass")
 	local rGroup = Net.Remote("ClaimGroupReward")
+
+	-- product key -> currency, refreshed by every ShopUpdate below. Empty until
+	-- the first payload lands, which is also when the shop first has cells to
+	-- click, so an unknown key here means a Robux product and never a gem one.
+	local currencyByKey: { [string]: string? } = {}
 
 	AppRoot.SetCallbacks({
 		onShopActivated = function(rowId)
@@ -26,9 +37,15 @@ function ShopSubsClient.Start(data, modules)
 			end
 			local productKey = string.match(rowId, "^product:(.+)$")
 			if productKey then
-				rPurchase:FireServer(productKey)
-				-- The Robux prompt is about to take over the screen: cue the
-				-- handoff, not the sale (ProcessReceipt owns the outcome).
+				if currencyByKey[productKey] == "gems" then
+					rGemPurchase:FireServer(productKey)
+				else
+					rPurchase:FireServer(productKey)
+				end
+				-- Cue the REQUEST, not the sale: on the Robux route the prompt is
+				-- about to take over the screen (ProcessReceipt owns the outcome),
+				-- and on the gem route the server can still refuse. Either way the
+				-- result arrives as a ShopUpdate/CurrencyUpdate, not as this click.
 				SoundPool.Play("purchaseStart")
 				return
 			end
@@ -48,9 +65,18 @@ function ShopSubsClient.Start(data, modules)
 		if type(payload) ~= "table" then
 			return
 		end
+		local products = if type(payload.products) == "table" then payload.products else {}
+		-- Rebuilt, not merged: a product dropped from the catalogue must stop
+		-- routing to the gem remote the moment it stops being sold.
+		table.clear(currencyByKey)
+		for _, product in ipairs(products) do
+			if type(product) == "table" and type(product.key) == "string" then
+				currencyByKey[product.key] = product.currency
+			end
+		end
 		AppRoot.Set({
 			shop = {
-				products = if type(payload.products) == "table" then payload.products else {},
+				products = products,
 				passes = if type(payload.passes) == "table" then payload.passes else {},
 			},
 		})

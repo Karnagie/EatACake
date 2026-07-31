@@ -66,13 +66,53 @@ local function loadedCakePlayers(): { Player }
 end
 
 local function fireCycle(payload)
-	if matchExpectedCount() == nil then
+	local matchMode = matchExpectedCount() ~= nil
+	-- The boss PRIZE is per-player (each fighter has their own pre-rolled squishy),
+	-- so once prizes exist this update stops being one broadcast payload. A
+	-- shallow clone per recipient rather than mutating one shared table: cheap
+	-- (<=4 players at 4 Hz) and it cannot leak one player's prize to another if a
+	-- future change makes the fire path yield.
+	local prizes = state.pendingPetRolls
+	local perPlayer = next(prizes) ~= nil
+	if not matchMode and not perPlayer then
 		uCycle:FireAllClients(payload)
 		return
 	end
-	for _, player in ipairs(loadedCakePlayers()) do
-		uCycle:FireClient(player, payload)
+	local recipients = if matchMode then loadedCakePlayers() else Players:GetPlayers()
+	for _, player in ipairs(recipients) do
+		if perPlayer then
+			local personal = table.clone(payload)
+			personal.pendingPet = prizes[player.UserId]
+			uCycle:FireClient(player, personal)
+		else
+			uCycle:FireClient(player, payload)
+		end
 	end
+end
+
+-- Decide (but do NOT grant) the squishy each fighter is playing for. Called when
+-- the boss phase opens so the HUD can advertise the prize — the fight used to be
+-- a blind tap race with no visible stake. Committed by rewardPlayers on a win.
+local function prepareBossPrizes()
+	table.clear(state.pendingPetRolls)
+	local minRarity = if state.rareKind == "rainbow" then cakeCfg.composition.rare.rainbow.guaranteedRarity else nil
+	local shown = 0
+	for _, player in ipairs(loadedCakePlayers()) do
+		local preview = services_.PetService.Preview(player.UserId, "cycle", minRarity)
+		if preview ~= nil then
+			state.pendingPetRolls[player.UserId] = preview
+			shown += 1
+		else
+			-- Not fatal: the win path falls back to a fresh roll, they just fight
+			-- without seeing the prize.
+			Log.Warn(
+				SCOPE,
+				`boss prize could not be pre-rolled for {player.Name} (profile not loaded) — `
+					.. `no prize shown; a fresh roll is granted on the win instead`
+			)
+		end
+	end
+	Log.Sum(SCOPE, `boss prizes pre-rolled for {shown} player(s){if minRarity then ` (floored to {minRarity}+)` else ""}`)
 end
 
 local function fireSnapshot(bufferValue, metadata)
@@ -90,7 +130,25 @@ local function rewardPlayers(players: { Player })
 	for _, player in ipairs(players) do
 		local userId = player.UserId
 		if services_.PersistenceService.IsLoaded(userId) then
-			local roll = services_.PetService.Roll(userId, "cycle", minRarity)
+			-- COMMIT the prize the boss HUD has been showing this player, so the
+			-- squishy they fought for is the squishy they get. Fresh roll only as a
+			-- fallback: no preview exists for someone whose profile finished loading
+			-- after the boss opened, or who arrived mid-fight.
+			local pending = state.pendingPetRolls[userId]
+			local roll = nil
+			if pending ~= nil then
+				roll = services_.PetService.Grant(userId, pending.petId)
+				if roll == nil then
+					Log.Warn(
+						SCOPE,
+						`advertised boss prize '{pending.petId}' could not be granted to {player.Name} `
+							.. `(id missing from PetConfig?) — rolling a fresh one instead`
+					)
+				end
+			end
+			if roll == nil then
+				roll = services_.PetService.Roll(userId, "cycle", minRarity)
+			end
 			if roll then
 				roll.source = "cake"
 				if PetSubs then
@@ -110,6 +168,20 @@ local function rewardPlayers(players: { Player })
 	end
 end
 
+-- Nil-safe: the counts are cosmetic, never worth dropping a cycle update over.
+local function findCounts(): { found: number, total: number }?
+	local service = services_ and services_.TreasureService
+	if service == nil or type(service.FindCounts) ~= "function" then
+		Log.Once(SCOPE, "find-counts-missing", "TreasureService.FindCounts missing -- HUD find goal hidden")
+		return nil
+	end
+	local ok, found, total = pcall(service.FindCounts)
+	if not ok or type(found) ~= "number" or type(total) ~= "number" or total <= 0 then
+		return nil
+	end
+	return { found = found, total = total }
+end
+
 --API
 function CakeCycleSubs.BroadcastCycle(announce: string?)
 	if uCycle == nil or state == nil then
@@ -124,7 +196,14 @@ function CakeCycleSubs.BroadcastCycle(announce: string?)
 		rareKind = state.rareKind,
 		biome = state.biome,
 		activeBandIndex = state.activeBandIndex,
+		-- Per-cake find goal for the HUD ("FINDS 7/40"). The cake % bar is hidden
+		-- while eating, which is ~all of the playtime, so this is the only
+		-- progress signal the player gets during the loop.
+		finds = findCounts(),
 		announce = announce,
+		-- `pendingPet = { petId, rarity }` is attached PER RECIPIENT by fireCycle
+		-- (each fighter has their own pre-rolled prize), so it is deliberately not
+		-- set here.
 	})
 end
 
@@ -136,14 +215,14 @@ function CakeCycleSubs.SpawnNewCake(fixedPlayerCount: number?)
 	end
 
 	local cakePlayers = loadedCakePlayers()
-	local maxRebirths = 0
-	for _, player in ipairs(cakePlayers) do
-		local rebirths = services_.ProgressService.GetRebirths(player.UserId)
-		if rebirths and rebirths > maxRebirths then
-			maxRebirths = rebirths
-		end
-	end
-	local biome = services_.ProgressService.BiomeFor(maxRebirths)
+	-- A fresh cake has no boss and therefore no advertised prize (belt-and-braces:
+	-- FinishBoss already clears these, but the endless fallback can reach a new
+	-- cake without one).
+	table.clear(state.pendingPetRolls)
+	-- Biome used to be unlocked by the highest-rebirth player present; rebirth is
+	-- gone (2026-07-26) so every cake takes the first biome. Kept as a call so
+	-- re-introducing an unlock rule stays a one-liner (ProgressService.BiomeFor).
+	local biome = services_.ProgressService.BiomeFor(0)
 	local playerCount = math.max(1, fixedPlayerCount or #cakePlayers)
 	local composition, footprint, rareKind = services_.CakeCycleService.RollComposition(biome, playerCount)
 	if rareKind == nil and os.time() - state.lastRareEventAt >= 3600 then
@@ -203,6 +282,21 @@ function CakeCycleSubs.BeginMatch(difficulty: string, expectedCount: number): bo
 end
 
 --API
+-- eating -> boss. Wraps the service transition so the PRIZE is decided in the
+-- same step: the boss HUD advertises the squishy each fighter is playing for
+-- (features/cake-cycle.md), and rewardPlayers commits exactly that one on a win.
+-- CakeSimulationSubs calls this instead of CakeCycleService.BeginBoss directly.
+function CakeCycleSubs.BeginBoss(playerCount: number): boolean
+	if state == nil or services_ == nil then
+		Log.Warn(SCOPE, "BeginBoss called before Start -- boss phase not started")
+		return false
+	end
+	services_.CakeCycleService.BeginBoss(playerCount)
+	prepareBossPrizes()
+	return true
+end
+
+--API
 function CakeCycleSubs.BossPlayerCount(): number
 	local expectedCount = matchExpectedCount()
 	if expectedCount ~= nil then
@@ -244,6 +338,10 @@ function CakeCycleSubs.FinishBoss(result: string): boolean
 		end
 		rewardPlayers(recipients)
 	end
+	-- Terminal either way: the advertised prizes are spent (win) or forfeited
+	-- (timeout). Clearing here also takes `pendingPet` back off the cycle update,
+	-- so the reward/spawning phases stop showing a prize card.
+	table.clear(state.pendingPetRolls)
 
 	CakeCycleSubs.BroadcastCycle(if result == "win" then "cake-cleared" else "match-lost")
 	if matchMode then

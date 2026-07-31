@@ -11,28 +11,50 @@ local MatchConfig = {}
 
 MatchConfig.protocolVersion = 1
 
+-- Difficulty tuning (2026-07-30 rebalance, docs/features/cake-cycle.md, ADR-0013).
+--   workMultiplier     — how much EATING WORK the cake is worth. Buys extra
+--                        LAYERS first, then smaller scoops; it never makes the
+--                        cake taller (CakeConfig.composition).
+--   caloriesMultiplier — payout premium. Deliberately steeper than the work, so
+--                        a strong player farms on HARD rather than on easy.
+--   bossHp/bossDuration— the fight at the end, unchanged in spirit.
+-- ⚠ `cakeHeightMultiplier` is GONE: cake height no longer varies (a bite clears
+-- to the band floor, so height never changed clear time — the old multipliers
+-- moved solo clear time by ~2%).
+--
+-- ⚠ 2026-07-30: every workMultiplier went UP by x1.08 (easy 1 -> 1.08). The
+-- upgrade tree is RUN-scoped and its costs were cut ~20x so the whole tree is
+-- owned by ~46% of the cake, which means the BACK HALF of every run is now
+-- played at full power — that alone took the solo-easy clear from 54.6 min to
+-- 36.8. The 8% work bump buys it back to **38.9 min**, i.e. the 40-minute
+-- target, without shrinking the cake or slowing the fun half.
+-- Measured over 5 seeds by `tools/balance-model/pacing.py --candidate`; the
+-- ratios between the three modes are untouched, so the ladder is unchanged.
 MatchConfig.difficultyOrder = { "easy", "medium", "hard" }
 MatchConfig.difficulties = {
 	easy = {
 		labelKey = "match-difficulty-easy",
 		worldLabel = "Easy",
-		cakeHeightMultiplier = 0.8,
+		workMultiplier = 1.08,
+		caloriesMultiplier = 1,
 		bossHpMultiplier = 0.75,
 		bossDurationMultiplier = 1.5,
 	},
 	medium = {
 		labelKey = "match-difficulty-medium",
 		worldLabel = "Medium",
-		cakeHeightMultiplier = 1,
+		workMultiplier = 1.27,
+		caloriesMultiplier = 1.25,
 		bossHpMultiplier = 1,
-		bossDurationMultiplier = 1,
+		bossDurationMultiplier = 1.2,
 	},
 	hard = {
 		labelKey = "match-difficulty-hard",
 		worldLabel = "Hard",
-		cakeHeightMultiplier = 1.08,
-		bossHpMultiplier = 1.5,
-		bossDurationMultiplier = 0.75,
+		workMultiplier = 1.49,
+		caloriesMultiplier = 1.55,
+		bossHpMultiplier = 1.25,
+		bossDurationMultiplier = 1,
 	},
 }
 

@@ -13,6 +13,15 @@
 	module DISCOVERS them from the merged subscriptions table (no hardcoded
 	sibling requires — a sub absent in this place is simply skipped, which is
 	what lets the SAME file run in the lobby and the game place).
+
+	Two discovered hooks, in this order:
+	  OnProfileLoaded(player) — the profile exists but NOTHING has been sent yet.
+	    For work that must MUTATE the profile before the client is told about it
+	    (RunResetSubs wipes the run-scoped upgrade tree / calories / belly here —
+	    ADR-0013). Ordering matters: PushInitialState hooks run alphabetically, so
+	    a sub that reset state from its own PushInitialState would be racing
+	    EconomySubs/UpgradeSubs, which sort earlier and would push stale values.
+	  PushInitialState(player) — replicate to a client that is ready to listen.
 ]]
 
 local Players = game:GetService("Players")
@@ -35,6 +44,7 @@ function PlayerLifecycleSubs.Start(data, services, subscriptions)
 	-- this is what lets the SAME file run in the lobby and the game place. Each
 	-- hook is captured once (the table is fully populated before any Start runs).
 	local pushHooks: { { name: string, fn: (Player) -> () } } = {}
+	local loadHooks: { { name: string, fn: (Player) -> () } } = {}
 	do
 		local names = {}
 		for name in pairs(subscriptions or {}) do
@@ -43,15 +53,35 @@ function PlayerLifecycleSubs.Start(data, services, subscriptions)
 		table.sort(names) -- deterministic order for reproducible logs
 		for _, name in ipairs(names) do
 			local mod = subscriptions[name]
-			if type(mod) == "table" and type(mod.PushInitialState) == "function" then
-				table.insert(pushHooks, { name = name, fn = mod.PushInitialState })
+			if type(mod) == "table" then
+				if type(mod.OnProfileLoaded) == "function" then
+					table.insert(loadHooks, { name = name, fn = mod.OnProfileLoaded })
+				end
+				if type(mod.PushInitialState) == "function" then
+					table.insert(pushHooks, { name = name, fn = mod.PushInitialState })
+				end
 			end
 		end
-		local hookNames = {}
-		for _, h in ipairs(pushHooks) do
-			table.insert(hookNames, h.name)
+		local function nameList(hooks): string
+			local out = {}
+			for _, h in ipairs(hooks) do
+				table.insert(out, h.name)
+			end
+			return table.concat(out, ", ")
 		end
-		Log.Info(SCOPE, `initial-state hooks ({#pushHooks}): {table.concat(hookNames, ", ")}`)
+		Log.Info(SCOPE, `profile-loaded hooks ({#loadHooks}): {nameList(loadHooks)}`)
+		Log.Info(SCOPE, `initial-state hooks ({#pushHooks}): {nameList(pushHooks)}`)
+	end
+
+	-- Runs BEFORE any push, while the profile is loaded but still private to the
+	-- server. A hook failing here must not strand the join (R8: log, don't die).
+	local function runProfileLoadedHooks(player: Player)
+		for _, hook in ipairs(loadHooks) do
+			local ok, err = pcall(hook.fn, player)
+			if not ok then
+				Log.Warn(SCOPE, `{hook.name}.OnProfileLoaded({player.Name}) FAILED — {err}`)
+			end
+		end
 	end
 
 	local function pushInitialState(player: Player)
@@ -73,9 +103,10 @@ function PlayerLifecycleSubs.Start(data, services, subscriptions)
 		if not profile then
 			return -- player left or was kicked during load
 		end
-		-- Anchor the playtime clock as soon as the profile exists (not
-		-- gated on ClientReady — played time counts from the actual join).
-		services.TimeRewardService.BeginSession(player.UserId)
+		-- Mutate the fresh profile BEFORE `profileLoaded` opens the push gate:
+		-- both push paths below require that flag, so nothing can have been sent
+		-- to this client yet.
+		runProfileLoadedHooks(player)
 		profileLoaded[player] = true
 		if clientReady[player] then
 			pushInitialState(player)
@@ -90,8 +121,12 @@ function PlayerLifecycleSubs.Start(data, services, subscriptions)
 
 	Players.PlayerAdded:Connect(onPlayerAdded)
 	for _, player in ipairs(Players:GetPlayers()) do
-		-- Players who joined before Start ran (fast server start).
-		task.spawn(onPlayerAdded, player)
+		-- Players who joined before Start ran (fast server start). DEFERRED, not
+		-- spawned: this module sorts before several of the subs whose hooks it
+		-- discovered, and a spawned body runs immediately — so it could reach
+		-- OnProfileLoaded before that sub's own Start had armed it. task.defer
+		-- resumes after the bootstrap's remaining Start calls have finished.
+		task.defer(onPlayerAdded, player)
 	end
 
 	Net.Remote("ClientReady").OnServerEvent:Connect(function(player)
@@ -110,8 +145,6 @@ function PlayerLifecycleSubs.Start(data, services, subscriptions)
 		profileLoaded[player] = nil
 		clientReady[player] = nil
 		data.PlayerRuntimeData.Clear(player.UserId)
-		-- Fold the final session slice into the profile BEFORE the final save.
-		services.TimeRewardService.EndSession(player.UserId)
 		services.PersistenceService.Unload(player.UserId)
 	end)
 

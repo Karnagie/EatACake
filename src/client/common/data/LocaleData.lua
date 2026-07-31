@@ -25,28 +25,38 @@ LocaleData.strings = {
 	["label-calories-n"] = "+{n} Cal",
 	["label-egg"] = "Free Egg",
 	["label-egg-epic"] = "EPIC Egg!",
+	-- Generic boost label: the fallback for a boostId nothing has named yet, and
+	-- what the daily card still uses for the ORIGINAL x2-calories boost (8 chars
+	-- vs 11 — see the budget note below).
 	["label-boost"] = "x2 Boost",
+	-- Per-boost names (TreasureConfig.boosts nameKeys).
+	-- ⚠ These are LENGTH-CONSTRAINED by the daily-reward DayCard, whose reward
+	-- line sits beside the art in a 96px zone — ~9 characters before it renders
+	-- under 14px, which is where "+100 Gems" and "EPIC Egg!" already sit.
+	-- "Extra Bite Size" (15) would render at ~8.5px there, the same unreadable
+	-- failure "One squishy, better odds" hit on a shop card.
+	["boost-bite"] = "Extra Bite",
+	["boost-speed"] = "2x Speed",
+	["boost-capacity"] = "2x Stomach",
+	-- The calories boost's own name, for the nameKey contract. The daily card
+	-- deliberately shows `label-boost` for it instead: same perk, three
+	-- characters shorter in a zone that is short of them.
+	["boost-15m"] = "x2 Calories",
 	["status-code-ok-gems"] = "Code redeemed! +{n} Gems",
 	-- HUD menu
 	["menu-daily"] = "Daily",
-	["menu-time"] = "Time",
 	["menu-shop"] = "Shop",
 	["menu-codes"] = "Codes",
 	["menu-settings"] = "Settings",
 	["menu-pets"] = "Squishies",
 	["menu-upgrades"] = "Upgrades",
-	["menu-rebirth"] = "Rebirth",
-	["menu-quests"] = "Quests",
 	-- window titles
 	["title-settings"] = "Settings",
 	["title-daily-rewards"] = "Daily Rewards",
-	["title-time-rewards"] = "Time Rewards",
 	["title-shop"] = "Shop",
 	["title-codes"] = "Codes",
 	["title-pets"] = "Squishies",
 	["title-upgrades"] = "Upgrades",
-	["title-rebirth"] = "Food Coma",
-	["title-quests"] = "Daily Quests",
 	-- lobby match selector
 	["match-title"] = "Choose a Match",
 	["match-difficulty-heading"] = "Difficulty",
@@ -69,7 +79,11 @@ LocaleData.strings = {
 	["belly-label"] = "BELLY {fill}/{cap}",
 	["belly-glutton"] = "FULL! GLUTTON x2",
 	["cake-progress"] = "CAKE {pct}%",
+	["cake-finds"] = "FINDS {found}/{total}",
 	["cake-boss"] = "BOSS! {timer}s",
+	-- Caption on the boss PRIZE card: the squishy at stake in the fight
+	-- (UIKit/BossPrizeCard, features/cake-cycle.md).
+	["boss-prize-caption"] = "FIGHTING FOR",
 	["cake-reward"] = "SQUISHY TIME!",
 	["cake-spawning"] = "NEW CAKE IN {timer}s",
 	["announce-new-cake"] = "A fresh cake rolled in!",
@@ -78,6 +92,12 @@ LocaleData.strings = {
 	["announce-boss-spawned"] = "The Cake Guardian awakens!",
 	["announce-cake-cleared"] = "Cake cleared! Everyone gets a squishy!",
 	["announce-layer-locked"] = "Eat the top layer first!",
+	["announce-layer-cleared"] = "LAYER CLEARED!",
+	-- Buried finds (features/treasures.md) — only rare+ earn a banner
+	["announce-find-new"] = "NEW DISCOVERY!",
+	["announce-find-rare"] = "RARE FIND!",
+	["announce-find-epic"] = "EPIC FIND!",
+	["announce-find-legendary"] = "LEGENDARY FIND!",
 	["announce-match-lost"] = "Match lost! Returning to the lobby...",
 	-- upgrades
 	["upgrade-capacity"] = "Stomach Capacity",
@@ -131,13 +151,6 @@ LocaleData.strings = {
 	["gym-tap"] = "TAP!",
 	["gym-fat-left"] = "{n}% FAT",
 	["hud-burn-fat"] = "TO CHECKPOINT",
-	-- rebirth
-	["rebirth-stat-count"] = "Rebirths",
-	["rebirth-stat-mult"] = "Calories Bonus",
-	["rebirth-stat-biome"] = "Next Biome",
-	["rebirth-warning"] = "Resets calories and eating upgrades!",
-	["rebirth-cost"] = "Cost: {n} calories",
-	["btn-rebirth"] = "REBIRTH",
 	-- pets / reveal
 	["btn-equip"] = "Equip",
 	["btn-unequip"] = "Unequip",
@@ -216,27 +229,30 @@ LocaleData.strings = {
 	["biome-factory"] = "Cake Factory",
 	["biome-donut"] = "Donut Plant",
 	["biome-candy"] = "Candy World",
-	-- quests
-	["quest-eat-cakes"] = "Eat 2 cakes",
-	["quest-burn-calories"] = "Burn 10,000 calories",
-	["quest-collect-finds"] = "Uncover 5 finds",
-	["quest-reward-gems"] = "+{n} Gems",
-	["quest-reward-egg"] = "Free Egg",
-	["btn-done"] = "DONE",
 	-- settings rows
 	["label-music"] = "Music",
 	["label-sound-effects"] = "Sound Effects",
 	-- rewards footers
 	["footer-daily-claim"] = "Claim today's reward!",
 	["footer-daily-tomorrow"] = "Come back tomorrow for the next reward!",
-	["footer-time-today"] = "Played today: {t}",
 	-- shop
 	["shop-section-featured"] = "Featured",
 	["shop-section-passes"] = "Game Passes",
 	["shop-section-gold"] = "Gems", -- legacy key, kept for the retired ShopRow list
 	["shop-section-gems"] = "Gems",
-	["shop-section-eggs"] = "Eggs & Boosts",
+	-- Was "shop-section-eggs" / "Eggs & Boosts". The section sells no eggs any
+	-- more, and a header naming content it does not hold is the drift D3 bans.
+	["shop-section-boosts"] = "Boosts",
 	["shop-section-free"] = "Free Stuff",
+	-- Tab labels: SHORT on purpose — a 217px tab holds ~9 glyphs before
+	-- TextScaled shrinks them below the section headers they replace.
+	-- "Offers", not "Featured": that tab holds the Free Stuff and Featured
+	-- SECTIONS, and a tab whose label repeats one of its own section headers
+	-- reads as a rendering bug.
+	["shop-tab-featured"] = "Offers",
+	["shop-tab-passes"] = "Passes",
+	["shop-tab-boosts"] = "Boosts",
+	["shop-tab-gems"] = "Gems",
 	["btn-soon"] = "SOON",
 	["ribbon-best-value"] = "BEST VALUE",
 	["ribbon-one-time"] = "ONE TIME",
@@ -246,6 +262,14 @@ LocaleData.strings = {
 	["btn-free"] = "FREE",
 	["btn-owned"] = "Owned",
 	["price-robux"] = "R$ {n}",
+	-- The card's price shelf draws the Robux GLYPH, so its label is the bare
+	-- amount. `price-robux` kept the "R$" prefix AND the glyph was drawn beside
+	-- it, so every card read "⬡ R$ 199".
+	["price-robux-short"] = "{n}",
+	-- Same rule on the gem row: the shelf draws the gem glyph, so the label is
+	-- the bare amount. It is a separate key from the Robux one because a
+	-- translation may want a different numeral format per currency.
+	["price-gems-short"] = "{n}",
 	-- codes
 	["placeholder-code"] = "Enter code...",
 	["btn-redeem"] = "Redeem",
@@ -266,7 +290,7 @@ local missingWarned: { [string]: boolean } = {}
 function LocaleData.T(key: string, params: { [string]: any }?): string
 	local text = LocaleData.strings[key]
 	if text == nil then
-		-- Once per key: dynamic keys (quest-*, announce-*) resolve inside
+		-- Once per key: dynamic keys (announce-*, pet-*) resolve inside
 		-- React renders — an unregistered id would otherwise warn-spam.
 		if not missingWarned[key] then
 			missingWarned[key] = true

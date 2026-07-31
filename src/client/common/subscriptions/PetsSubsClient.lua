@@ -3,11 +3,17 @@
 	AppRoot pets panel; PetRollUpdate triggers the reveal; equip clicks flow
 	back through the EquipPet remote.
 
+	It ALSO owns the per-frame PetFollowers step. That used to live in
+	BodySubsClient, which returns early without the game partition — so equipped
+	squishies never flew in the LOBBY. This sub is common and unconditional, so
+	the followers now run in both places.
+
 	The reveal cue is RARITY-TIERED (AudioConfig.hatchByRarity): a legendary
 	must not sound like a common, or the roll has no stakes.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Net = require(Shared:WaitForChild("Net"))
 local Log = require(Shared:WaitForChild("Log"))
@@ -20,7 +26,21 @@ local PetsSubsClient = {}
 function PetsSubsClient.Start(data, modules)
 	local AppRoot = modules.AppRoot
 	local SoundPool = modules.SoundPool
+	local PetFollowers = modules.PetFollowers
 	local rEquip = Net.Remote("EquipPet")
+
+	-- R8: the console must be able to answer "did the followers subscribe?" in
+	-- EITHER place. This connect is deliberately ungated — the lobby needs it
+	-- just as much as the game place, and it used to live behind
+	-- BodySubsClient's game-partition early return.
+	if PetFollowers ~= nil and type(PetFollowers.Step) == "function" then
+		RunService.RenderStepped:Connect(function(dt)
+			PetFollowers.Step(dt)
+		end)
+		Log.Info(SCOPE, "squishy follower stepper armed")
+	else
+		Log.Warn(SCOPE, "PetFollowers.Step missing — equipped squishies will not fly behind players")
+	end
 
 	Net.Update("PetsUpdate").OnClientEvent:Connect(function(payload)
 		if type(payload) ~= "table" then

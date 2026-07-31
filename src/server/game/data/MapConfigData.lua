@@ -19,22 +19,31 @@
 local MapConfigData = {}
 
 MapConfigData.floor = { size = 340, thickness = 2 }
--- Rectangular cake tray under the loaf (90x78 studs of cake + a ~5-stud lip;
--- grown from 100x72 for the bigger footprint so the loaf never overhangs it).
-MapConfigData.platform = { length = 100, width = 88, height = 2 } -- top = cake bottom
+-- Rectangular cake tray under the loaf. A 5-stud lip on a 90x78 loaf read as a
+-- bare slab at ground level — the cake appeared to meet the floor with nothing
+-- under it (map inspection, 2026-07-26). A ~12-stud lip and a thicker slab read
+-- as a cake PLATE, which is what the eye expects under a layer cake.
+-- ⚠ DEFAULT-GENERATOR ONLY (ADR-0007): an already-authored Environment keeps
+-- its own tray until it is re-modelled in Studio.
+MapConfigData.platform = { length = 114, width = 102, height = 4 } -- top = cake bottom
 MapConfigData.spawnHeightAboveCake = 8 -- fall onto the frosting (§7.1 crust crack)
 
 -- The room: four decorated walls around the play area.
 MapConfigData.room = {
 	size = 340, -- inner width (walls at ±170)
-	-- Tall enough to clear the 3× cake: a 4-player loaf tops out ~261 studs
-	-- (grid.origin.y 2 + composition height), so the walls + ceiling (at
-	-- wallHeight+1) must sit above it or players eating the top clip through the
-	-- ceiling / spawn above the room. (The scene is CLONED from place-authored
-	-- ReplicatedStorage.Assets — if the room is already authored at the old
-	-- height, raise its walls/ceiling in Studio too; this only reseeds the
-	-- default generator, ADR-0007.)
-	wallHeight = 300,
+	-- Tall enough to clear the cake, and NO taller. EVERY cake is built to
+	-- CakeConfig.composition.maxTotalHeight (170 since 2026-07-26), so the top
+	-- sits at grid.origin.y (2) + 170 = 172 and the spawn pad rides ~8 above
+	-- that. Walls + ceiling (at wallHeight+1) must clear ~180 or players eating
+	-- the top layer clip through the ceiling.
+	-- ⚠ KEEP THIS IN STEP WITH maxTotalHeight. It was left at 380 when the cake
+	-- came down from 330 to 170, which builds a cavernous 2x-too-tall room around
+	-- the loaf in any fresh clone — the scale reads wrong and the walls stop
+	-- framing the cake at all.
+	-- (The scene is CLONED from place-authored ReplicatedStorage.Assets — this
+	-- only reseeds the DEFAULT generator, so an already-authored room keeps its
+	-- own height until you lower it in Studio, ADR-0007.)
+	wallHeight = 210,
 	wallThickness = 6,
 	braceThickness = 2.5, -- diagonal X-braces on chocolate walls
 	propsPerWall = 20,

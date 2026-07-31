@@ -28,6 +28,24 @@ function LocalUpgradeTree.Init(data)
 	locale = data.LocaleData
 end
 
+--API
+-- Is ANY stat's next tier already affordable? Cheap (9 stats), pure.
+-- ⚠ NO CALLER since 2026-07-30 (kept, not wired — like UpgradeRow/UpgradesPanel).
+-- It drove a HUD Upgrades badge; the tree is opened only from the checkpoint's
+-- `UpgradeStation` prompt now, so there is no button to badge. Re-wire this if an
+-- "you can afford an upgrade" cue is ever wanted on the prompt or the HUD.
+function LocalUpgradeTree.AnyAffordable(levels: { [string]: number }?, calories: number?): boolean
+	local owned = levels or {}
+	local balance = calories or 0
+	for id, def in pairs(UpgradeConfig.upgrades) do
+		local nextTier = def.tiers[(owned[id] or 0) + 1]
+		if nextTier ~= nil and nextTier.cost <= balance then
+			return true
+		end
+	end
+	return false
+end
+
 local ROMAN = { "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X" }
 local function roman(n: number): string
 	return ROMAN[n] or tostring(n)

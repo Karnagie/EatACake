@@ -27,6 +27,7 @@ local Log = require(Shared:WaitForChild("Log"))
 -- Resolved from the subscriptions registry in Start — both live in the COMMON
 -- partition (static script.Parent requires break once this sub is in game/).
 local EconomySubs
+local AnalyticsSubs -- optional retention instrumentation (features/analytics.md)
 local RewardGrantSubs
 
 local SCOPE = "BodySubs"
@@ -96,6 +97,7 @@ end
 
 function BodySubs.Start(data, services, subscriptions)
 	EconomySubs = subscriptions.EconomySubs
+	AnalyticsSubs = subscriptions.AnalyticsSubs
 	RewardGrantSubs = subscriptions.RewardGrantSubs
 	services_ = services
 	bodyCfg = data.CakeConfigData.body
@@ -238,6 +240,10 @@ function BodySubs.Start(data, services, subscriptions)
 			services.EconomyService.AddCalories(userId, banked)
 			services.ProgressService.AddStat(userId, "lifetimeCalories", banked)
 			EconomySubs.SendCurrency(player)
+			if AnalyticsSubs then
+				AnalyticsSubs.Onboard(player, "firstGym")
+				AnalyticsSubs.Count(player, "gym_banked", banked)
+			end
 		end
 		uGym:FireClient(player, { event = event, banked = banked })
 		-- Full stomach resync (fill/stored now 0) — includes RefreshBody.
@@ -389,11 +395,11 @@ function BodySubs.Start(data, services, subscriptions)
 					continue -- profile unloaded (leaving/session-taken): skip gym work
 				end
 				-- Safety net: release a player still MOUNTED after the session ended via a
-				-- path that didn't unmount (rebirth, external burn) so they can never be
+				-- path that didn't unmount (an external burn) so they can never be
 				-- left ANCHORED with no run. Idempotent (no-op if not mounted).
 				if gymMount[player] ~= nil and not services.GymService.HasSession(userId) then
 					unmountTreadmill(player, true)
-					uGym:FireClient(player, { event = "stopped" }) -- close the overlay + stop the run (session ended externally, e.g. rebirth)
+					uGym:FireClient(player, { event = "stopped" }) -- close the overlay + stop the run (session ended externally)
 				end
 				if services.GymService.HasSession(userId) then
 					-- Treadmill run (user req 4): while MOUNTED the player is ANCHORED on

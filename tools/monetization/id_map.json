@@ -1,0 +1,103 @@
+{
+  "autoeat": {
+    "adopted": true,
+    "http": 200,
+    "id": 1933322816,
+    "kind": "pass",
+    "name": "Auto-Eat",
+    "price": 399,
+    "universe": 10593425705
+  },
+  "autogym": {
+    "adopted": true,
+    "http": 200,
+    "id": 1932437169,
+    "kind": "pass",
+    "name": "Auto-Gym",
+    "price": 349,
+    "universe": 10593425705
+  },
+  "capacity2": {
+    "adopted": true,
+    "http": 200,
+    "id": 1931927238,
+    "kind": "pass",
+    "name": "x2 Stomach",
+    "price": 249,
+    "universe": 10593425705
+  },
+  "gems-l": {
+    "adopted": true,
+    "http": 200,
+    "id": 3612534252,
+    "kind": "product",
+    "name": "1,050 Gems",
+    "price": 900,
+    "universe": 10593425705
+  },
+  "gems-m": {
+    "adopted": true,
+    "http": 200,
+    "id": 3612534248,
+    "kind": "product",
+    "name": "450 Gems",
+    "price": 400,
+    "universe": 10593425705
+  },
+  "gems-s": {
+    "adopted": true,
+    "http": 200,
+    "id": 3612534244,
+    "kind": "product",
+    "livePrice": 100,
+    "name": "100 Gems",
+    "price": 100,
+    "universe": 10593425705
+  },
+  "gems-xl": {
+    "adopted": true,
+    "http": 200,
+    "id": 3612534255,
+    "kind": "product",
+    "name": "2,500 Gems",
+    "price": 2000,
+    "universe": 10593425705
+  },
+  "starterpack": {
+    "adopted": true,
+    "http": 200,
+    "id": 3612534258,
+    "kind": "product",
+    "name": "Starter Pack",
+    "price": 99,
+    "universe": 10593425705
+  },
+  "vip": {
+    "adopted": true,
+    "http": 200,
+    "id": 1934984583,
+    "kind": "pass",
+    "name": "VIP",
+    "price": 799,
+    "universe": 10593425705
+  },
+  "x2calories": {
+    "adopted": true,
+    "http": 200,
+    "id": 1933472819,
+    "kind": "pass",
+    "livePrice": 199,
+    "name": "x2 Calories",
+    "price": 199,
+    "universe": 10593425705
+  },
+  "x2gems": {
+    "adopted": true,
+    "http": 200,
+    "id": 1930993460,
+    "kind": "pass",
+    "name": "x2 Gems",
+    "price": 299,
+    "universe": 10593425705
+  }
+}

@@ -1,13 +1,15 @@
 --[[
-	RewardsPanel — landscape rewards window (daily + time tracks share it).
-	Grid strip of DayCards + footer line. Archetype: "Daily/time rewards —
-	landscape grid strip" (references/window-archetypes.md).
+	RewardsPanel — landscape rewards window (the DAILY login track). Grid strip of
+	DayCards + footer line. Archetype: "Daily rewards — landscape grid strip"
+	(references/window-archetypes.md). It carried a second consumer, the
+	playtime-today track, until time rewards were removed (2026-07-31); the props
+	are still track-agnostic, so a future one needs no change here.
 
 	props:
 		title, size, visible, zIndex, onClose
 		cards      -- ARRAY of { id, title, rewardText, iconName, subText, state }
 		           -- (state: "claimable"|"claimed"|"locked"|"tomorrow")
-		footerText -- bottom status line ("Played today: 12:34" / "Come back tomorrow!")
+		footerText -- bottom status line ("Come back tomorrow!")
 		onClaim(id)
 ]]
 

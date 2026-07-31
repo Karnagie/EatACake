@@ -14,10 +14,14 @@
 
 local PlaceConfig = {}
 
--- Universe 10515688913 ("EatACake_DontPublish"). The lobby is the START place
--- (players land there). The game place is created in Studio at publish time.
-PlaceConfig.lobbyPlaceId = 80059832045175 -- existing START place (the lobby)
-PlaceConfig.gamePlaceId = 91726662453442
+-- Universe 10593425705 — VERIFIED 2026-07-30 for both ids below via
+-- `GET https://apis.roblox.com/universes/v1/places/{placeId}/universe`.
+-- (The header used to name 10515688913, which is the OLD standalone place
+-- 80059832045175 — a different universe. Monetization ids, DataStores and the
+-- teleport handoff are all universe-scoped, so that mismatch mattered.)
+-- The lobby is the START place (players land there).
+PlaceConfig.lobbyPlaceId = 126172008675265 -- existing START place (the lobby)
+PlaceConfig.gamePlaceId = 136881957250247
 
 export type Place = "lobby" | "game" | "unknown"
 

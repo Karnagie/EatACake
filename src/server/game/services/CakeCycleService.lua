@@ -34,59 +34,100 @@ function CakeCycleService.Init(data)
 end
 
 --API
+-- How much EATING WORK this cake is worth: difficulty × co-op. Drives the layer
+-- count and the scoop ramp (CakeConfig.composition header) — and nothing else,
+-- so a bigger cake is never a taller one.
+function CakeCycleService.CakeWork(playerCount: number): number
+	local comp = cakeCfg.composition
+	local players = math.max(1, playerCount or 1)
+	local difficultyWork = difficultyConfig().workMultiplier or 1
+	return difficultyWork * (1 + (comp.coopWork or 0) * (players - 1))
+end
+
+--API
 -- Rolls a new cake: composition (bottom-up bands) + the fixed loaf
 -- footprint + rare kind. Pure roll — the caller passes everything to
 -- CakeFieldService.ResetCake.
+--
+-- Bands are designed TOP-DOWN along the pacing curve (see the CakeConfig
+-- .composition header): band k gets a `scoop` (bite-radius multiplier) that
+-- shrinks geometrically with depth, a thickness that grows with it, and a
+-- `density` (calories + belly fill per stud³) that keeps one bite worth the
+-- same food anywhere in any cake. Layer IDENTITY stays random — the pacing
+-- lives on the band, so a chocolate layer near the top can no longer wreck the
+-- opening minutes.
 function CakeCycleService.RollComposition(biome: string, playerCount: number)
 	local comp = cakeCfg.composition
 	local grid = cakeCfg.grid
 	local footprint = comp.footprint
 
-	-- Middle layers: middleCountMin..Max from the pool, no immediate repeats.
-	local middleCount = math.random(comp.middleCountMin, comp.middleCountMax)
-	local middles = {}
-	local lastId = nil
-	for _ = 1, middleCount do
+	local work = CakeCycleService.CakeWork(playerCount)
+	local layers = math.clamp(
+		math.floor(comp.baseLayers * work ^ comp.layerExponent + 0.5),
+		2,
+		comp.maxLayers
+	)
+	-- Work the layer cap could not absorb becomes SMALLER scoops (a denser cake).
+	-- Clear time scales with the bite AREA, hence the square root.
+	local scoopScale = (work / (layers / comp.baseLayers)) ^ -0.5
+	local scoopTop = comp.scoopTop * scoopScale
+	local scoopBottom = comp.scoopBottom * scoopScale
+	local totalHeight = math.min(comp.maxTotalHeight, grid.maxHeight - comp.coreThickness)
+
+	-- Per-band scoop + thickness WEIGHT (thickness follows the scoop ramp).
+	local scoops, weights, weightSum = {}, {}, 0
+	for k = 0, layers - 1 do
+		local f = if layers > 1 then k / (layers - 1) else 0
+		local scoop = scoopTop * (scoopBottom / scoopTop) ^ f
+		scoops[k + 1] = scoop
+		local w = (scoopTop / scoop) ^ (2 * comp.thicknessExponent)
+		weights[k + 1] = w
+		weightSum += w
+	end
+
+	-- Layer identity: random from the pool, no immediate repeats. Index 1 is
+	-- the TOP (always frosting), index `layers` the deepest.
+	local ids = { "frosting" }
+	local lastId = "frosting"
+	for k = 2, layers do
 		local candidate
 		repeat
 			candidate = comp.middlePool[math.random(#comp.middlePool)]
 		until candidate ~= lastId
 		lastId = candidate
-		table.insert(middles, candidate)
+		ids[k] = candidate
 	end
 
-	-- Thicknesses: roll raw, then scale middles so the total hits the
-	-- rolled target height (clamped to the grid ceiling).
-	-- Easy-mode co-op scaling: a TALLER (== longer-to-eat) shared loaf for a
-	-- crowd, but SUBLINEAR so more mouths still clear it faster — solo ~40 min,
-	-- 4 players ~18 min (not ~10). The footprint is fixed, so height is the only
-	-- population lever (CakeConfig.composition.perPlayerScale, features/cake-cycle.md).
-	local playerScale = 1 + (comp.perPlayerScale or 0) * math.max(0, math.max(1, playerCount) - 1)
-	local heightMultiplier = difficultyConfig().cakeHeightMultiplier or 1
-	local totalTarget = math.min(
-		math.floor(math.random(comp.totalHeight[1], comp.totalHeight[2]) * playerScale * heightMultiplier),
-		grid.maxHeight
-	)
-	local frosting = math.random(comp.frostingThickness[1], comp.frostingThickness[2])
-	local middleBudget = totalTarget - comp.coreThickness - frosting
-	local raw = {}
-	local rawSum = 0
-	for k = 1, middleCount do
-		raw[k] = math.random(comp.middleThickness[1], comp.middleThickness[2])
-		rawSum += raw[k]
+	-- Thicknesses (top-down), jittered then RENORMALISED so the cake is exactly
+	-- `totalHeight` tall whatever the jitter and the min-thickness floor did.
+	local thickness, thickSum = {}, 0
+	for k = 1, layers do
+		local jitter = 0.9 + math.random() * 0.2
+		local t = math.max(comp.minLayerThickness, weights[k] / weightSum * totalHeight * jitter)
+		thickness[k] = t
+		thickSum += t
+	end
+	local renorm = totalHeight / thickSum
+	for k = 1, layers do
+		thickness[k] *= renorm
 	end
 
 	local composition = {}
 	local cursor = 0
-	local function push(id: string, thickness: number)
-		table.insert(composition, { id = id, bottom = cursor, top = cursor + thickness })
-		cursor += thickness
+	local function push(band)
+		band.bottom = cursor
+		band.top = cursor + band.thickness
+		cursor = band.top
+		band.thickness = nil
+		table.insert(composition, band)
 	end
-	push("core", comp.coreThickness)
-	for k = 1, middleCount do
-		push(middles[k], raw[k] / rawSum * middleBudget)
+	push({ id = "core", thickness = comp.coreThickness, scoop = 1, density = 1 })
+	-- bottom-up: the DEEPEST designed band (k = layers) goes in first
+	for k = layers, 1, -1 do
+		local scoop = scoops[k]
+		local density = math.clamp(comp.refBandWeight / (thickness[k] * scoop * scoop), 1, comp.maxDensity)
+		push({ id = ids[k], thickness = thickness[k], scoop = scoop, density = density })
 	end
-	push("frosting", frosting)
 
 	-- Rare cakes (§5): golden / rainbow, announced server-wide by CakeSubs.
 	local rareKind = nil
@@ -97,14 +138,47 @@ function CakeCycleService.RollComposition(biome: string, playerCount: number)
 		rareKind = "golden"
 	end
 
+	-- Payout scale for THIS cake: difficulty premium × per-head co-op payout.
+	-- Stored here (not recomputed per bite) so it cannot drift as players leave.
+	state.payoutScale = (difficultyConfig().caloriesMultiplier or 1)
+		* (1 + (comp.coopCalories or 0) * (math.max(1, playerCount or 1) - 1))
+	-- Gems from finds get the per-head term but NOT the difficulty premium — see
+	-- CakeConfig.composition.coopFinds.
+	state.findPayoutScale = 1 + (comp.coopFinds or 0) * (math.max(1, playerCount or 1) - 1)
+
+	Log.Sum(
+		"CakeCycle",
+		`cake rolled — {layers} layers, {math.floor(totalHeight)} studs, work {string.format("%.2f", work)}, scoop {string.format("%.2f", scoopTop)}→{string.format("%.2f", scoopBottom)}, payout ×{string.format("%.2f", state.payoutScale)}`
+	)
 	return composition, footprint, rareKind
 end
 
 --API
--- Calories multiplier of the current cake (rare cakes pay more).
+-- A find's reward descriptor with this cake's per-head find payout applied.
+-- Returns a COPY — the caller is handed `TreasureConfig.finds[n].reward`, which
+-- is shared by every spawn of that find for the life of the server, so scaling it
+-- in place would compound on the config itself.
+-- Only `gems` is scaled: finds pay gems only (features/treasures.md), and a kind
+-- with no amount is passed through untouched rather than silently dropped.
+function CakeCycleService.ScaleFindReward(reward)
+	if type(reward) ~= "table" then
+		return reward
+	end
+	local scale = state.findPayoutScale or 1
+	if scale == 1 or reward.kind ~= "gems" or type(reward.amount) ~= "number" then
+		return reward
+	end
+	local scaled = table.clone(reward)
+	scaled.amount = math.max(1, math.floor(reward.amount * scale))
+	return scaled
+end
+
+--API
+-- Calories multiplier of the current cake: rare-cake bonus × this cake's payout
+-- scale (difficulty premium × per-head co-op payout, fixed at RollComposition).
 function CakeCycleService.CakeCaloriesMult(): number
 	local rare = state.rareKind and cakeCfg.composition.rare[state.rareKind]
-	return rare and rare.caloriesMult or 1
+	return (rare and rare.caloriesMult or 1) * (state.payoutScale or 1)
 end
 
 --API

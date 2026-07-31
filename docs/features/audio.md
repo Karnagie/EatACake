@@ -55,11 +55,12 @@ voice has no effect chain); everything else rides a pooled voice.
 - **Settings gate applies to BOTH.** SFX start muted for the same reason music
   starts stopped; the same grace releases either on the defaults if the
   settings push never lands.
-- **Cue the GRANT, not the click.** Quests, rebirth, upgrades, shop grants and
-  daily/time rewards all cue from their `*Update` payload, so a refused or
-  duplicate action stays silent and a spam-clicker earns one sound per grant.
-  Purchases are the exception: `purchaseStart` deliberately cues the handoff to
-  the Robux prompt, and `purchaseOk` the grant.
+- **Cue the GRANT, not the click.** Upgrades, shop grants and daily rewards all
+  cue from their `*Update` payload, so a refused or duplicate action stays silent
+  and a spam-clicker earns one sound per grant.
+  Purchases are the exception: `purchaseStart` deliberately cues the REQUEST (on
+  the Robux route it is the handoff to the prompt; on the gem route the server
+  may still refuse), and `purchaseOk` the grant.
 - **Panel whoosh has ONE source**: AppRoot's `openPanel` effect, never the
   individual close buttons — a panel cannot forget to fire it.
 
@@ -76,10 +77,17 @@ voice has no effect chain); everything else rides a pooled voice.
   Audit with: for each Components/*.lua that builds a Text/ImageButton, it must
   either call `usePressable` or `Interaction.Cue`.
 - **A silent button is usually a DISABLED button, not a missing cue.** Shop
-  tiles make no sound while their dev-product / gamepass ids are unconfigured
-  (`LocalShopService.priceState` → `"unavailable"` → `enabled = false` →
-  `Active = false`): the button is intentionally inert, so it must be silent.
-  Check `Active` on the instance before hunting for a missing cue.
+  cells make no sound while their dev-product / gamepass ids are unconfigured,
+  and gem-priced cells make none while the player cannot afford them
+  (`LocalShopService.priceState` → `"unavailable"` / `"unaffordable"` →
+  `enabled = false` → `Active = false`): the button is intentionally inert, so it
+  must be silent. Check `Active` on the instance before hunting for a missing cue.
+- **A REFUSAL is not automatically a cue.** The layer gate refuses a bite you
+  take constantly while clearing a layer, so its cue became a stutter of buzzes
+  and was REMOVED (user req, 2026-07-31): the `layer-locked` banner carries it
+  alone. Do NOT add `SoundPool.Play` back there. The full-belly refusal keeps its
+  `blocked` cue because it is a different, rare event — frequency is what decides,
+  not "it was refused".
 - Cues on per-bite / per-tick events need `cut` AND usually `throttle`, or a
   high eat-rate turns the whole voice pool into one waveform. Calories
   deliberately have NO cue (they tick every bite); gems do (throttled).
@@ -98,5 +106,5 @@ voice has no effect chain); everything else rides a pooled voice.
 `src/shared/config/AudioConfig.lua`; `src/client/common/modules/{SoundPool,
 MusicService}.lua`; `src/client/common/subscriptions/AudioSubsClient.lua`;
 `src/shared/UIKit/Interaction.lua` (SOUND section). Cues are fired from the
-domain subscriptions (cake, body, pets, shop, rewards, codes, quests, rebirth,
+domain subscriptions (cake, body, pets, shop, rewards, codes,
 upgrades, economy, lobby, teleport).

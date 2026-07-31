@@ -64,11 +64,20 @@ function CakeOps.ApplyBite(
 				local wx, wz = GridUtil.CellToWorld(gridCfg, x, z)
 				local dx, dz = wx - px, wz - pz
 				local distSq = dx * dx + dz * dz
-				if distSq <= radiusStuds * radiusStuds then
+				-- The cell the bite POINT sits in always counts: a small scoop
+				-- (dense deep band) can otherwise fall between cell centres and
+				-- remove nothing at all (CakeConfig.sim.minBiteRadiusStuds).
+				if distSq <= radiusStuds * radiusStuds or (x == cx and z == cz) then
 					local i = GridUtil.Index(size, x, z)
 					local h = GridUtil.ReadHeight(field, i)
 					if h > floorUnits then
 						local falloff = 1 - distSq / (radiusStuds * radiusStuds) -- 1 center → 0 rim
+						if falloff <= 0 then
+							-- only reachable for the FORCED centre cell, when the
+							-- scoop is smaller than the distance to that cell's
+							-- centre; give it a small but real bite.
+							falloff = 0.15
+						end
 						local layer = CakeOps.LayerAtStuds(composition, layersCfg, GridUtil.UnitsToStuds(h))
 						if layer.hardness ~= math.huge then
 							-- Clear the cell TOWARD the floor (clean cut), not a shallow

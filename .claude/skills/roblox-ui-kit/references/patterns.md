@@ -3,13 +3,16 @@
 Worked recipes proven in the reference implementations. Copy the math, swap
 the content. **Window STRUCTURE is chosen first via
 `window-archetypes.md`** — the patterns below implement structures, they do
-not choose them (a shop is a sectioned vertical list, not a card grid).
+not choose them (a collection you BROWSE is a card grid; a list of things you
+read and act on one-by-one is a vertical list).
 
 ## New window walkthrough (example: a collection window — pets/inventory)
 
 1. **Archetype first** (`window-archetypes.md`): collection you browse →
-   landscape grid; rows-you-act-on (shop, quests, upgrades) → vertical list
-   (see the worked Shop example there); options → settings list; etc.
+   landscape grid (the shipped shop and pets panels); rows-you-act-on
+   (upgrades, a quest/mission track, a small catalogue) → vertical list (see the
+   worked Shop example there — superseded for THIS shop, still the right answer
+   for a small one); options → settings list; etc.
 2. **Pick orientation + nominal grid.** Landscape grid → 1000x600
    (`Theme.PanelWide` + `Theme.HeaderWide`). Vertical list → 512x727
    (`Theme.Panel` + `Theme.Header`).
@@ -28,7 +31,7 @@ not choose them (a shop is a sectioned vertical list, not a card grid).
    state, callbacks) — replace mock data.
 7. Mount, verify (SKILL.md protocol).
 
-## Vertical list in a ScrollPane (shop/quests/upgrades archetypes)
+## Vertical list in a ScrollPane (upgrades / quest-track / small-catalogue archetypes)
 
 Use `UIListLayout` + `AutomaticCanvasSize = Y` (ScrollPane default when
 `canvasHeightScale` is nil). Rows: `Size = UDim2.fromScale(1, 0)` +

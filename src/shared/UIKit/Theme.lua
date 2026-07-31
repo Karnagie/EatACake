@@ -314,6 +314,18 @@ Theme.Feel.Squish = {
 	CardHoverPose = Vector2.new(0.970, 1.045),
 	CardHoverTween = TweenInfo.new(0.13, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 	CardPressPose = Vector2.new(1.10, 0.88),
+	-- (c) GRID CELL flush against a clip edge — never grows past 1.0 in X.
+	-- A ScrollingFrame CLIPS, and a deterministic grid packs its columns to the
+	-- canvas edges exactly (3*282 + 2*12 = 870), so there is ZERO horizontal
+	-- slack. The (b) poses combine with the uniform UIScale to 1.05*0.970 = 1.019
+	-- on hover and 0.93*1.10 = 1.023 on press — which shaves ~3px off the outer
+	-- columns' dark outline, and ~10px off a full-width banner's, every time the
+	-- pointer touches one. Callers using these poses ALSO pass
+	-- `hoverScale = 1, pressScale = 1`: the UIScale is uniform, so it cannot be
+	-- part of an X-safe deform. The squash survives — it just runs on Y, which
+	-- has budget (`ShopLayout.CanvasTopPadPx`).
+	GridCellHoverPose = Vector2.new(0.985, 1.030),
+	GridCellPressPose = Vector2.new(0.995, 0.920),
 	-- Panel-jelly, reward-splat and idle-breath poses were designed alongside
 	-- these but are NOT shipped: they had no call sites, and naming one of them
 	-- PanelOpenTween would have SHADOWED the live Theme.Feel.PanelOpenTween that
@@ -1062,25 +1074,41 @@ Theme.ShopRow = {
 -- at the same fraction renders 1692x1015 — the new grid would have been NARROWER
 -- while costing a whole second chrome family to maintain.
 --
--- Vertical (content y 132..559, h 427):   balance 48 · gap 12 · pane 367
---   48 + 12 + 367 = 427 ✓
+-- TABS (2026-07-31). The single stacked scroll held all five sections at once:
+-- 2046 nominal px of canvas in a 367 px window = 5.6 SCREENS, of which the first
+-- showed the balance chips, one section header and one banner. A player looking
+-- for a gem pack had to scroll past everything. That is the other half of
+-- "cluttered" — not density, but a window showing 20% of one category.
+-- With four tabs the worst tab is Passes at 1.9 screens (Offers 1.6) and the
+-- other TWO FIT ENTIRELY. The 56px the tab row costs is paid for by moving the
+-- balance chips up into the header band, which was empty either side of the title.
+--
+-- Vertical (content y 128..564, h 436):   tabs 56 · gap 10 · pane 370
+--   56 + 10 + 370 = 436 ✓  (balances now live at y 34..82 INSIDE the header)
 -- Horizontal (content x 48..952, w 904):  window 870 + gap 12 + bar 22 = 904 ✓
 --   (PetsLayout's proven split. The old ShopLayout had 0.96 + 0.05 = 1.01 — the
 --   scrollbar track overlapped the scroll window and there was no gap at all.)
+-- Tab row: 4 * 217 + 3 * 12 = 904 ✓
 Theme.ShopLayout = {
 	PanelAspect = Theme.PanelWide.AspectRatio,
 	PanelMaxViewportFraction = 0.92,
 	HeaderHeight = 120 / 600,
-	BalancePosition = Vector2.new(48 / 1000, 132 / 600),
-	BalanceSize = Vector2.new(904 / 1000, 48 / 600),
-	BalanceChipWidth = 190 / 904, -- Theme.Chip nominal 190x48
-	BalanceChipStride = 202 / 904, -- 190 + 12 gap
-	PanePosition = Vector2.new(48 / 1000, 192 / 600),
-	PaneSize = Vector2.new(904 / 1000, 367 / 600),
+	-- Balance chips ride the header band, left of the centred title. Chips end
+	-- at x 390; "SHOP" centred in its 350..650 zone starts near 430.
+	BalancePosition = Vector2.new(34 / 1000, 34 / 600),
+	BalanceSize = Vector2.new(356 / 1000, 48 / 600),
+	BalanceChipWidth = 172 / 356, -- Theme.Chip nominal 190x48, tightened
+	BalanceChipStride = 184 / 356, -- 172 + 12 gap
+	TabsPosition = Vector2.new(48 / 1000, 128 / 600),
+	TabsSize = Vector2.new(904 / 1000, 56 / 600),
+	TabWidth = 217 / 904,
+	TabStride = 229 / 904, -- 217 + 12 gap
+	PanePosition = Vector2.new(48 / 1000, 194 / 600),
+	PaneSize = Vector2.new(904 / 1000, 370 / 600),
 	ScrollWindowFraction = 870 / 904,
 	ScrollBarWidth = 22 / 904,
 
-	-- DETERMINISTIC CANVAS (nominal px on the 870x367 scroll window). The panel
+	-- DETERMINISTIC CANVAS (nominal px on the 870x370 scroll window). The panel
 	-- walks the sections, sums these, and positions every cell by an explicit
 	-- fraction of the resulting canvas.
 	--
@@ -1093,16 +1121,23 @@ Theme.ShopLayout = {
 	-- Deterministic math is what patterns.md prescribes for grids, and it removes
 	-- the aspect constraints, the automatic canvas and UIGridLayout all at once.
 	CanvasWidthPx = 870,
-	WindowHeightPx = 367,
-	SectionHeaderPx = 56,
-	SectionHeaderGapPx = 12,
-	SectionGapPx = 24, -- after each section block
-	BannerPx = 200,
+	WindowHeightPx = 370,
+	SectionHeaderPx = 48,
+	SectionHeaderGapPx = 10,
+	SectionGapPx = 20, -- after each section block
+	BannerPx = 176,
 	BannerGapPx = 16,
 	TilePx = 160,
 	TileRowGapPx = 14,
 	PackPx = 264,
 	PackRowGapPx = 14,
+	-- Top pad must clear the ribbon's 12px overhang above its card AS DEFORMED BY
+	-- THE HOVER POSE, not the static 12: the cell grows about its centre, so the
+	-- tag's offset from that centre (169 + 12 = 181 on the big card) is what gets
+	-- scaled. 181 * 1.03 - 169 = 17.4 -> 20 with margin. Section headers used to
+	-- guarantee this clearance by accident; a single-section tab has none, so the
+	-- first row starts at canvas y = 0.
+	CanvasTopPadPx = 20,
 	CanvasBottomPadPx = 16,
 	-- Column packing on the 870 canvas:
 	--   tiles: 3*282 + 2*12 = 846 + 24 = 870 ✓
@@ -1115,28 +1150,108 @@ Theme.ShopLayout = {
 	PackWidthPx = 208,
 	PackStridePx = 220,
 
+	-- ===== CARD kinds (2026-07-30 redesign) =====
+	-- Two card sizes on purpose, so EVERY row is full and the hierarchy is
+	-- visible: passes (6, the premium permanent perks) get the big card 3
+	-- across; eggs/boosts (4) and gem packs (4) get the small card 4 across.
+	-- At one shared column count a section always ended in a lonely orphan
+	-- (6 over 4 columns = 4+2; 4 over 3 = 3+1).
+	--   big:   3 * 282 + 2 * 12 = 870 ✓ exact
+	--   small: 4 * 208 + 3 * 12 = 868 — 2px slack ON PURPOSE (kit pitfall 6)
+	CardPx = 338,
+	CardRowGapPx = 14,
+	CardColumns = 3,
+	CardWidthPx = 282,
+	CardStridePx = 294,
+	SmallCardPx = 264,
+	SmallCardRowGapPx = 14,
+	SmallCardColumns = 4,
+	SmallCardWidthPx = 208,
+	SmallCardStridePx = 220,
+	HeroPx = 260,
+	HeroGapPx = 16,
+
 	-- Retired portrait ShopRow still reads this for its default cell height.
 	RowCellHeight = 98 / 563,
 }
 
 -- Section header. Nominal 870x48: icon 38 | label | right-aligned count, over a
--- full-width 4px underline pill.
+-- full-width 4px underline pill. Only drawn when a TAB holds more than one
+-- section (otherwise the tab label already names the content, and a header
+-- repeating it is the "chrome that says nothing" the redesign removed).
 -- Horizontal: 0 icon(38) 10 label(560) 32 count(230) = 870 ✓
--- Vertical: icon y 5..43, label y 8..40, underline y 44..48 ✓
+-- Vertical: icon y 3..41, label y 6..36, underline y 44..48 ✓
 Theme.ShopSectionHeader = {
-	AspectRatio = 870 / 56,
-	IconPosition = Vector2.new(0, 3 / 56),
-	IconSize = Vector2.new(44 / 870, 44 / 56),
-	LabelPosition = Vector2.new(54 / 870, 8 / 56),
-	LabelSize = Vector2.new(556 / 870, 36 / 56),
-	CountPosition = Vector2.new(610 / 870, 12 / 56),
-	CountSize = Vector2.new(240 / 870, 30 / 56), -- ends at 850: 20px right margin
-	UnderlinePosition = Vector2.new(0, 51 / 56),
-	UnderlineSize = Vector2.new(1, 5 / 56),
+	AspectRatio = 870 / 48,
+	IconPosition = Vector2.new(0, 2 / 48),
+	IconSize = Vector2.new(38 / 870, 38 / 48),
+	LabelPosition = Vector2.new(48 / 870, 5 / 48),
+	LabelSize = Vector2.new(560 / 870, 32 / 48),
+	CountPosition = Vector2.new(610 / 870, 9 / 48),
+	CountSize = Vector2.new(240 / 870, 26 / 48), -- ends at 850: 20px right margin
+	UnderlinePosition = Vector2.new(0, 43 / 48),
+	UnderlineSize = Vector2.new(1, 4 / 48),
 	UnderlineCorner = 1,
 	UnderlineColor = Theme.Colors.Outline,
 	LabelGradient = Theme.Header.TitleGradient,
 	CountGradient = Theme.PetCard.NameGradient,
+}
+
+-- ===== SHOP TAB — the category selector row ==================================
+-- Nominal 217x56, four across the 904 content column (4*217 + 3*12 = 904 ✓).
+-- Label only, CENTRED: an icon on the left of a 217-wide pill would push the
+-- label off-centre by 8% of the tab, and the section content carries the icons
+-- already.
+-- Selected wears the kit's gold selection accent (§4, the PetCard rule — the
+-- same "this one is active" language the pets grid and the hex tree use), idle
+-- is the neutral dark chip so the active tab is the only bright thing in the row.
+-- Thickness on H=56 (§2): rim top 4 (7%), face top 6 / bottom 10 (1.7x) — a tab
+-- IS pressable, so it keeps the button weight.
+Theme.ShopTab = {
+	AspectRatio = 217 / 56,
+	OuterCorner = 0.22,
+	RimPosition = Vector2.new(5 / 217, 4 / 56),
+	RimSize = Vector2.new(207 / 217, 44 / 56),
+	RimCorner = 0.20,
+	FacePosition = Vector2.new(7 / 217, 6 / 56),
+	FaceSize = Vector2.new(203 / 217, 40 / 56),
+	FaceCorner = 0.19,
+	LabelPosition = Vector2.new(16 / 217, 13 / 56),
+	LabelSize = Vector2.new(185 / 217, 28 / 56),
+}
+Theme.ShopTabStates = {
+	selected = {
+		OutlineColor = Color3.fromRGB(92, 58, 0),
+		OuterGradient = Theme.PetCard.SelectOuterGradient,
+		RimGradient = Theme.PetCard.SelectRingGradient,
+		FaceGradient = Theme.Rarity.Legendary.Face,
+		TextGradient = Theme.Rarity.Legendary.Text,
+	},
+	-- Idle: the Toggle's dark well plus a muted slate face. Deliberately LOW
+	-- contrast — an idle tab that competes with the selected one is the same
+	-- "everything shouts equally" failure the card colours had.
+	idle = {
+		OutlineColor = Color3.fromRGB(8, 26, 48),
+		OuterGradient = Theme.Toggle.OuterGradient,
+		RimGradient = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(118, 148, 186)),
+			ColorSequenceKeypoint.new(0.06, Color3.fromRGB(126, 156, 194)),
+			ColorSequenceKeypoint.new(0.72, Color3.fromRGB(88, 116, 154)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(66, 92, 128)),
+		}),
+		FaceGradient = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(96, 126, 166)),
+			ColorSequenceKeypoint.new(0.05, Color3.fromRGB(80, 108, 148)),
+			ColorSequenceKeypoint.new(0.55, Color3.fromRGB(66, 92, 130)),
+			ColorSequenceKeypoint.new(0.93, Color3.fromRGB(56, 80, 116)),
+			ColorSequenceKeypoint.new(0.96, Color3.fromRGB(36, 54, 84)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(46, 66, 100)),
+		}),
+		TextGradient = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(214, 230, 248)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(178, 200, 226)),
+		}),
+	},
 }
 
 -- Shop tile — the workhorse cell (passes, eggs, boosts). Nominal 282x160,
@@ -1180,11 +1295,11 @@ Theme.ShopTile = {
 	SubGradient = Theme.PetCard.NameGradient,
 }
 
--- Currency pack card — portrait, compare-at-a-glance. Nominal 208x248 with a
+-- Currency pack card — portrait, compare-at-a-glance. Nominal 208x264 with a
 -- RESERVED ribbon band at the top: every pack keeps the band whether or not it
 -- wears a ribbon, so the four cards stay the same height and the BEST VALUE tag
 -- can never overlap the art or the price (the classic version of this bug).
--- Vertical: 18 ribbon(35) 5 plate(76) 6 amount(28) 4 price(46) 30 = 248 ✓
+-- Vertical: 18 ribbon(35) 4 plate(92) 5 amount(28) 6 price(46) 30 = 264 ✓
 -- Horizontal: plate (208-76)/2 = 66 · price (208-148)/2 = 30 · ribbon (208-140)/2 = 34 ✓
 Theme.ShopPack = {
 	AspectRatio = 208 / 264,
@@ -1217,50 +1332,42 @@ Theme.ShopPack = {
 	BestRimGradient = Theme.PetCard.SelectRingGradient,
 }
 
--- Hero banner — one per section at most (Featured, Free). Nominal 870x200.
--- Horizontal: 26 plate(150) 24 column(460) 24 ribbon(160) 26 = 870 ✓
--- Vertical column: 30 name(40) 4 desc(28) 10 price(58) 30 = 200 ✓
--- Vertical plate: 25 plate(150) 25 = 200 ✓
+-- Full-width GIVE row (the group reward). Nominal 870x176 — a landscape card
+-- in the same language as the grid cells: neutral body, ART WINDOW left, info
+-- column, price shelf right. It was 870x200 with a white CIRCULAR plate and a
+-- fully green face; the circle wasted its corners under `ScaleType.Fit` and a
+-- 870-wide field of flat green is the widest possible "button".
+-- Horizontal: 18 art(138) 20 column(394) 16 price(266) 18 = 870 ✓
+-- Vertical column: title 50..90 (40) · desc 94..122 (28) — pair centred on 86
+-- Art window: y 18..156 (138 square) · price y 60..116 (56, 266/56 = 4.75 ✓)
 Theme.ShopBanner = {
-	AspectRatio = 870 / 200,
-	OuterCorner = 0.16,
-	RimPosition = Vector2.new(8 / 870, 8 / 200),
-	RimSize = Vector2.new(854 / 870, 168 / 200),
-	RimCorner = 0.15,
-	FacePosition = Vector2.new(14 / 870, 13 / 200),
-	FaceSize = Vector2.new(842 / 870, 162 / 200),
-	FaceCorner = 0.14,
-	PlatePosition = Vector2.new(22 / 870, 16 / 200),
-	PlateSize = Vector2.new(168 / 870, 168 / 200),
-	IconInset = 0.06,
-	RibbonPosition = Vector2.new(684 / 870, 24 / 200),
-	RibbonSize = Vector2.new(160 / 870, 40 / 200),
-	NamePosition = Vector2.new(206 / 870, 30 / 200),
-	NameSize = Vector2.new(454 / 870, 40 / 200),
-	DescPosition = Vector2.new(206 / 870, 74 / 200),
-	DescSize = Vector2.new(454 / 870, 28 / 200),
-	PricePosition = Vector2.new(206 / 870, 112 / 200),
-	PriceSize = Vector2.new(220 / 870, 58 / 200),
-	BadgeCenter = Vector2.new(172 / 870, 32 / 200),
-	BadgeSize = Vector2.new(40 / 870, 40 / 200),
-	OutlineColor = Theme.Rarity.Legendary.Outline,
-	OuterGradient = Theme.Rarity.Legendary.Outer,
-	RimGradient = Theme.Rarity.Legendary.Rim,
-	FaceGradient = Theme.Rarity.Legendary.Face,
-	PlateGradient = Theme.PetCard.PlateGradient,
-	PlateTransparency = Theme.PetCard.PlateTransparency,
-	NameGradient = Theme.Rarity.Legendary.Text,
-	DescGradient = Theme.PetCard.NameGradient,
+	AspectRatio = 870 / 176,
+	OuterCorner = 0.13,
+	FacePosition = Vector2.new(7 / 870, 7 / 176),
+	FaceSize = Vector2.new(856 / 870, 159 / 176),
+	FaceCorner = 0.115,
+	ArtPosition = Vector2.new(18 / 870, 18 / 176),
+	ArtSize = Vector2.new(138 / 870, 138 / 176),
+	ArtCorner = 0.14,
+	ArtFacePosition = Vector2.new(22 / 870, 22 / 176),
+	ArtFaceSize = Vector2.new(130 / 870, 130 / 176),
+	ArtFaceCorner = 0.13,
+	IconPosition = Vector2.new(31 / 870, 31 / 176),
+	IconSize = Vector2.new(112 / 870, 112 / 176),
+	RibbonPosition = Vector2.new(692 / 870, 10 / 176),
+	RibbonSize = Vector2.new(160 / 870, 34 / 176),
+	NamePosition = Vector2.new(176 / 870, 50 / 176),
+	NameSize = Vector2.new(394 / 870, 40 / 176),
+	DescPosition = Vector2.new(176 / 870, 94 / 176),
+	DescSize = Vector2.new(394 / 870, 28 / 176),
+	PricePosition = Vector2.new(586 / 870, 60 / 176),
+	PriceSize = Vector2.new(266 / 870, 56 / 176),
+	BadgeCenter = Vector2.new(150 / 870, 34 / 176),
+	BadgeSize = Vector2.new(40 / 870, 40 / 176),
+	Accent = "Rare", -- a GIVE wears green; the paid hero wears gold
 }
--- Free/group banner: same geometry, Rare-green accent (this is a GIVE, not a
--- sell — it must not read as the paid hero).
-Theme.ShopBannerFree = {
-	OutlineColor = Theme.Rarity.Rare.Outline,
-	OuterGradient = Theme.Rarity.Rare.Outer,
-	RimGradient = Theme.Rarity.Rare.Rim,
-	FaceGradient = Theme.Rarity.Rare.Face,
-	NameGradient = Theme.Rarity.Rare.Text,
-}
+-- `accent = "free"` is handled inside ShopBanner (it resolves to the same Rare
+-- green as the default), so no override table is needed any more.
 
 -- Price button: icon + amount, the largest coloured element on every cell.
 -- Thickness by style-rules §2 on H=48: rim top 3 (6.3%) / bottom 7 (14.6%).
@@ -1303,9 +1410,43 @@ Theme.ShopPriceWide = {
 	WideTextSize = Vector2.new(188 / 220, 30 / 58),
 }
 
--- Price button state accents. `unavailable` is the one that did not exist: an
--- unconfigured dev-product id used to render a live BUY button whose purchase
--- the server silently refused (R8 — the failure has to be visible in the UI).
+-- Neutral grey — the same "this is not available to you" language the hex tree
+-- uses for a locked node, so the state is learned once and read everywhere. A
+-- green button would still say "press me" whatever its label read.
+-- ONE table serves both greyed states: they differ in what the shelf SAYS, not
+-- in what it looks like, and giving "can't afford yet" its own shade would be a
+-- new palette for no new meaning (style-rules §4/§7).
+local shopPriceGrey = {
+	OutlineColor = Color3.fromRGB(20, 23, 28),
+	OuterGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(48, 54, 64)),
+		ColorSequenceKeypoint.new(0.10, Color3.fromRGB(34, 39, 47)),
+		ColorSequenceKeypoint.new(0.80, Color3.fromRGB(33, 38, 46)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(30, 34, 42)),
+	}),
+	RimGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 130, 145)),
+		ColorSequenceKeypoint.new(0.05, Color3.fromRGB(150, 160, 175)),
+		ColorSequenceKeypoint.new(0.72, Color3.fromRGB(104, 114, 130)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(78, 86, 100)),
+	}),
+	FaceGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(126, 136, 150)),
+		ColorSequenceKeypoint.new(0.50, Color3.fromRGB(104, 113, 128)),
+		ColorSequenceKeypoint.new(0.93, Color3.fromRGB(90, 98, 112)),
+		ColorSequenceKeypoint.new(0.96, Color3.fromRGB(60, 66, 78)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(70, 77, 90)),
+	}),
+	TextGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(226, 231, 240)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(176, 184, 198)),
+	}),
+}
+
+-- Price button state accents. The two grey ones exist because their absence was
+-- a silent failure (R8): an unconfigured dev-product id used to render a live
+-- BUY button whose purchase the server refused with nothing shown to the
+-- player, and a gem card the player could not pay for did the same.
 Theme.ShopPriceStates = {
 	buy = {
 		OutlineColor = Theme.EquipGreen.OutlineColor,
@@ -1321,35 +1462,14 @@ Theme.ShopPriceStates = {
 		FaceGradient = Theme.Button.FaceGradient,
 		TextGradient = Theme.Button.TextGradient,
 	},
-	-- Neutral grey — the same "this is not available to you" language the hex
-	-- tree uses for a locked node, so the state is learned once and read
-	-- everywhere. A green SOON button would still say "press me".
-	unavailable = {
-		OutlineColor = Color3.fromRGB(20, 23, 28),
-		OuterGradient = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(48, 54, 64)),
-			ColorSequenceKeypoint.new(0.10, Color3.fromRGB(34, 39, 47)),
-			ColorSequenceKeypoint.new(0.80, Color3.fromRGB(33, 38, 46)),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(30, 34, 42)),
-		}),
-		RimGradient = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 130, 145)),
-			ColorSequenceKeypoint.new(0.05, Color3.fromRGB(150, 160, 175)),
-			ColorSequenceKeypoint.new(0.72, Color3.fromRGB(104, 114, 130)),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(78, 86, 100)),
-		}),
-		FaceGradient = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(126, 136, 150)),
-			ColorSequenceKeypoint.new(0.50, Color3.fromRGB(104, 113, 128)),
-			ColorSequenceKeypoint.new(0.93, Color3.fromRGB(90, 98, 112)),
-			ColorSequenceKeypoint.new(0.96, Color3.fromRGB(60, 66, 78)),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(70, 77, 90)),
-		}),
-		TextGradient = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(226, 231, 240)),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(176, 184, 198)),
-		}),
-	},
+	-- "SOON" — no id yet, so there is no price to show and the label spans the
+	-- whole shelf (text-only, no glyph).
+	unavailable = shopPriceGrey,
+	-- "Not enough gems YET" — same grey shelf, but it KEEPS the gem glyph and
+	-- the amount, because that number is the information the player needs. It is
+	-- simply not clickable; a disabled kit button is correctly silent, so there
+	-- is no extra cue.
+	unaffordable = shopPriceGrey,
 }
 
 -- Corner tag ("BEST VALUE", "ONE TIME"). Built from the kit's own layer recipe,
@@ -1395,6 +1515,339 @@ Theme.ShopRibbon = {
 			Text = Theme.Rarity.Epic.Text,
 		},
 	},
+}
+
+-- ===== Shop CARDS (2026-07-31 redesign) =====================================
+--
+-- THE BUG THIS FIXES — "the cards look like stretched buttons".
+-- The 2026-07-30 card was drawn with the kit's BUTTON layer recipe
+-- (style-rules §2): dark outline ~6% of H at the top and ~12% at the bottom,
+-- "the weight that makes elements look physically thick". On a 282x296 cell
+-- that is 8px of outline at the top and 30px at the bottom — a 3.75x lip. That
+-- lip is the single strongest "I am a pressable slab" signal in the whole kit,
+-- and it was under EVERY product. Add a flat single-colour face and content
+-- floating on it (also exactly what a button is) and the result is a button
+-- that happens to be tall. The rule the kit was missing:
+--
+--   A BUTTON is a slab: one colour field, bottom-weighted outline.
+--   A CARD is a container: EVEN outline, and INTERNAL ZONES.
+--
+-- So: the outline is now even (7 top/sides, 10 bottom = 1.4x, enough for the
+-- kit's physicality, far below the 2x that reads as "press me"), and the card
+-- is composed of an ART WINDOW over an INFO block over a PRICE SHELF. Only the
+-- price shelf keeps the button recipe — it is the only thing that IS a button.
+--
+-- WHERE THE COLOUR WENT. Six passes in six saturated hues gave the grid no
+-- hierarchy: every cell shouted equally, which is what "cluttered" means. The
+-- body is now ONE neutral for every card and the accent lives in the ART
+-- WINDOW only. A row then reads as one object with N coloured windows, the
+-- product art gets the strongest local contrast on the card, and rarity is
+-- still colour-coded.
+--
+-- This is NOT the rejected "plate behind the icon". Both rejected attempts put
+-- a BADGE under the glyph (a white circle; then a recessed well + shelf +
+-- gloss + shadow + halo — five layers at once). The art window is the card's
+-- top ZONE, full content width, and it is doing a job nothing else can do:
+-- `ScaleType.Fit` draws every icon at the shorter side of its box, so art of
+-- different aspect (a tall flame vs a wide egg cluster vs a square pack) drew
+-- at wildly different visual sizes straight on the face. One window normalises
+-- them. Icon area went 13.5% -> 22% of the cell.
+
+-- Card body — ONE palette for every product card, so the accent can live in
+-- the art window alone. Derived from the kit's navy outline family (§4): the
+-- Outer is the Header's outline curve, the Face is a desaturated blueberry
+-- that sits dark against the panel's white-blue fill.
+Theme.ShopCardBody = {
+	OutlineColor = Color3.fromRGB(8, 26, 48),
+	OuterGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 62, 98)),
+		ColorSequenceKeypoint.new(0.06, Color3.fromRGB(8, 36, 62)),
+		ColorSequenceKeypoint.new(0.85, Color3.fromRGB(6, 30, 54)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 42, 70)),
+	}),
+	-- Face recipe (§3): bright at 0, plateau, hard dark lip at 0.93..1.
+	FaceGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(96, 130, 180)),
+		ColorSequenceKeypoint.new(0.05, Color3.fromRGB(78, 110, 158)),
+		ColorSequenceKeypoint.new(0.55, Color3.fromRGB(62, 90, 136)),
+		ColorSequenceKeypoint.new(0.93, Color3.fromRGB(50, 74, 116)),
+		ColorSequenceKeypoint.new(0.96, Color3.fromRGB(32, 50, 84)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(42, 62, 100)),
+	}),
+	TitleGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+		ColorSequenceKeypoint.new(0.55, Color3.fromRGB(232, 243, 255)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(196, 220, 250)),
+	}),
+	-- The perk line is SECONDARY: same family, one step down in value, so the
+	-- title wins the cell without needing a second font size trick.
+	PerkGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(188, 210, 238)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(158, 184, 218)),
+	}),
+	-- Gold frame for `premium` — the kit's existing selection accent (§4), a
+	-- gradient swap on the Outer only. Geometry never changes with state.
+	PremiumOuterGradient = Theme.PetCard.SelectOuterGradient,
+	PremiumOutlineColor = Color3.fromRGB(92, 58, 0),
+}
+
+-- Per-item accents. Every one is an EXISTING kit accent set (the six-tier rarity
+-- ladder plus the base Button blue) — no new hues, per style-rules §4/§7.
+Theme.ShopCardAccents = {
+	Blue = {
+		OuterGradient = Theme.Button.OuterGradient,
+		FaceGradient = Theme.Button.FaceGradient,
+		OutlineColor = Theme.Button.OutlineColor,
+		TextGradient = Theme.Button.TextGradient,
+	},
+	Common = {
+		OuterGradient = Theme.Rarity.Common.Outer,
+		FaceGradient = Theme.Rarity.Common.Face,
+		OutlineColor = Theme.Rarity.Common.Outline,
+		TextGradient = Theme.Rarity.Common.Text,
+	},
+	Uncommon = {
+		OuterGradient = Theme.Rarity.Uncommon.Outer,
+		FaceGradient = Theme.Rarity.Uncommon.Face,
+		OutlineColor = Theme.Rarity.Uncommon.Outline,
+		TextGradient = Theme.Rarity.Uncommon.Text,
+	},
+	Rare = {
+		OuterGradient = Theme.Rarity.Rare.Outer,
+		FaceGradient = Theme.Rarity.Rare.Face,
+		OutlineColor = Theme.Rarity.Rare.Outline,
+		TextGradient = Theme.Rarity.Rare.Text,
+	},
+	Epic = {
+		OuterGradient = Theme.Rarity.Epic.Outer,
+		FaceGradient = Theme.Rarity.Epic.Face,
+		OutlineColor = Theme.Rarity.Epic.Outline,
+		TextGradient = Theme.Rarity.Epic.Text,
+	},
+	Legendary = {
+		OuterGradient = Theme.Rarity.Legendary.Outer,
+		FaceGradient = Theme.Rarity.Legendary.Face,
+		OutlineColor = Theme.Rarity.Legendary.Outline,
+		TextGradient = Theme.Rarity.Legendary.Text,
+	},
+	Secret = {
+		OuterGradient = Theme.Rarity.Secret.Outer,
+		FaceGradient = Theme.Rarity.Secret.Face,
+		OutlineColor = Theme.Rarity.Secret.Outline,
+		TextGradient = Theme.Rarity.Secret.Text,
+	},
+}
+Theme.ShopCardAccentDefault = "Blue"
+
+-- ===== SHOP CARD — art window · info · price shelf ==========================
+--
+-- Big card — game passes, 3 across the 870 canvas. Nominal 282x338.
+--   3*282 + 2*12 = 870 ✓ exact
+-- The cell went 282x296 (0.95, a squat rectangle — the second "button" tell,
+-- since buttons are wide and cards are portrait) to 282x338 (0.834).
+--
+-- CHROME  Outer 0..282 x 0..338 r 0.14
+--         Face  7..275 x 7..328 — outline 7 top/sides, 10 bottom (1.4x, NOT
+--               the button recipe's 2x+; the old card was 8 vs 30 = 3.75x)
+-- VERTICAL inside the face (321):
+--   11 · 168 art · 10 · 36 title · 2 · 22 perk · 8 · 52 price · 12 = 321 ✓
+--   art 18..186 · title 196..232 · perk 234..256 · price 264..316
+-- HORIZONTAL: one content column x 18..264 (246) for art, title, perk and
+--   price alike — every zone shares one left and right edge, which is most of
+--   why the cell now reads as tidy. ✓ 18 + 246 + 18 = 282
+--   ribbon 130 + 140 + 12 ✓ (overhangs the card TOP into the row gap)
+-- ART WINDOW: ring 18..264 x 18..186, face inset 4 all round (an even ring —
+--   a window, not a bevel). Icon 146² centred = 22% of the cell (was 13.5%).
+Theme.ShopCard = {
+	AspectRatio = 282 / 338,
+	OuterCorner = 0.14,
+	FacePosition = Vector2.new(7 / 282, 7 / 338),
+	FaceSize = Vector2.new(268 / 282, 321 / 338),
+	FaceCorner = 0.123,
+	ArtPosition = Vector2.new(18 / 282, 18 / 338),
+	ArtSize = Vector2.new(246 / 282, 168 / 338),
+	ArtCorner = 0.13,
+	ArtFacePosition = Vector2.new(22 / 282, 22 / 338),
+	ArtFaceSize = Vector2.new(238 / 282, 160 / 338),
+	ArtFaceCorner = 0.12,
+	IconPosition = Vector2.new(68 / 282, 29 / 338),
+	IconSize = Vector2.new(146 / 282, 146 / 338),
+	TitlePosition = Vector2.new(18 / 282, 196 / 338),
+	TitleSize = Vector2.new(246 / 282, 36 / 338),
+	PerkPosition = Vector2.new(18 / 282, 234 / 338),
+	PerkSize = Vector2.new(246 / 282, 22 / 338),
+	PricePosition = Vector2.new(18 / 282, 264 / 338),
+	PriceSize = Vector2.new(246 / 282, 52 / 338),
+	RibbonPosition = Vector2.new(130 / 282, -12 / 338),
+	RibbonSize = Vector2.new(140 / 282, 34 / 338),
+	BadgeCenter = Vector2.new(240 / 282, 42 / 338), -- art window's top-right corner
+	BadgeSize = Vector2.new(44 / 282, 44 / 338),
+}
+
+-- Small card — eggs/boosts and gem packs, 4 across. Nominal 208x264 (0.788).
+--   4*208 + 3*12 = 868 <= 870 ✓ (2px slack, kit pitfall 6)
+-- Same composition at 0.7376 scale, re-rounded to whole px.
+-- CHROME  Face 6..202 x 6..255 — outline 6 top/sides, 9 bottom (1.5x)
+-- VERTICAL inside the face (249):
+--   10 · 126 art · 8 · 28 title · 2 · 16 perk · 8 · 37 price · 14 = 249 ✓
+--   art 16..142 · title 150..178 · perk 180..196 · price 204..241
+-- HORIZONTAL: content column x 16..192 (176) ✓ 16 + 176 + 16 = 208
+--   Icon 110² centred in the window = 22% of the cell — the SAME share as the
+--   big card, so the two sizes read as one family.
+Theme.ShopCardSmall = {
+	AspectRatio = 208 / 264,
+	OuterCorner = 0.14,
+	FacePosition = Vector2.new(6 / 208, 6 / 264),
+	FaceSize = Vector2.new(196 / 208, 249 / 264),
+	FaceCorner = 0.123,
+	ArtPosition = Vector2.new(16 / 208, 16 / 264),
+	ArtSize = Vector2.new(176 / 208, 126 / 264),
+	ArtCorner = 0.13,
+	ArtFacePosition = Vector2.new(19.5 / 208, 19.5 / 264),
+	ArtFaceSize = Vector2.new(169 / 208, 119 / 264),
+	ArtFaceCorner = 0.12,
+	IconPosition = Vector2.new(49 / 208, 24 / 264),
+	IconSize = Vector2.new(110 / 208, 110 / 264),
+	TitlePosition = Vector2.new(16 / 208, 150 / 264),
+	TitleSize = Vector2.new(176 / 208, 28 / 264),
+	PerkPosition = Vector2.new(16 / 208, 180 / 264),
+	PerkSize = Vector2.new(176 / 208, 16 / 264),
+	PricePosition = Vector2.new(16 / 208, 204 / 264),
+	PriceSize = Vector2.new(176 / 208, 37 / 264),
+	RibbonPosition = Vector2.new(96 / 208, -9 / 264),
+	RibbonSize = Vector2.new(104 / 208, 26 / 264),
+	BadgeCenter = Vector2.new(176 / 208, 34 / 264),
+	BadgeSize = Vector2.new(38 / 208, 38 / 264),
+}
+
+-- The card's PRICE SHELF — the only part of a card that is still drawn with
+-- the button recipe, because it is the only part that is a button: rim 3.5,
+-- face top 5 / bottom 9 (1.8x weight, §2). One table serves both card sizes:
+-- big 246x52 = 4.731 and small 176x37 = 4.757 are the same aspect to 0.5%.
+-- Horizontal: 76 icon(30) 8 text(80) — the pair is centred for a 3-digit price
+--   (icon 76..106, "349" ≈ 114..162 → group centre 119 vs shelf centre 123).
+--   Text is LEFT-aligned after the glyph, so 2- and 4-digit prices drift ±8px
+--   on a 246 shelf, which is under 4% and invisible in a grid.
+-- WideText (OWNED / SOON / FREE) is centred across 20..226.
+Theme.ShopPriceCard = {
+	AspectRatio = 246 / 52,
+	OuterCorner = 0.20,
+	RimPosition = Vector2.new(4 / 246, 3.5 / 52),
+	RimSize = Vector2.new(238 / 246, 41 / 52),
+	RimCorner = 0.18,
+	FacePosition = Vector2.new(5.5 / 246, 5 / 52),
+	FaceSize = Vector2.new(235 / 246, 38 / 52),
+	FaceCorner = 0.17,
+	IconPosition = Vector2.new(76 / 246, 11 / 52),
+	IconSize = Vector2.new(30 / 246, 30 / 52),
+	TextPosition = Vector2.new(114 / 246, 12 / 52),
+	TextSize = Vector2.new(80 / 246, 28 / 52),
+	WideTextPosition = Vector2.new(20 / 246, 12 / 52),
+	WideTextSize = Vector2.new(206 / 246, 28 / 52),
+}
+
+-- HERO — the Starter Pack's own cell, full width. Nominal 870x260.
+-- It is not a wide ShopCard: the bundle is the pitch, so the contents render as
+-- a ROW OF CHIPS (what you get, one per grant) beside the art window and an
+-- oversized price shelf. That row is the whole reason this component exists.
+-- Same body/art-window language as the grid cells, plus the gold PREMIUM frame
+-- — the featured offer is the one cell in the shop allowed to wear it.
+-- The info column runs to the card's RIGHT EDGE and the buy shelf is CENTRED
+-- under it. Packing title/desc/chips into a 416-wide column and parking a
+-- 266-wide shelf at its left left a 160x160 void in the bottom-right quadrant —
+-- the only dead area in the whole panel. Spread wide, centre the button, and
+-- the leftover space becomes symmetric margin instead.
+-- Horizontal: 22 art(206) 22 column(596) 24 = 870 ✓
+--   chips 4 * 140 + 3 * 12 = 560 + 36 = 596 ✓ (was 3 * 188 + 2 * 16 — the
+--   Starter Pack grants four things now, and a bundle whose chip row is capped
+--   below its grant count is an offer that under-sells itself)
+--   last chip 250 + 3*152 = 706, +140 = 846 = 250 + 596 ✓ closes on the edge
+--   shelf 266 centred in the column: 415..681
+-- Column vertical: 28 title(46) 4 desc(28) 12 bundle(50) 12 price(56) 24 = 260 ✓
+--   (unchanged — the fourth chip is paid for in WIDTH, not height)
+-- Art window: y 27..233 (206 square, vertically centred in 260)
+Theme.ShopHero = {
+	AspectRatio = 870 / 260,
+	OuterCorner = 0.105,
+	FacePosition = Vector2.new(8 / 870, 8 / 260),
+	FaceSize = Vector2.new(854 / 870, 241 / 260),
+	FaceCorner = 0.095,
+	ArtPosition = Vector2.new(22 / 870, 27 / 260),
+	ArtSize = Vector2.new(206 / 870, 206 / 260),
+	ArtCorner = 0.13,
+	ArtFacePosition = Vector2.new(27 / 870, 32 / 260),
+	ArtFaceSize = Vector2.new(196 / 870, 196 / 260),
+	ArtFaceCorner = 0.12,
+	IconPosition = Vector2.new(41 / 870, 46 / 260),
+	IconSize = Vector2.new(168 / 870, 168 / 260),
+	TitlePosition = Vector2.new(250 / 870, 28 / 260),
+	TitleSize = Vector2.new(596 / 870, 46 / 260),
+	DescPosition = Vector2.new(250 / 870, 78 / 260),
+	DescSize = Vector2.new(596 / 870, 28 / 260),
+	-- Bundle row: 4 * 140 + 3 * 12 = 596 ✓ (chips are laid out by stride)
+	BundlePosition = Vector2.new(250 / 870, 118 / 260),
+	BundleSize = Vector2.new(140 / 870, 50 / 260),
+	BundleStride = 152 / 870,
+	BundleColumns = 4,
+	PricePosition = Vector2.new(415 / 870, 180 / 260),
+	PriceSize = Vector2.new(266 / 870, 56 / 260),
+	-- Overhangs the card's TOP edge, exactly like a grid cell's ribbon, instead
+	-- of floating inside the face where it needed a void around it to breathe.
+	RibbonPosition = Vector2.new(686 / 870, -12 / 260),
+	RibbonSize = Vector2.new(160 / 870, 40 / 260),
+	BadgeCenter = Vector2.new(222 / 870, 44 / 260),
+	BadgeSize = Vector2.new(46 / 870, 46 / 260),
+	Accent = "Legendary", -- the paid hero wears gold; the give stays green
+	Premium = true,
+}
+
+-- One bundle chip ("x2 Cal"). Nominal 140x50 — under the 50px threshold, so it
+-- drops the Rim and is Outer + Face only (style-rules §2). Re-cut from 188x50
+-- when the row went to four chips; every fraction below is of the NEW 140 grid,
+-- because the old ones would have squashed a 34px icon into a 25px slot.
+-- Horizontal: 8 icon(28) 6 text(90) 8 = 140 ✓ · Vertical: face 3..44,
+--   icon y 11..39 (28 square, centred in 50), text y 12..38 ✓
+-- CHIP COPY IS A LAYOUT CONSTRAINT, and a tighter one than before: TextScaled
+-- binds on WIDTH, and the text zone lost 38px. At the kit's measured Fredoka
+-- advance (~0.75 x font size per glyph — the constant that reproduces both
+-- published limits: 15 chars in the card's 176px perk zone, 9 glyphs in the
+-- 185px tab label), a 90px zone renders N characters at 90 / (0.75 N) px:
+--   3 chars "200"      -> capped at the 26px zone height
+--   6 chars "x2 Cal"   -> 20px
+--   5 chars "Bite+"    -> 24px
+--   8 chars "x2 Speed" -> 15px  <- the floor; longer copy reads as noise
+-- So bundle text is capped at 8 characters. Anything longer belongs in the
+-- product's own card, not on a chip.
+-- The face is a LIGHT slate, not the Chip recipe's deep blue: the hero's body
+-- is navy now, and a dark chip on a dark body was invisible (it was designed
+-- against the old gold face).
+Theme.ShopHeroItem = {
+	AspectRatio = 140 / 50,
+	OuterCorner = 0.24,
+	FacePosition = Vector2.new(3 / 140, 3 / 50),
+	FaceSize = Vector2.new(134 / 140, 41 / 50),
+	FaceCorner = 0.22,
+	IconPosition = Vector2.new(8 / 140, 11 / 50),
+	IconSize = Vector2.new(28 / 140, 28 / 50),
+	TextPosition = Vector2.new(42 / 140, 12 / 50),
+	TextSize = Vector2.new(90 / 140, 26 / 50),
+	-- Dark Outer pill (the Chip recipe) over a RAISED slate face — one value step
+	-- lighter than the card body, so the contents row separates from it. The
+	-- original deep-blue Chip face was chosen against a gold hero; on the navy
+	-- body it was navy-on-navy and the chips disappeared.
+	OuterGradient = Theme.Chip.OuterGradient,
+	FaceGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(134, 168, 212)),
+		ColorSequenceKeypoint.new(0.05, Color3.fromRGB(116, 150, 196)),
+		ColorSequenceKeypoint.new(0.60, Color3.fromRGB(98, 130, 176)),
+		ColorSequenceKeypoint.new(0.93, Color3.fromRGB(84, 114, 158)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(70, 98, 140)),
+	}),
+	TextGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(222, 236, 252)),
+	}),
+	OutlineColor = Color3.fromRGB(8, 26, 48),
 }
 
 -- Kit-styled text input (dark well + light groove face). Nominal 418x84.
@@ -1480,9 +1933,10 @@ Theme.AppHud = {
 	PillPosition = Vector2.new(22 / 1920, 24 / 1080),
 	MenuPosition = Vector2.new(22 / 1920, 110 / 1080),
 	-- Icon GRID (was a single tall column that ran to the bottom of the screen).
-	-- Buttons flow left-to-right, wrapping after MenuColumns — 8 buttons become a
-	-- 2x4 block that stops around mid-screen. Each cell is comfortable to tap on
-	-- phones; the HudMenuButton icon self-fits its cell (no aspect constraint).
+	-- Buttons flow left-to-right, wrapping after MenuColumns — the meta menu
+	-- becomes a compact block that stops well above mid-screen. Each cell is
+	-- comfortable to tap on phones; the HudMenuButton icon self-fits its cell
+	-- (no aspect constraint).
 	MenuColumns = 2,
 	-- 92x100 was too small to read on a phone: the icon drew at 73% of the
 	-- button height because ScaleType.Fit letterboxes a square image into the
@@ -1559,6 +2013,44 @@ Theme.ComboBadge = {
 	OutlineColor = Theme.Colors.TextOutline,
 	PulseScale = 0.18, -- extra scale at pulse peak
 	PulseTime = 0.18,
+}
+
+-- Boss PRIZE card (HUD top-right, boss phase only). The stake of the fight: the
+-- squishy this player is playing for, decided server-side when the boss opens
+-- (features/cake-cycle.md). The finale used to be a blind tap race — you could
+-- not see what you were fighting for until it was already yours.
+-- ARCHETYPE: not a window — a HUD "reward on offer" strip, the plate-left /
+-- text-column-right shape ShopTile uses, ratio-transferred to HUD height. It
+-- wears the PRIZE'S OWN rarity accent (Theme.Rarity), so a Legendary on offer
+-- reads across the room without reading the label.
+-- Nominal 300x92.
+-- Horizontal: 12 plate(68) 10 column(198) 12 = 300 ✓
+-- Vertical plate:  12 plate(68) 12 = 92 ✓
+-- Vertical column: 14 caption(24) 2 name(38) 14 = 92 ✓
+-- Layers on H=92 (style-rules §2: ~6% top, ~2x that at the bottom):
+--   outer top 5 (5.4%) / bottom 10 (10.9%);  rim ring 4 top / 4 bottom
+Theme.BossPrize = {
+	AspectRatio = 300 / 92,
+	OuterCorner = 0.16,
+	RimPosition = Vector2.new(7 / 300, 5 / 92),
+	RimSize = Vector2.new(286 / 300, 77 / 92),
+	RimCorner = 0.15,
+	FacePosition = Vector2.new(11 / 300, 9 / 92),
+	FaceSize = Vector2.new(278 / 300, 69 / 92),
+	FaceCorner = 0.14,
+	PlatePosition = Vector2.new(12 / 300, 12 / 92),
+	PlateSize = Vector2.new(68 / 300, 68 / 92),
+	IconInset = 0.06, -- the squishy nearly fills the plate (ShopTile's value)
+	CaptionPosition = Vector2.new(90 / 300, 14 / 92),
+	CaptionSize = Vector2.new(198 / 300, 24 / 92),
+	NamePosition = Vector2.new(90 / 300, 40 / 92),
+	NameSize = Vector2.new(198 / 300, 38 / 92),
+	PlateGradient = Theme.PetCard.PlateGradient,
+	PlateTransparency = Theme.PetCard.PlateTransparency,
+	-- The caption is the quiet line, the NAME is the prize: neutral card text for
+	-- the label, the rarity's own text colour for the name (Theme.Rarity carries
+	-- `Text`, so this needs no new palette — iron rule 7).
+	CaptionGradient = Theme.PetCard.NameGradient,
 }
 
 -- Announce banner (HUD top-center, under the cake bar). One OutlinedText
@@ -1716,56 +2208,11 @@ Theme.RebirthLayout = {
 	ButtonSize = Vector2.new(318 / 512, 84 / 727),
 }
 
--- Quest row (quests list archetype). Nominal 418x96 (cell bakes 10 gap).
--- Vertical: name 8..34 (26), bar 40..62 (22), reward 66..90 (24);
--- claim button 20..76 (56). Horizontal: 16 text(254) 12 claim(120) 16 = 418 ✓.
-Theme.QuestRow = {
-	CellAspectRatio = 418 / 106,
-	ContentHeightInCell = 96 / 106,
-	AspectRatio = 418 / 96,
-	OuterCorner = 0.20,
-	RimPosition = Vector2.new(6 / 418, 6 / 96),
-	RimSize = Vector2.new(406 / 418, 78 / 96),
-	RimCorner = 0.18,
-	FacePosition = Vector2.new(9 / 418, 8 / 96),
-	FaceSize = Vector2.new(400 / 418, 74 / 96),
-	FaceCorner = 0.17,
-	OutlineColor = Theme.Button.OutlineColor,
-	OuterGradient = Theme.Button.OuterGradient,
-	RimGradient = Theme.Button.RimGradient,
-	FaceGradient = Theme.Button.FaceGradient,
-	NamePosition = Vector2.new(16 / 418, 8 / 96),
-	NameSize = Vector2.new(254 / 418, 26 / 96),
-	NameGradient = Theme.Button.TextGradient,
-	BarPosition = Vector2.new(16 / 418, 40 / 96),
-	BarSize = Vector2.new(254 / 418, 22 / 96),
-	BarOuterGradient = Theme.Toggle.OuterGradient,
-	BarGrooveGradient = Theme.Scrollbar.GrooveGradient,
-	BarGrooveInset = Vector2.new(3 / 254, 3 / 22),
-	BarFillGradient = Theme.Toggle.KnobOnGradient,
-	BarTextGradient = Theme.PetCard.NameGradient,
-	RewardPosition = Vector2.new(16 / 418, 66 / 96),
-	RewardSize = Vector2.new(254 / 418, 24 / 96),
-	RewardGradient = Theme.PetCard.NameGradient,
-	ClaimPosition = Vector2.new(282 / 418, 20 / 96),
-	ClaimSize = Vector2.new(120 / 418, 56 / 96),
-}
-
--- Quests window geometry: 3 rows: 3*96 + 2*10 = 308 ≤ 563 ✓.
-Theme.QuestsLayout = {
-	PanelAspect = Theme.Layout.PanelAspect,
-	PanelMaxViewportFraction = Theme.Layout.PanelMaxViewportFraction,
-	ListPosition = Theme.Layout.RowsPosition,
-	ListSize = Theme.Layout.RowsSize,
-	RowHeight = 96 / 563,
-	RowGap = 10 / 563,
-}
-
 -- Button styles for non-4.06 zones. Components.Button self-constrains to
 -- its style's AspectRatio (FitWithinMaxSize): putting EquipGreen (418/103)
 -- into a 140x56 zone renders a 140x34.5 button — every zone needs a style
--- whose aspect MATCHES the zone (the arithmetic in UpgradeRow/QuestRow/
--- RebirthLayout assumes full-height buttons).
+-- whose aspect MATCHES the zone (the arithmetic in UpgradeRow/RebirthLayout
+-- assumes full-height buttons).
 local function buttonStyleWithAspect(base, aspect: number)
 	local copy = table.clone(base)
 	copy.AspectRatio = aspect
@@ -1773,15 +2220,16 @@ local function buttonStyleWithAspect(base, aspect: number)
 end
 Theme.BuyButton = buttonStyleWithAspect(Theme.EquipGreen, 140 / 56) -- UpgradeRow buy zone
 Theme.BuyButtonNeutral = buttonStyleWithAspect(Theme.ActionButton, 140 / 56) -- "MAX"
-Theme.ClaimButton = buttonStyleWithAspect(Theme.EquipGreen, 120 / 56) -- QuestRow claim zone
+Theme.ClaimButton = buttonStyleWithAspect(Theme.EquipGreen, 120 / 56) -- 120x56 in-row claim zone
 Theme.ClaimButtonNeutral = buttonStyleWithAspect(Theme.ActionButton, 120 / 56)
 Theme.RebirthButton = buttonStyleWithAspect(Theme.EquipGreen, 318 / 84) -- RebirthLayout button zone
 Theme.CheckpointButton = buttonStyleWithAspect(Theme.EquipGreen, 300 / 64) -- HUD "return to gym" button (features/checkpoint.md)
 
 -- App HUD additions for the game: second currency pill, belly bar,
 -- cake progress bar, combo badge, announce banner. Two pills stack at
--- y 24..88 and 96..160; the menu (icon column) moves DOWN to clear them:
--- 8 rows: 8*100 + 7*12 = 884 -> y 172..1056 on the 1080 reference ✓.
+-- y 24..88 and 96..160; the menu (icon GRID) moves DOWN to clear them:
+-- at 2 columns its tallest sane form is 4 rows: 4*132 + 3*14 = 570 ->
+-- y 172..742 on the 1080 reference ✓ (it holds 5 buttons today).
 Theme.AppHud.SecondPillPosition = Vector2.new(22 / 1920, 96 / 1080)
 Theme.AppHud.MenuPosition = Vector2.new(22 / 1920, 172 / 1080)
 Theme.AppHud.BellyPosition = Vector2.new(0.5, 0.955) -- anchor (0.5, 1)
@@ -1792,6 +2240,12 @@ Theme.AppHud.ComboPosition = Vector2.new(0.82, 0.40)
 Theme.AppHud.ComboHeight = 84 / 1080
 Theme.AppHud.AnnouncePosition = Vector2.new(0.5, 92 / 1080)
 Theme.AppHud.AnnounceHeight = 52 / 1080
+--- Boss prize card: top-RIGHT, level with the calories pill on the left (same
+--- 22px reference margin, same 26px top). Anchor (1, 0). The only free corner
+--- during a boss fight — top-centre is the HP bar + announce banner, and
+--- bottom-right is the touch EAT button.
+Theme.AppHud.BossPrizePosition = Vector2.new(1 - 22 / 1920, 26 / 1080)
+Theme.AppHud.BossPrizeHeight = 76 / 1080 -- taller than a 64/1080 stat pill: it is a prize
 -- Return-to-checkpoint button: bottom-center, just ABOVE the belly bar (belly
 -- full -> burn is right here). Anchor (0.5, 1); height on the 1080 reference.
 Theme.AppHud.CheckpointPosition = Vector2.new(0.5, 897 / 1080)
@@ -1812,15 +2266,25 @@ Theme.AppHud.MenuIconPlaceholder = menuIconPlaceholder
 Theme.AppHud.MenuIcons = {
 	Squishies = Icons.SqRainbowDrop, -- the collection = the game's identity
 	Pets = Icons.SqRainbowDrop, -- legacy panel name, same destination
-	Rebirth = Icons.UiRebirth,
-	Quests = Icons.UiQuest,
 	Shop = Icons.UiShop,
 	DailyRewards = Icons.UiGift,
-	TimeRewards = Icons.BadgeClock,
 	Codes = Icons.UiCodes,
 	Settings = Icons.UiSettings,
 	Upgrades = Icons.UiStrength,
 	Index = Icons.BadgeStats,
+}
+
+--- HUD stat-pill icons, as registry NAMES (resolve with Theme.Icon).
+--- ONE source for both the HUD pills and the shop's balance row, so a currency
+--- can never show two different glyphs on the same screen — which it did: the
+--- GAME HUD still drew StatPill's legacy hand-vectored `bolt`/`coin` shapes from
+--- before the icon registry existed, so the GEMS pill wore a COIN while the shop
+--- showed the same balance next to a gem. Calories keep a bolt (they are burned
+--- energy, and Hud.EnergyTextGradient is built around that reading), in the
+--- badge-pack cut, which is heavier and far more readable at pill size.
+Theme.AppHud.PillIcons = {
+	Calories = "BadgeLightning",
+	Gems = "UiGem",
 }
 
 -- ===== Upgrades HEX TREE (features/upgrades.md) =====
@@ -2015,8 +2479,6 @@ table.freeze(Theme.EatButton)
 table.freeze(Theme.RevealOverlay)
 table.freeze(Theme.RebirthLayout.StatPositions)
 table.freeze(Theme.RebirthLayout)
-table.freeze(Theme.QuestRow)
-table.freeze(Theme.QuestsLayout)
 table.freeze(Theme.MatchChoice)
 table.freeze(Theme.MatchmakingStartButton)
 table.freeze(Theme.MatchmakingLayout)
@@ -2074,21 +2536,37 @@ table.freeze(Theme.ShopSectionHeader)
 table.freeze(Theme.ShopTile)
 table.freeze(Theme.ShopPack)
 table.freeze(Theme.ShopBanner)
-table.freeze(Theme.ShopBannerFree)
 table.freeze(Theme.ShopPrice)
 table.freeze(Theme.ShopPriceWide)
 table.freeze(Theme.ShopPriceStates.buy)
 table.freeze(Theme.ShopPriceStates.owned)
 table.freeze(Theme.ShopPriceStates.unavailable)
+-- NOT frozen again: `unaffordable` IS `unavailable` (one shared grey table), and
+-- table.freeze errors on an already-frozen table.
 table.freeze(Theme.ShopPriceStates)
 table.freeze(Theme.ShopRibbon.Variants)
 table.freeze(Theme.ShopRibbon)
 table.freeze(Theme.ShopLayout)
+for _, accent in pairs(Theme.ShopCardAccents) do
+	table.freeze(accent)
+end
+table.freeze(Theme.ShopCardAccents)
+table.freeze(Theme.ShopCard)
+table.freeze(Theme.ShopCardSmall)
+table.freeze(Theme.ShopPriceCard)
+table.freeze(Theme.ShopCardBody)
+table.freeze(Theme.ShopTab)
+table.freeze(Theme.ShopTabStates.selected)
+table.freeze(Theme.ShopTabStates.idle)
+table.freeze(Theme.ShopTabStates)
+table.freeze(Theme.ShopHero)
+table.freeze(Theme.ShopHeroItem)
 table.freeze(Theme.TextInput)
 table.freeze(Theme.CodesLayout)
 table.freeze(Theme.MenuButton)
 table.freeze(Theme.HudMenuButton)
 table.freeze(Theme.AppHud.MenuIcons)
+table.freeze(Theme.AppHud.PillIcons)
 table.freeze(Theme.AppHud)
 
 Theme.Icons = table.freeze(Icons)
@@ -2105,6 +2583,38 @@ for panel, id in pairs(Theme.AppHud.MenuIcons) do
 				.. `Point it at a name that exists in Icons.lua.`
 		)
 	end
+end
+
+-- PillIcons hold NAMES, not ids (one source shared by the HUD pills and the
+-- shop's balance row), so they are checked against the registry here rather than
+-- for nil — otherwise a typo would only surface as a fallback glyph at runtime.
+for slot, name in pairs(Theme.AppHud.PillIcons) do
+	if Icons[name] == nil then
+		Log.Warn(
+			"UIKit",
+			`AppHud.PillIcons.{slot} = '{tostring(name)}' is not in the icon registry — `
+				.. `that pill will render the fallback glyph. See src/shared/UIKit/Icons.lua.`
+		)
+	end
+end
+
+--API
+-- Resolve a shop-card accent NAME to its gradient set. Same contract as
+-- Theme.Icon: an unknown key warns ONCE and falls back to the default, because
+-- the alternative — a card that quietly renders in the wrong colour — reads as
+-- a design choice rather than a typo in the catalogue (R8).
+function Theme.ShopAccent(name: string?)
+	local accent = Theme.ShopCardAccents[name or Theme.ShopCardAccentDefault]
+	if accent then
+		return accent
+	end
+	Log.Once(
+		"UIKit",
+		`shop-accent-{tostring(name)}`,
+		`unknown shop accent '{tostring(name)}' — falling back to {Theme.ShopCardAccentDefault}. `
+			.. `Valid keys are the Theme.ShopCardAccents tiers; set it in ShopData.`
+	)
+	return Theme.ShopCardAccents[Theme.ShopCardAccentDefault]
 end
 
 --API

@@ -2,10 +2,15 @@
 	UpgradesSubsClient — upgrade levels consumer + hex-tree open/close (R4):
 	  * UpgradesUpdate feeds LocalStatsService (bite prediction) + AppRoot's
 	    hex-tree; node buys flow back through the BuyUpgrade remote.
-	  * The tree is a full-screen lobby overlay reserved for an authored
-	    UpgradeStation ProximityPrompt (placement pending; features/upgrades.md).
-	    Opening a menu is local UI, so it needs no server round-trip. E (or the
-	    Close button) closes it; a BlurEffect dims the world while open.
+	  * The tree is a full-screen MODAL overlay. Its ONE opener is the authored
+	    `UpgradeStation` ProximityPrompt on the game checkpoint's computer (built
+	    by MapService, enabled, HoldDuration 0) — there is no HUD button in either
+	    place (2026-07-30: you are stood at the checkpoint after every belly burn,
+	    so a button was a second door into the same room). Opening a menu is local
+	    UI, so it needs no server round-trip. E (or the Close button) closes it; a
+	    BlurEffect dims the world while open.
+	    `onToggleUpgrades` stays on the AppRoot callback table so a future opener
+	    (or a re-added menu entry) gets the modal wiring instead of bypassing it.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -24,15 +29,15 @@ local SCOPE = "UpgradesSubsClient"
 local UpgradesSubsClient = {}
 
 function UpgradesSubsClient.Start(data, modules)
-	if data.LobbyUiData == nil then
-		Log.Info(SCOPE, "lobby client partition absent -- lobby upgrade UI wiring skipped in game")
+	local upgradesData = data.UpgradesUiData
+	if upgradesData == nil then
+		Log.Warn(SCOPE, "UpgradesUiData missing -- the upgrade tree cannot be opened in this place")
 		return
 	end
-	local lobbyData = data.LobbyUiData
-	local upgradesConfig = lobbyData["upgrades-config"]
-	local upgradesState = lobbyData["upgrades-state"]
+	local upgradesConfig = upgradesData["config"]
+	local upgradesState = upgradesData["state"]
 	if type(upgradesConfig) ~= "table" or type(upgradesState) ~= "table" then
-		Log.Warn(SCOPE, "LobbyUiData upgrades config/state missing -- upgrade UI wiring skipped")
+		Log.Warn(SCOPE, "UpgradesUiData config/state missing -- upgrade UI wiring skipped")
 		return
 	end
 	local promptName = upgradesConfig["prompt-name"]
@@ -46,7 +51,7 @@ function UpgradesSubsClient.Start(data, modules)
 		or type(blurTemplateName) ~= "string" or blurTemplateName == ""
 		or type(upgradesState["disabled-prompts"]) ~= "table"
 	then
-		Log.Warn(SCOPE, "LobbyUiData upgrades config invalid -- upgrade UI wiring skipped")
+		Log.Warn(SCOPE, "UpgradesUiData config invalid -- upgrade UI wiring skipped")
 		return
 	end
 	local AppRoot = modules.AppRoot
@@ -211,6 +216,12 @@ function UpgradesSubsClient.Start(data, modules)
 		-- Routed from the overlay Close button so blur + E-binding stay in sync.
 		onCloseUpgrades = function()
 			setOpen(false)
+		end,
+		-- HUD menu button: the tree is MODAL (blur, frozen camera, movement lock,
+		-- world prompts off), so opening it must come through here, never through
+		-- AppRoot.Open directly.
+		onToggleUpgrades = function()
+			setOpen(not upgradesState["open"])
 		end,
 	})
 

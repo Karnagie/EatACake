@@ -14,24 +14,60 @@
 	tables. The tier COUNT (5, +4 for instantBurn) and the remote contract are
 	unchanged, so no profile migration is needed when only values/costs move.
 
-	⚠ EASY-MODE REBALANCE (2026-07-19, docs/flow/2026-07-19_easy-mode-balance.md):
-	values + costs were retuned from the ground up so a solo player clears ONE
-	cake in ~40 min with EATING as ~94% of the playtime (was: belly filled in ~1
-	bite, so the loop was mostly running to the gym). The big levers:
-	  * capacity base 150 -> 2600 (belly now holds 50-160 BITES, not ~4) so a
-	    full belly is ~50 s of eating, not ~1 s;
-	  * eating stats (biteRadius/biteDepth/eatSpeed) grow only ~4x total over the
-	    whole tree (were ~2000x) — "reduce final sizes"; endgame no longer eats
-	    the whole cake in a handful of bites;
-	  * costs pace the ~5-tier ramp across the full ~40-min cake.
-	Grounded by a loop+economy simulation, not guesswork — tune from here in
-	Studio. Rare/rebirth blocks below are UNTOUCHED (separate meta).
+	⚠ REBALANCE 2026-07-30 — COSTS CUT ~20x (docs/flow/2026-07-30_*.md, ADR-0013).
+	The tree is RUN-scoped now (see UpgradeConfig.run below), and the design
+	target changed with it: a player must be able to own EVERY tier by the time
+	they have eaten HALF the cake. The whole tree costs **772,250** calories,
+	down from 16,019,500.
+
+	Measured with `tools/balance-model/pacing.py` (ports ApplyBite, the layer
+	gate, both forfeiting sweeps, per-band density and a player who BUYS TIERS
+	MID-RUN — which is the thing the old numbers were never checked against).
+	Solo easy, 5 seeds:
+	  * clear time **38.9 min** (target ~40; the shipped tuning measured 54.6 min
+	    of eat+gym, and a real playtest reported 1 h 01 m);
+	  * every tier owned at **46% of the cake** (5/5 seeds), around the 27-minute
+	    mark — so the back half is played at full power, which is what pulls the
+	    clear time down without shrinking the cake;
+	  * a full belly is ~18 trips per cake, so the gym stays a quick beat.
+	VALUES ARE UNCHANGED. The power curve (~2.4x total eating power) was never
+	the problem — the PRICE of reaching it was: at the old costs a run ended
+	owning 21 of 44 tiers, and since nothing carries over any more that would
+	mean never seeing most of the tree at all.
+	⚠ `instantBurn` is priced at ~0.35x the others' scale on purpose: at a flat
+	scale its 4 tiers were 48% of the entire tree, so one gym-convenience stat
+	crowded out everything that touches the cake.
+	The cake's own pacing knobs (scoop / density / layer count) live in
+	CakeConfig.composition; work per difficulty is MatchConfig. These are the
+	PLAYER side of the same curve.
+
+	⚠ REBIRTH REMOVED (2026-07-26, by request). There is no `UpgradeConfig
+	.rebirth` block any more, and the calorie multiplier no longer has a rebirth
+	term (StatsService). The profile still carries `progress.rebirths` (always 0)
+	so no migration was needed. What resets the tiers now is the RUN reset below.
 
 	Upgrades group into 3 CATEGORIES (root honeycomb nodes that drill into a
 	sub-tree): eating / body / gym.
 ]]
 
 local UpgradeConfig = {}
+
+-- ── RUN-SCOPED progression (ADR-0013, by request 2026-07-30) ─────────────
+-- The tree is no longer permanent meta. Every profile load — entering the lobby
+-- AND arriving in a match — wipes the owned tiers and the spendable calorie
+-- balance, so a run starts as a base eater and buys the WHOLE tree back inside
+-- one cake (the costs below are calibrated for exactly that).
+-- What survives is META: gems, squishies, daily rewards, shop purchases +
+-- gamepasses, timed boosts, and every `progress.lifetime*` stat.
+-- ⚠ `progress.lifetimeCalories` is NOT this balance — it is the permanent
+-- leaderboard stat and must never be reset (EconomyService.ResetCalories).
+UpgradeConfig.run = {
+	resetOnLoad = true,
+	-- Belly volume + unbanked calories are run state too: carrying a full
+	-- stomach out of a finished match into the lobby made no sense, and a
+	-- carried-over `stored` would bank against the NEXT run's gymEff.
+	resetBelly = true,
+}
 
 UpgradeConfig.order =
 	{ "capacity", "biteRadius", "biteDepth", "eatSpeed", "gymEff", "burnSpeed", "burnPerTap", "instantBurn", "runSpeed" }
@@ -51,18 +87,18 @@ UpgradeConfig.upgrades = {
 		descKey = "upgrade-capacity-desc",
 		category = "body",
 		icon = "capacity",
-		-- Stomach volume in studs^3 of eaten cake. SAME-PACE ×3 for the 3× cake
-		-- (base 2600→7800): bites are ×3 bigger (biteDepth ×3), so ×3 capacity
-		-- holds the SAME NUMBER of bites (~50-160) and the eating stretch stays
-		-- ~50 s. Grows ~4.4x across the tree so the belly keeps pace as bites get
-		-- bigger. Costs unchanged (income/sec is flat).
-		base = 7800,
+		-- Belly size in FOOD units (eaten volume × the band's density, so it means
+		-- the same thing at every depth — see CakeConfig.composition). Base 84000
+		-- ≈ 90 s of eating before the belly tops out, which is the loop's rhythm:
+		-- a long eating stretch, then one quick treadmill beat + a purchase.
+		-- Grows 4x across the tree so the stretch lengthens as you get stronger.
+		base = 84000,
 		tiers = {
-			{ value = 11400, cost = 1050 },
-			{ value = 15600, cost = 3150 },
-			{ value = 21000, cost = 8400 },
-			{ value = 27000, cost = 21000 },
-			{ value = 34500, cost = 49000 },
+			{ value = 110000, cost = 750 },
+			{ value = 145000, cost = 2500 },
+			{ value = 190000, cost = 7000 },
+			{ value = 255000, cost = 19000 },
+			{ value = 335000, cost = 45000 },
 		},
 	},
 	runSpeed = {
@@ -71,15 +107,16 @@ UpgradeConfig.upgrades = {
 		descKey = "upgrade-run-speed-desc",
 		category = "body",
 		icon = "runSpeed",
-		-- WalkSpeed (base 16). Modest ramp; the bigger loaf means more ground to
-		-- cover to fresh cake, and faster travel = MORE eating, less walking.
-		base = 16,
+		-- WalkSpeed (Roblox default 16). This matters MORE than it looks: on the
+		-- wide top layers a wide scoop clears cake faster than you can walk over
+		-- it, so speed — not chewing — is what finishes those layers.
+		base = 20,
 		tiers = {
-			{ value = 22, cost = 900 },
-			{ value = 27, cost = 2700 },
-			{ value = 32, cost = 7000 },
-			{ value = 37, cost = 17000 },
-			{ value = 42, cost = 40000 },
+			{ value = 23, cost = 550 },
+			{ value = 26, cost = 1900 },
+			{ value = 29, cost = 6000 },
+			{ value = 32, cost = 15000 },
+			{ value = 35, cost = 37000 },
 		},
 	},
 	biteRadius = {
@@ -88,20 +125,19 @@ UpgradeConfig.upgrades = {
 		descKey = "upgrade-bite-radius-desc",
 		category = "eating",
 		icon = "biteRadius",
-		-- Bite SCOOP radius in studs (base 1.7). Smaller than before (was 3) because
-		-- the Req 2 clean bite clears its footprint to the layer FLOOR (not a shallow
-		-- dent), so a smaller scoop keeps roughly the same volume/bite and pacing
-		-- while each bite reads CLEAN (one side of the layer clears, the other stays
-		-- full). Grows the scoop (and forward reach) with upgrades. ⚠ STARTING value
-		-- — verify clear-time by feel in Studio (this + biteDepth, the clean-bite
-		-- "strength", set the pace together).
-		base = 2.7,
+		-- Bite SCOOP radius in studs, BEFORE the band's `scoop` multiplier (the
+		-- cake's own pacing curve — icing ×2.23, deepest band ×0.558). So a base
+		-- eater scoops ~7.6 studs of icing and ~1.9 studs of the dense core.
+		-- Because a bite clears to the layer floor, clear time scales with the
+		-- bite AREA: this is the single strongest eating stat (each tier is ~15%
+		-- more area) and it is priced accordingly.
+		base = 3.4,
 		tiers = {
-			{ value = 2.85, cost = 910 },
-			{ value = 3.0, cost = 2750 },
-			{ value = 3.15, cost = 7350 },
-			{ value = 3.25, cost = 18000 },
-			{ value = 3.4, cost = 42000 },
+			{ value = 3.65, cost = 850 },
+			{ value = 3.9, cost = 2800 },
+			{ value = 4.2, cost = 8750 },
+			{ value = 4.5, cost = 22500 },
+			{ value = 4.8, cost = 54000 },
 		},
 	},
 	biteDepth = {
@@ -110,19 +146,18 @@ UpgradeConfig.upgrades = {
 		descKey = "upgrade-bite-depth-desc",
 		category = "eating",
 		icon = "biteDepth",
-		-- Crater depth in studs at the center. SAME-PACE ×3 for the 3× TALLER
-		-- cake (base 1.2→3.6, max 1.8→5.4): bite volume ∝ depth·radius², so ×3
-		-- depth = ×3 removed volume, exactly offsetting the ×3 edible volume so a
-		-- cake still clears in ~the same time (income stays flat via calories ÷3
-		-- in CakeConfig). Still a nibble vs the chunky ~12-16-stud layers, and the
-		-- layer gate clamps each bite to the current layer's floor. Costs unchanged.
+		-- Bite STRENGTH in studs, read against sim.biteClearRefDepth (3.6): a bite
+		-- clears each cell toward the layer floor by falloff × (biteDepth /
+		-- refDepth) / hardness. At the base value the centre of the scoop clears
+		-- a soft layer in one bite; upgrading WIDENS the fully-cleared core (and
+		-- lets you chew the dense deep layers in one bite instead of three).
 		base = 3.6,
 		tiers = {
-			{ value = 4.05, cost = 1200 },
-			{ value = 4.5, cost = 3500 },
-			{ value = 4.86, cost = 9450 },
-			{ value = 5.16, cost = 24000 },
-			{ value = 5.4, cost = 56000 },
+			{ value = 4.1, cost = 800 },
+			{ value = 4.6, cost = 2650 },
+			{ value = 5.1, cost = 8000 },
+			{ value = 5.6, cost = 20500 },
+			{ value = 6.2, cost = 50500 },
 		},
 	},
 	eatSpeed = {
@@ -131,15 +166,16 @@ UpgradeConfig.upgrades = {
 		descKey = "upgrade-eat-speed-desc",
 		category = "eating",
 		icon = "eatSpeed",
-		-- Bites per second (base 4). Gentle ramp to 5.2 (was 41 — a machine-gun
-		-- that trivialised the cake). A comfortable rapid nibble, not a blender.
+		-- Bites per second (base 4). Gentle ramp to 5.6 — a comfortable rapid
+		-- nibble, not a blender. Also drives the eat-gesture speed and the
+		-- anti-cheat token bucket, so it is deliberately the flattest curve.
 		base = 4,
 		tiers = {
-			{ value = 4.3, cost = 1100 },
-			{ value = 4.6, cost = 3350 },
-			{ value = 4.85, cost = 8750 },
-			{ value = 5.0, cost = 22000 },
-			{ value = 5.2, cost = 52500 },
+			{ value = 4.4, cost = 700 },
+			{ value = 4.75, cost = 2450 },
+			{ value = 5.05, cost = 7700 },
+			{ value = 5.3, cost = 19500 },
+			{ value = 5.6, cost = 47500 },
 		},
 	},
 	gymEff = {
@@ -148,16 +184,16 @@ UpgradeConfig.upgrades = {
 		descKey = "upgrade-gym-eff-desc",
 		category = "gym",
 		icon = "gymEff",
-		-- Calories banked per stored calorie (base 1). Max 2.35 (was 4.32) —
-		-- trimmed so the (now much bigger) belly's payout doesn't over-inflate
-		-- the economy; the main income growth comes from eating more, not x4.32.
+		-- Calories banked per stored calorie (base 1). The pure income stat: it
+		-- buys nothing on the cake, so it is the natural second purchase once the
+		-- eating stats have paid for themselves.
 		base = 1,
 		tiers = {
-			{ value = 1.2, cost = 1400 },
-			{ value = 1.45, cost = 4200 },
-			{ value = 1.7, cost = 11000 },
-			{ value = 2.0, cost = 28000 },
-			{ value = 2.35, cost = 66500 },
+			{ value = 1.2, cost = 1000 },
+			{ value = 1.45, cost = 3350 },
+			{ value = 1.7, cost = 10000 },
+			{ value = 2.0, cost = 26000 },
+			{ value = 2.35, cost = 61500 },
 		},
 	},
 	burnSpeed = {
@@ -172,11 +208,11 @@ UpgradeConfig.upgrades = {
 		-- easy-mode retune (the gym is deliberately a quick beat); only costs moved.
 		base = 0.06,
 		tiers = {
-			{ value = 0.10, cost = 770 },
-			{ value = 0.16, cost = 2300 },
-			{ value = 0.25, cost = 5950 },
-			{ value = 0.40, cost = 14500 },
-			{ value = 0.65, cost = 35000 },
+			{ value = 0.10, cost = 500 },
+			{ value = 0.16, cost = 1700 },
+			{ value = 0.25, cost = 5000 },
+			{ value = 0.40, cost = 13000 },
+			{ value = 0.65, cost = 31500 },
 		},
 	},
 	burnPerTap = {
@@ -190,11 +226,11 @@ UpgradeConfig.upgrades = {
 		-- still clears the bigger belly in ~10 taps. VALUES unchanged; only costs.
 		base = 0.10,
 		tiers = {
-			{ value = 0.14, cost = 700 },
-			{ value = 0.20, cost = 2100 },
-			{ value = 0.30, cost = 5450 },
-			{ value = 0.45, cost = 13500 },
-			{ value = 0.70, cost = 31500 },
+			{ value = 0.14, cost = 450 },
+			{ value = 0.20, cost = 1550 },
+			{ value = 0.30, cost = 4550 },
+			{ value = 0.45, cost = 12000 },
+			{ value = 0.70, cost = 28750 },
 		},
 	},
 	instantBurn = {
@@ -209,33 +245,12 @@ UpgradeConfig.upgrades = {
 		-- costs scaled to the retuned economy (a big-ticket end-game QoL sink).
 		base = 0,
 		tiers = {
-			{ value = 0.15, cost = 50000 },
-			{ value = 0.35, cost = 160000 },
-			{ value = 0.60, cost = 450000 },
-			{ value = 1.00, cost = 1400000 },
+			{ value = 0.20, cost = 6000 },
+			{ value = 0.45, cost = 17500 },
+			{ value = 0.70, cost = 46500 },
+			{ value = 1.00, cost = 117500 },
 		},
 	},
-}
-
--- Rebirth ("Food Coma", GDD §9): resets calories + these upgrade levels,
--- grants a permanent +25% calories multiplier per rebirth level.
-UpgradeConfig.rebirth = {
-	resets = {
-		"capacity",
-		"biteRadius",
-		"biteDepth",
-		"eatSpeed",
-		"gymEff",
-		"burnSpeed",
-		"burnPerTap",
-		"instantBurn",
-		"runSpeed",
-	},
-	multPerLevel = 0.25,
-	-- Cost of rebirth N (0-based): base * growth^N calories.
-	baseCost = 25000,
-	growth = 2.2,
-	biomes = { "factory", "donut", "candy" }, -- biome index = rebirth level + 1 (capped)
 }
 
 return UpgradeConfig

@@ -145,13 +145,25 @@ function CakeFieldService.ResetCake(composition, footprint, rareKind: string?, b
 end
 
 --API
--- Applies a bite. Returns removed volume (studs^3) and the layer def at
--- the pre-bite surface of the bite point (for calories + client SFX).
+-- The bite-radius multiplier of the band currently being eaten (the pacing
+-- curve, CakeConfig.composition): a soft top band scoops wide, a dense deep one
+-- only chips. Floored at sim.minBiteRadiusStuds so a bite can never miss every
+-- cell centre. The CLIENT mirrors this in LocalCakeField.ScoopedRadius.
+function CakeFieldService.ScoopedRadius(radiusStuds: number): number
+	local band = state.composition[state.activeBandIndex]
+	local scoop = (band and band.scoop) or 1
+	return math.max(radiusStuds * scoop, cakeCfg.sim.minBiteRadiusStuds)
+end
+
+--API
+-- Applies a bite. Returns removed volume (studs^3), the layer def at the
+-- pre-bite surface of the bite point (calories + client SFX) and that band
+-- (its `density` turns raw volume into FOOD — see CakeSubs).
 function CakeFieldService.ApplyBite(px: number, pz: number, radiusStuds: number, depthStuds: number)
 	local field = state.field :: buffer
 	local grid = cakeCfg.grid
 	local preH = GridUtil.SurfaceHeightAt(field, grid, state.footprint, px, pz) or 0
-	local surfaceLayer = CakeOps.LayerAtStuds(state.composition, cakeCfg.layers, preH)
+	local surfaceLayer, surfaceBand = CakeOps.LayerAtStuds(state.composition, cakeCfg.layers, preH)
 
 	-- Layer gate: clamp the bite to the ACTIVE band's floor so a chomp can't
 	-- cut into the layer beneath before the top one is finished. Disabled ->
@@ -159,7 +171,8 @@ function CakeFieldService.ApplyBite(px: number, pz: number, radiusStuds: number,
 	local clampFloor = if cakeCfg.layerGate.enabled then state.activeFloorUnits else state.floorUnits
 	local removed, changed = CakeOps.ApplyBite(
 		field, grid, state.footprint, state.composition, cakeCfg.layers,
-		px, pz, radiusStuds, depthStuds, clampFloor, cakeCfg.sim.biteClearRefDepth
+		px, pz, CakeFieldService.ScoopedRadius(radiusStuds), depthStuds, clampFloor,
+		cakeCfg.sim.biteClearRefDepth
 	)
 
 	-- The chunk rips out NOW (net-dirty immediately); the crater only
@@ -177,7 +190,7 @@ function CakeFieldService.ApplyBite(px: number, pz: number, radiusStuds: number,
 		if z < size - 1 then table.insert(state.delayedSettle, { i = i + size, dueAt = dueAt }) end
 	end
 
-	return removed, surfaceLayer
+	return removed, surfaceLayer, surfaceBand
 end
 
 local neighborOffsets = {} -- filled per call: {dx, dz, di}
@@ -441,7 +454,19 @@ function CakeFieldService.ScanStats()
 	-- zone, so there is no sweep-vs-settle flicker (the drip forms ABOVE the zone).
 	-- Cheap (one 1 Hz scan). Deltas replicate the change to clients.
 	local floorU = state.activeFloorUnits
-	local sliverCeil = floorU + GridUtil.StudsToUnits(cakeCfg.sim.sliverSweepStuds)
+	-- Cap each sweep distance at a fraction of the ACTIVE BAND's own thickness:
+	-- an absolute stud rule swallows a thin band (see CakeConfig.sim
+	-- .sweepBandFraction for the measurement). nil/0 = the old absolute rules.
+	local activeBand = state.composition[activeIndex]
+	local bandThickness = activeBand and (activeBand.top - activeBand.bottom) or math.huge
+	local sweepFraction = cakeCfg.sim.sweepBandFraction
+	local function sweepStuds(studs: number): number
+		if sweepFraction == nil or sweepFraction <= 0 then
+			return studs
+		end
+		return math.min(studs, bandThickness * sweepFraction)
+	end
+	local sliverCeil = floorU + GridUtil.StudsToUnits(sweepStuds(cakeCfg.sim.sliverSweepStuds))
 	if sliverCeil > floorU then
 		for z = 0, size - 1 do
 			for x = 0, size - 1 do
@@ -460,20 +485,24 @@ function CakeFieldService.ScanStats()
 	-- Eaten-zone cleanup sweep (user req: the eaten section should be COMPLETELY
 	-- eaten — no small pieces). Snaps active-band cells that TOUCH a crater (a
 	-- neighbour near the active floor) down to the floor when the cell is either
-	-- (a) EATEN-INTO (bitten > eatenEpsilon below its band top) — cleans the ragged
-	-- rim + half-eaten crumbs + wax fragments so the bitten footprint becomes a
-	-- clean cliff — or (b) an ISOLATED full pillar/spike (>= minClearedNeighbors
-	-- crater neighbours) / a 1-cell wall (2 OPPOSITE). A FULL cell with a crater on
-	-- only ONE side is LEFT, so the clean cut edge (one side full, other floor)
-	-- survives; the loaf PERIMETER survives (out-of-cake neighbours are SUPPORT,
-	-- never a crater). Two-phase (collect, then apply) so a swept cell never changes
-	-- a later cell's neighbour test mid-scan. The SettleStep clearedCeil guard keeps
-	-- the settle from refilling the collapsed cells (no flicker). Forfeits the volume.
+	-- (a) NEARLY CLEARED itself (within remnant.nearFloorStuds of the active
+	-- floor) — the soft RIM of a bite, so the bitten footprint becomes a clean
+	-- cliff instead of a ragged gradient — or (b) an ISOLATED full pillar/spike
+	-- (>= minClearedNeighbors crater neighbours) / a 1-cell wall (2 OPPOSITE). A
+	-- FULL cell with a crater on only ONE side is LEFT, so the clean cut edge
+	-- (one side full, other floor) survives; the loaf PERIMETER survives
+	-- (out-of-cake neighbours are SUPPORT, never a crater). Two-phase (collect,
+	-- then apply) so a swept cell never changes a later cell's neighbour test
+	-- mid-scan. The SettleStep clearedCeil guard keeps the settle from refilling
+	-- the collapsed cells (no flicker). Forfeits the volume.
+	-- ⚠ Rule (a) is measured from the FLOOR, not from the band TOP. Measuring it
+	-- from the top (the pre-2026-07-26 `eatenEpsilonStuds`) collapsed a chunky
+	-- band's cell the moment it was nicked, which forfeited ~25% of every cake
+	-- and made layer clear-time independent of the bite stats — no pacing lever.
 	local remnant = cakeCfg.sim.remnantSweep
 	if remnant and remnant.enabled then
-		local clearedCeilU = floorU + GridUtil.StudsToUnits(remnant.clearedMarginStuds)
-		local bandTopU = GridUtil.StudsToUnits(state.composition[state.activeBandIndex].top)
-		local eatenCeilU = bandTopU - GridUtil.StudsToUnits(remnant.eatenEpsilonStuds)
+		local clearedCeilU = floorU + GridUtil.StudsToUnits(sweepStuds(remnant.clearedMarginStuds))
+		local nearFloorU = floorU + GridUtil.StudsToUnits(sweepStuds(remnant.nearFloorStuds))
 		local minCleared = remnant.minClearedNeighbors
 		local collapse = {}
 		for z = 0, size - 1 do
@@ -494,7 +523,7 @@ function CakeFieldService.ScanStats()
 						local cleared = (left and 1 or 0) + (right and 1 or 0) + (back and 1 or 0) + (front and 1 or 0)
 						if cleared > 0 then
 							local thinWall = (left and right) or (back and front) -- 2 OPPOSITE
-							if h <= eatenCeilU or cleared >= minCleared or thinWall then
+							if h <= nearFloorU or cleared >= minCleared or thinWall then
 								table.insert(collapse, i)
 							end
 						end

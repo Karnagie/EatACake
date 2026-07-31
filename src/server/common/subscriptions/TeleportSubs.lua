@@ -2,10 +2,10 @@
 	TeleportSubs -- data-safe lobby <-> game ProfileStore handoff (COMMON).
 
 	One universe has one profile session lock per user. Before a player moves,
-	the source ends playtime bookkeeping, intentionally unloads the profile, and
-	waits for the ending save's committed-release signal. Only then does it call
-	TeleportAsync. A failed teleport re-acquires the released profile so nobody
-	is stranded without an active session.
+	the source intentionally unloads the profile and waits for the ending save's
+	committed-release signal. Only then does it call TeleportAsync. A failed
+	teleport re-acquires the released profile so nobody is stranded without an
+	active session.
 
 	SendGroup performs that contract for a whole party and invokes exactly one
 	TeleportAsync call. Lobby -> game may reserve an isolated round server; game
@@ -64,7 +64,6 @@ function TeleportSubs.RecoverPlayer(player: Player)
 		player,
 		teleportData_,
 		services_.PersistenceService,
-		services_.TimeRewardService,
 		function(recoveredPlayer)
 			Resync.Push(recoveredPlayer, subscriptions_)
 		end
@@ -90,7 +89,6 @@ local function recoverPresentGroup(group: { Player })
 				player,
 				teleportData_,
 				services_.PersistenceService,
-				services_.TimeRewardService,
 				function(recoveredPlayer)
 					Resync.Push(recoveredPlayer, subscriptions_)
 				end
@@ -169,7 +167,6 @@ function TeleportSubs.SendGroup(players: { Player }, options: GroupOptions): boo
 		player:SetAttribute("Teleporting", true)
 	end
 	for _, player in ipairs(group) do
-		services_.TimeRewardService.EndSession(player.UserId)
 		-- Unload includes the final save. PersistenceService associates it with a
 		-- unique nonce; the loop below read-backs that nonce and the cleared lock.
 		services_.PersistenceService.Unload(player.UserId, true)
@@ -186,7 +183,6 @@ function TeleportSubs.SendGroup(players: { Player }, options: GroupOptions): boo
 						player,
 						teleportData_,
 						services_.PersistenceService,
-						services_.TimeRewardService,
 						function(recoveredPlayer)
 							Resync.Push(recoveredPlayer, subscriptions_)
 						end
@@ -260,8 +256,8 @@ function TeleportSubs.Start(data, services, subscriptions)
 		return
 	end
 	teleportData_["enabled"] = false
-	if services_.PersistenceService == nil or services_.TimeRewardService == nil then
-		Log.Warn(SCOPE, "PersistenceService/TimeRewardService missing -- teleport handoffs disabled")
+	if services_.PersistenceService == nil then
+		Log.Warn(SCOPE, "PersistenceService missing -- teleport handoffs disabled")
 		return
 	end
 	if type(services_.PersistenceService.VerifyReleased) ~= "function"

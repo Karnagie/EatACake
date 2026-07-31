@@ -30,6 +30,7 @@ local runtime -- PlayerRuntimeData
 local services_
 local CakeCycleSubs
 local GameRoundSubs
+local AnalyticsSubs -- optional retention instrumentation (features/analytics.md)
 
 --API
 function CakeSubs.SendSnapshot(player: Player)
@@ -67,6 +68,7 @@ end
 function CakeSubs.Start(data, services, subscriptions)
 	CakeCycleSubs = subscriptions and subscriptions.CakeCycleSubs
 	GameRoundSubs = subscriptions and subscriptions.GameRoundSubs
+	AnalyticsSubs = subscriptions and subscriptions.AnalyticsSubs
 	services_ = services
 	state = data.CakeStateData
 	cakeCfg = data.CakeConfigData and data.CakeConfigData.cake
@@ -140,6 +142,11 @@ function CakeSubs.Start(data, services, subscriptions)
 			return -- expected anti-spam drop, not a missing dependency
 		end
 		bucket.tokens -= 1
+		if AnalyticsSubs then
+			-- The bite is ACCEPTED here (auth + rate limit passed), which is the
+			-- honest "the player is playing" moment for the funnel.
+			AnalyticsSubs.Onboard(player, "firstBite")
+		end
 
 		local biteRadius = services.StatsService.BiteRadius(userId)
 		local dx = position.X - root.Position.X
@@ -179,7 +186,7 @@ function CakeSubs.Start(data, services, subscriptions)
 		end
 
 		local biteDepth = services.StatsService.BiteDepth(userId)
-		local removed, layer = services.CakeFieldService.ApplyBite(
+		local removed, layer, band = services.CakeFieldService.ApplyBite(
 			position.X,
 			position.Z,
 			biteRadius,
@@ -192,14 +199,20 @@ function CakeSubs.Start(data, services, subscriptions)
 			return
 		end
 
+		-- FOOD, not raw volume: the band's `density` (the pacing curve, see
+		-- CakeConfig.composition) says how filling/rich this depth is per stud³,
+		-- so one bite is worth ~the same belly + calories anywhere in any cake —
+		-- that is what keeps the gym rhythm and the income steady while the
+		-- scoops shrink with depth.
+		local food = removed * ((band and band.density) or 1)
 		local biomeMultiplier = (biomes[state.biome] and biomes[state.biome].caloriesMult) or 1
-		local baseCalories = removed
+		local baseCalories = food
 			* (layer.calories or 0)
 			* services.CakeCycleService.CakeCaloriesMult()
 			* biomeMultiplier
 		local result = services.StomachService.Ingest(
 			userId,
-			removed,
+			food,
 			baseCalories,
 			services.StatsService.CaloriesMult(userId),
 			capacity

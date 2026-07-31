@@ -6,8 +6,8 @@
 	  ["matchmaking"]        : false | selector state table
 	  ["bound-shop-parts"]   : { [BasePart] = true }
 	  ["last-shop-open-at"]  : os.clock timestamp
-	  ["upgrades-config"]    : authored names/tuning for UpgradesSubsClient
-	  ["upgrades-state"]     : open/modal runtime state and cloned blur reference
+	(The hex upgrade tree's config/state moved to the COMMON `UpgradesUiData`
+	on 2026-07-26 — it has to work in the game place too.)
 
 	Its presence is also the client partition marker AppRoot uses to enable
 	lobby panels in lobby.project.json (and the combined development build).
@@ -21,30 +21,12 @@ local LobbyUiData = {
 	["matchmaking"] = false,
 	["bound-shop-parts"] = {} :: { [BasePart]: boolean },
 	["last-shop-open-at"] = 0,
-	["upgrades-config"] = {
-		["prompt-name"] = "UpgradeStation",
-		["close-action-name"] = "CloseUpgradeTree",
-		["blur-size"] = 18,
-		["blur-template-name"] = "UpgradeTreeBlur",
-	},
-	["upgrades-state"] = {
-		["open"] = false,
-		["disabled-prompts"] = {} :: { ProximityPrompt },
-		["saved-camera-type"] = nil :: Enum.CameraType?,
-		["blur"] = nil :: BlurEffect?,
-	},
 }
 
 function LobbyUiData.Init()
 	LobbyUiData["matchmaking"] = false
 	table.clear(LobbyUiData["bound-shop-parts"])
 	LobbyUiData["last-shop-open-at"] = 0
-	LobbyUiData["upgrades-state"] = {
-		["open"] = false,
-		["disabled-prompts"] = {} :: { ProximityPrompt },
-		["saved-camera-type"] = nil,
-		["blur"] = nil,
-	}
 end
 
 --API

@@ -1,9 +1,16 @@
 --[[
 	Profile section: progress — rebirths, lifetime stats and active boosts.
-	  rebirths     — Food Coma count; +25% calories each (UpgradeConfig.rebirth)
+	  rebirths     — LEGACY. The rebirth system was removed 2026-07-26; the field
+	                 stays (always 0) so no version bump/migration was needed.
 	  activeBoosts — array of { id, stat, mult, expiresAt (unix) }; offline
 	                 time counts down (standard for timed boosts)
-	  lifetime*    — leaderboard / quest fodder
+	  lifetime*    — leaderboard fodder
+	  foundKinds   — set of buried-find ids ever collected { [findId] = true }.
+	                 Drives the FIRST-DISCOVERY moment (features/treasures.md):
+	                 the first time you ever dig up each of the 9 kinds is called
+	                 out, the 40th berry of the cake is not. STRING keys, so no
+	                 `intKeySets` entry — and a NEW field with a default needs no
+	                 version bump, reconcile fills it (P2).
 ]]
 
 local function sanitizeNumber(value: any): number
@@ -22,6 +29,7 @@ return {
 		lifetimeCalories = 0,
 		cakesEaten = 0,
 		findsCollected = 0,
+		foundKinds = {},
 		biggestBelly = 0,
 	},
 	intKeySets = {},
@@ -32,6 +40,19 @@ return {
 		section.cakesEaten = math.floor(sanitizeNumber(section.cakesEaten))
 		section.findsCollected = math.floor(sanitizeNumber(section.findsCollected))
 		section.biggestBelly = sanitizeNumber(section.biggestBelly)
+		if type(section.foundKinds) ~= "table" then
+			section.foundKinds = {}
+		else
+			-- Only `[string] = true` survives — a hand-edited or corrupted profile
+			-- must not turn a discovery set into arbitrary data.
+			local clean = {}
+			for id, value in pairs(section.foundKinds) do
+				if type(id) == "string" and value == true then
+					clean[id] = true
+				end
+			end
+			section.foundKinds = clean
+		end
 		if type(section.activeBoosts) ~= "table" then
 			section.activeBoosts = {}
 		end

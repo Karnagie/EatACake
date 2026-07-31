@@ -4,8 +4,23 @@
 	rate derived from the replicated upgrade levels with the SAME
 	UpgradeConfig formulas the server uses. View-model only — the server
 	never trusts any of this.
+
+	TIMED BOOSTS: the levels are not the whole story any more. A bite-radius
+	boost multiplies the SERVER's radius, and the client predicts its own
+	craters — so without the mirror below every predicted crater is smaller than
+	the one the server actually carves, for the whole 15 minutes, and the cake
+	visibly "grows back" at each delta. The multiplier arrives as the
+	`BiteRadiusMult` player ATTRIBUTE (BoostSubs writes it on grant and on
+	expiry); attributes replicate on their own, so this needs no remote and no
+	subscription.
+	The speed and capacity boosts need NO mirror here, and that asymmetry is
+	deliberate rather than an omission: WalkSpeed is written authoritatively onto
+	the Humanoid (which replicates), and capacity rides the existing StomachUpdate
+	payload that BoostSubs re-pushes. Bite radius is the only boosted stat the
+	client PREDICTS with.
 ]]
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UpgradeConfig = require(
 	ReplicatedStorage:WaitForChild("Shared"):WaitForChild("config"):WaitForChild("UpgradeConfig")
@@ -37,8 +52,29 @@ function LocalStatsService.Levels(): { [string]: number }
 end
 
 --API
+-- Live bite-radius BOOST multiplier, mirrored from the server through the
+-- `BiteRadiusMult` player attribute. Absent (no boost, or before the first
+-- write) reads as 1.
+-- ⚠ Floored at 1 on purpose: a garbage attribute must never shrink the
+-- prediction BELOW the plain upgrade value. Under-predicting makes the server's
+-- delta snap away cake the player never saw go; over-predicting is the worse
+-- one (cake visibly pops back). The floor bounds the error to the honest
+-- un-boosted radius, which is the same divergence a late attribute already has.
+function LocalStatsService.BiteRadiusMult(): number
+	local player = Players.LocalPlayer
+	if player == nil then
+		return 1
+	end
+	local mult = tonumber(player:GetAttribute("BiteRadiusMult"))
+	if mult == nil or mult ~= mult then
+		return 1 -- absent, or NaN from a corrupted write
+	end
+	return math.max(1, mult)
+end
+
+--API
 function LocalStatsService.BiteRadius(): number
-	return upgradeValue("biteRadius")
+	return upgradeValue("biteRadius") * LocalStatsService.BiteRadiusMult()
 end
 
 --API

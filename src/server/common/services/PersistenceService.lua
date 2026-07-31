@@ -368,6 +368,55 @@ function PersistenceService.Save(userId: number)
 end
 
 --API
+-- Save and WAIT (bounded) for the write to commit. Returns true only if a save
+-- actually landed.
+--
+-- `Save` is fire-and-forget: ProfileStore's `Profile:Save()` is a `task.spawn`,
+-- so it returns before anything reaches the DataStore. That is fine for
+-- gameplay state, which the autosave will pick up — and NOT fine on the money
+-- path, where the caller has to decide whether to tell Roblox the receipt was
+-- granted. Telling it too early means a hard crash in that window consumes the
+-- receipt with the grant only ever having existed in memory: Robux taken,
+-- nothing delivered, and no retry because Roblox already saw PurchaseGranted.
+--
+-- Caveat inherited from ProfileStore: `OnAfterSave` is shared by every
+-- concurrent save of this profile, so "a save committed" is what this proves,
+-- not "MY save committed". That is the guarantee the receipt path needs — any
+-- committed write carries the already-mutated `Data`, including the grant.
+function PersistenceService.SaveAndWait(userId: number, timeoutSeconds: number?): boolean
+	if profileData.releaseNonces[userId] ~= nil then
+		Log.Once(SCOPE, `save-wait-during-release-{userId}`, `SaveAndWait({userId}) refused while an intentional release is in flight`)
+		return false
+	end
+	local session = profileData.sessions[userId]
+	if session == nil or not session:IsActive() then
+		Log.Warn(SCOPE, `SaveAndWait({userId}): no active session — nothing was persisted`)
+		return false
+	end
+	local saved = false
+	local conn
+	conn = session.OnAfterSave:Connect(function()
+		saved = true
+		if conn then
+			conn:Disconnect()
+			conn = nil
+		end
+	end)
+	session:Save()
+	local deadline = os.clock() + (timeoutSeconds or 10)
+	while not saved and os.clock() < deadline do
+		task.wait(0.2)
+	end
+	if conn then
+		conn:Disconnect()
+	end
+	if not saved then
+		Log.Warn(SCOPE, `SaveAndWait({userId}) timed out — the write did not confirm in time`)
+	end
+	return saved
+end
+
+--API
 -- Ends the session (final save included) and clears the runtime cache.
 -- Call exactly once when the player leaves.
 --

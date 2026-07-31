@@ -18,15 +18,17 @@ local CakeConfig = {}
 CakeConfig.grid = {
 	size = 64, -- 64x64 cells
 	cell = 1.5, -- studs per cell -> 96x96 stud field
-	-- Hard height ceiling. Raised to 270 for the 3× TALLER cake (totalHeight ×3
-	-- + composition.perPlayerScale): a 4-player loaf tops out ~261 studs. u16
-	-- fixed-point (655 stud max) easily covers it; taller = taller collision
-	-- columns + render slabs, NOT more cells (weak-device vertex budget is
-	-- driven by cell count, which is unchanged). Only the CURRENT + NEXT edible
-	-- layer are rendered as slabs now (CakeRenderer window); the bulk below is
-	-- hidden behind the textured CakeWrapper wall, so more/taller layers no
-	-- longer grow the slab vertex budget.
-	maxHeight = 270,
+	-- Hard height ceiling, with room to spare: every cake is built to
+	-- composition.maxTotalHeight (170 since 2026-07-26) regardless of difficulty
+	-- or population — a bigger cake means MORE LAYERS (thinner ones), never a
+	-- taller tower. 340 is left as headroom so raising maxTotalHeight again does
+	-- not require touching the u16 field layout. u16 fixed-point (655 stud max) easily covers it; taller =
+	-- taller collision columns + render slabs, NOT more cells (weak-device
+	-- vertex budget is driven by cell count, which is unchanged). Only the
+	-- CURRENT + NEXT edible layer are rendered as slabs (CakeRenderer window);
+	-- the bulk below is hidden behind the textured CakeWrapper wall, so more
+	-- layers no longer grow the slab vertex budget.
+	maxHeight = 340,
 	-- World placement: bottom of the cake sits at this Y; grid is centered
 	-- on origin XZ. MapService builds the platform to match.
 	origin = { x = 0, y = 2, z = 0 },
@@ -43,7 +45,15 @@ CakeConfig.sim = {
 	-- Auto-sweep (§7.6): when the volume remaining in the current top band
 	-- falls below this fraction of the band's initial volume, the tail
 	-- collapses to the band floor. Never make the player hunt crumbs.
-	autoSweepFraction = 0.12,
+	-- ⚠ This is the anti-tedium valve AND a calorie tax (swept volume is
+	-- forfeited by everyone). 0.10 is the balanced point: the sim finished
+	-- every difficulty/population without a leftover hunt at this value.
+	autoSweepFraction = 0.10,
+	-- Floor on the EFFECTIVE bite radius (biteRadius stat × the active band's
+	-- `scoop`, see composition.scoopTop). Below ~1 cell a bite can miss every
+	-- cell centre and remove nothing; ApplyBite also always processes the
+	-- centre cell so a floored bite still bites.
+	minBiteRadiusStuds = 1.1,
 	statsScanHz = 1, -- full-field scan for progress % / auto-sweep
 	-- CLEAN CUT (Req 2): a bite clears its footprint TOWARD the active-band floor
 	-- (not a shallow paraboloid that leaves hard-to-eat crumbs), scaled by falloff
@@ -58,6 +68,17 @@ CakeConfig.sim = {
 	-- messy): any active-band cell within this many studs of the active floor
 	-- collapses to it. Small enough that meaningful partial cake is left alone.
 	sliverSweepStuds = 1.5,
+	-- ⚠ BOTH sweep distances above and in `remnantSweep` are ABSOLUTE studs, and
+	-- they are measured against the ACTIVE BAND — so the thinner the band, the
+	-- more of it a fixed rule swallows. When the cake came down 330 -> 170 (bands
+	-- 4.5-24 -> 3.4-12) the forfeited fraction rose 6.2% -> 8.3% purely from that.
+	-- Each distance is therefore capped at this FRACTION of the active band's own
+	-- thickness. Measured (`tools/headless-sim/pacing_scenario.lua`, section C):
+	--   no cap 8.3% waste | 0.35 -> 7.4% | 0.25 -> 6.8% (+3.4% food) | 0.15 -> 6.6%
+	-- 0.25 takes nearly all of it back for +0.7 min of clear time; below that the
+	-- returns flatten and the eaten rim starts to keep visible crumbs, which is
+	-- the whole reason these sweeps exist. nil/0 restores the old absolute rules.
+	sweepBandFraction = 0.25,
 	-- Eaten-zone cleanup sweep (user req: the eaten section should be COMPLETELY
 	-- eaten — no small pieces). Each stats scan snaps partially-eaten OR isolated
 	-- active-band cells that touch a CRATER down to the active floor, so the eaten
@@ -69,11 +90,16 @@ CakeConfig.sim = {
 		enabled = true,
 		-- A neighbour within this many studs of the ACTIVE FLOOR = a crater ("cleared").
 		clearedMarginStuds = 2,
-		-- A cell bitten more than this many studs BELOW its band top = "eaten-into": if
-		-- it also touches a crater it snaps to the floor, so the whole bitten footprint
-		-- (incl. the soft rim) becomes a clean cliff, not a ragged gradient of half-
-		-- eaten cells. Small = sharper/cleaner edge.
-		eatenEpsilonStuds = 1,
+		-- A cell whose surface is within this many studs of the ACTIVE FLOOR and
+		-- that touches a crater snaps to the floor — the soft rim of a bite is
+		-- swept away so the eaten footprint reads as a clean cliff.
+		-- ⚠ This REPLACED the old `eatenEpsilonStuds` rule ("anything bitten >1
+		-- stud below its band TOP"), which collapsed a whole cell the moment it
+		-- was nicked: with chunky bands that forfeited most of the layer for
+		-- free, made layer clear-time independent of the bite stats (~25% of
+		-- every cake vanished uneaten) and left NO room to pace the cake.
+		-- Measured near the floor instead, it only cleans the rim.
+		nearFloorStuds = 2.5,
 		-- A TALL isolated remnant (a full-height pillar/spike, or a 1-cell wall between
 		-- craters) is swept too: >= this many crater neighbours (of 4), or exactly 2
 		-- OPPOSITE. A solid EDGE (1 crater) / convex corner (2 ADJACENT) is preserved.
@@ -182,11 +208,29 @@ CakeConfig.render = {
 	-- shrinking as each layer clears. Wears a RANDOM cake photo (one per cake, by
 	-- cakeIndex) on its 4 sides + top cap. Built + driven by CakeWrapper (client).
 	wrapper = {
+		-- ⚠ These MUST be IMAGE ids, not DECAL ids. A decal id renders BLANK on a
+		-- `Texture` (resolve one via `InsertService:LoadAsset(decalId)` → the
+		-- loaded Decal's `.Texture`). The two ids that used to live here were the
+		-- unresolved decals: one drew nothing and the other was a red/white
+		-- diagonal STRIPE, which is why the loaf read as a candy-cane column from
+		-- outside rather than a cake. These three are the resolved cake photos.
+		-- ⚠ These MUST be IMAGE ids, not DECAL ids — a decal id renders BLANK on a
+		-- `Texture`. (Toolbox right-click gives both; take "Copy Texture ID".)
+		-- The wall used to carry the unresolved decals: one drew nothing, the
+		-- other a red/white diagonal stripe, so the loaf read as a candy cane.
+		-- The photos that replaced them read as cake but tiled with visible
+		-- seams. This one is a SEAMLESS layered cross-section — horizontal sponge
+		-- and cream bands, which also reinforce the eat-down-through-layers
+		-- fantasy. Verified on screen 2026-07-26. Add more entries for per-cake
+		-- variety (CakeWrapper picks one by cakeIndex) — keep them seamless.
 		textures = {
-			"rbxassetid://6116282545",
-			"rbxassetid://8235746297",
+			"rbxassetid://111184124905083", -- Toolbox "Cakie", layered sponge/cream
 		},
-		tileStuds = 26, -- studs per texture tile (Texture StudsPerTileU/V)
+		-- Studs per texture tile. Sized so the cake photo reads a FEW times up the
+		-- wall, not a dozen: at the old 26 on a 330-stud wall it tiled ~12x and
+		-- turned the silhouette into stripes. ~55 on the 170-stud cake is ~3 up
+		-- and ~1.7 across — a cake side.
+		tileStuds = 55,
 		gloss = 0.05, -- Part.Reflectance
 		color = Color3.fromRGB(232, 205, 165), -- warm cake tint under the texture (shows if it's missing)
 	},
@@ -268,8 +312,8 @@ CakeConfig.layers = {
 		-- soft pillow: deep dents, medium flow
 		repose = 1.5,
 		flowRate = 0.6,
-		hardness = 0.5,
-		calories = 0.4, -- was 1.2 (÷3 for the 3× cake)
+		hardness = 0.85,
+		calories = 0.139,
 		colors = { top = Color3.fromRGB(255, 182, 220), bottom = Color3.fromRGB(246, 148, 196) },
 		texture = "rbxassetid://104319784921009", -- confetti frosting/icing
 		material = Enum.Material.SmoothPlastic,
@@ -288,7 +332,7 @@ CakeConfig.layers = {
 		repose = 3.0,
 		flowRate = 0.35,
 		hardness = 1.0,
-		calories = 0.33, -- was 1.0 (÷3 for the 3× cake)
+		calories = 0.155,
 		colors = { top = Color3.fromRGB(250, 198, 95), bottom = Color3.fromRGB(226, 168, 70) },
 		material = Enum.Material.Sand, -- grainy crumb pores
 		transparency = 0,
@@ -306,8 +350,8 @@ CakeConfig.layers = {
 		-- hard shell: cliffs, never flows, no dents, shatters when bitten
 		repose = math.huge,
 		flowRate = 0,
-		hardness = 3.0,
-		calories = 0.67, -- was 2.0 (÷3 for the 3× cake)
+		hardness = 1.25,
+		calories = 0.237,
 		colors = { top = Color3.fromRGB(96, 58, 34), bottom = Color3.fromRGB(66, 38, 22) },
 		texture = "rbxassetid://18310304910", -- chocolate bar
 		material = Enum.Material.SmoothPlastic,
@@ -325,8 +369,8 @@ CakeConfig.layers = {
 		-- SEE-THROUGH MARMALADE: translucent, jiggles, springy underfoot
 		repose = 4.5,
 		flowRate = 0.2,
-		hardness = 1.5,
-		calories = 0.47, -- was 1.4 (÷3 for the 3× cake)
+		hardness = 1.08,
+		calories = 0.188,
 		colors = { top = Color3.fromRGB(238, 58, 88), bottom = Color3.fromRGB(196, 30, 62) },
 		-- Glass: wet refraction on high quality, plastic-smooth on low.
 		-- KNOWN engine tradeoff: semi-transparent Glass hides TRANSPARENT
@@ -350,8 +394,8 @@ CakeConfig.layers = {
 		-- almost LIQUID: spectacular fast avalanches, light feet (+15% speed)
 		repose = 0.5,
 		flowRate = 0.95,
-		hardness = 0.3,
-		calories = 0.27, -- was 0.8 (÷3 for the 3× cake)
+		hardness = 0.85,
+		calories = 0.122,
 		colors = { top = Color3.fromRGB(255, 176, 224), bottom = Color3.fromRGB(158, 196, 255) },
 		material = Enum.Material.Fabric,
 		transparency = 0,
@@ -369,8 +413,8 @@ CakeConfig.layers = {
 		-- STICKY HONEY: slowest visible creep, boots glued (-40% speed, low jump)
 		repose = 5.5,
 		flowRate = 0.07,
-		hardness = 2.0,
-		calories = 0.53, -- was 1.6 (÷3 for the 3× cake)
+		hardness = 1.15,
+		calories = 0.204,
 		colors = { top = Color3.fromRGB(230, 150, 42), bottom = Color3.fromRGB(190, 110, 22) },
 		material = Enum.Material.SmoothPlastic,
 		transparency = 0,
@@ -388,8 +432,8 @@ CakeConfig.layers = {
 		-- loose sand: pours fast, soft steps
 		repose = 1.0,
 		flowRate = 0.85,
-		hardness = 0.8,
-		calories = 0.3, -- was 0.9 (÷3 for the 3× cake)
+		hardness = 0.95,
+		calories = 0.147,
 		colors = { top = Color3.fromRGB(164, 112, 64), bottom = Color3.fromRGB(132, 88, 50) },
 		material = Enum.Material.Sand,
 		transparency = 0,
@@ -407,8 +451,8 @@ CakeConfig.layers = {
 		-- pillowy underfoot. Wears a real filling photo texture (Task 3).
 		repose = 2.5,
 		flowRate = 0.4,
-		hardness = 0.7,
-		calories = 0.45, -- a mid-value layer (÷3 for the 3× cake)
+		hardness = 0.9,
+		calories = 0.163,
 		colors = { top = Color3.fromRGB(255, 224, 150), bottom = Color3.fromRGB(238, 198, 120) },
 		texture = "rbxassetid://432607426", -- custard/cream filling
 		material = Enum.Material.SmoothPlastic,
@@ -457,39 +501,107 @@ CakeConfig.feel = {
 }
 
 -- ── Composition rolls (GDD §5 "Cake composition") ───────────────────────
--- Every cake: frosting on top, core at the bottom, 10-13 middle layers drawn
--- from the pool without immediate repeats. Thicknesses are rolled within
--- the ranges, then normalized to the rolled total height. CHUNKY layers: each
--- layer is a floor you live on for a while, not a stripe — a ~3× TALLER cake
--- with ~3× as many layers (the renderer only draws the current + next one, so
--- the layer count is no longer capped by the slab vertex budget).
+-- THE PACING CURVE (2026-07-26 rework, docs/decisions/0011-cake-pacing-curve.md).
+--
+-- A bite CLEARS its footprint to the active band's floor, so a layer's clear
+-- TIME is driven by AREA, not by how thick it is. Two per-band knobs therefore
+-- carry the whole design, and `RollComposition` builds them TOP-DOWN:
+--
+--   scoop   — multiplies the eater's biteRadius on this band. The icing takes
+--             a HUGE scoop (a ~7.8-stud bite: the top layer is gone in ~30 s);
+--             every band below scoops a little smaller, down to ~2 studs at the
+--             core. This is the difficulty ramp AND it reads instantly on screen
+--             ("soft cream = giant spoonful, dense cake = small chip").
+--   density — how RICH/FILLING that band is per stud³ (calories AND belly fill).
+--             Computed so the food value of one bite stays ~constant as the
+--             scoop shrinks and the layers change thickness, which is what keeps
+--             the belly→gym rhythm (~90 s) and the calorie income steady from
+--             the first layer to the last, on every difficulty and party size.
+--
+-- Thickness rides the same curve (deeper == chunkier, `thicknessExponent`),
+-- normalised so EVERY cake is exactly `maxTotalHeight` tall. A harder or more
+-- crowded cake is therefore not a taller tower — it has MORE (thinner) layers
+-- and smaller scoops, i.e. more "layer cleared!" moments in the same silhouette.
+--
+-- Sim-calibrated (scratchpad model, ports ApplyBite + the three sweeps + a
+-- mowing player): solo easy 40 min; see features/cake-cycle.md for the matrix.
 CakeConfig.composition = {
 	middlePool = { "sponge", "chocolate", "jelly", "cotton", "caramel", "crumb", "filling" },
-	middleCountMin = 10,
-	middleCountMax = 13,
-	frostingThickness = { 6, 8 }, -- studs
 	coreThickness = 3, -- exposed cavity floor, not edible
-	middleThickness = { 10, 16 },
-	totalHeight = { 150, 180 }, -- 3× taller; clamped to grid.maxHeight (×perPlayerScale first)
 	-- Footprint: a rounded-rectangle LOAF (Drain-the-Lake scale). A LANDMARK,
 	-- not a per-player snack — the XZ size is FIXED for any population (the 64-
 	-- cell grid caps hx/hz at ~31; growing the grid would blow the render
-	-- vertex budget). 30x26 cells at 1.5 studs = 90x78 studs of cake (~46%
-	-- more area than the old 28x19 loaf — a longer, wider cake to eat).
+	-- vertex budget). 30x26 cells at 1.5 studs = 90x78 studs of cake.
 	footprint = { hx = 30, hz = 26, corner = 10 },
-	-- Easy-mode co-op scaling (the ONE population lever, since the footprint is
-	-- fixed): the rolled totalHeight is multiplied by 1 + perPlayerScale*(n-1)
-	-- for n players present at spawn, then clamped to grid.maxHeight. A TALLER
-	-- (== "longer to eat") shared loaf for a crowd, sublinear so more mouths
-	-- still clear it faster: solo ~40 min, 4 players ~18 min (not ~10).
-	-- Applied in CakeCycleService.RollComposition. See features/cake-cycle.md.
-	perPlayerScale = 0.15,
+
+	-- Layer count + silhouette
+	baseLayers = 28, -- edible layers of a solo EASY cake (incl. the frosting)
+	maxLayers = 42, -- ceiling; work beyond it goes into smaller scoops instead
+	-- 2026-07-26: 330 -> 170. At 330 on a 90x78 loaf the cake was ~3.7x taller
+	-- than wide and read as a candy-STRIPED TOWER, not a cake. 170 is ~1.8x the
+	-- footprint — a tall layer cake.
+	-- COST, measured by `tools/headless-sim/pacing_scenario.lua` (mows a whole
+	-- cake through the real ApplyBite + layer gate + BOTH forfeiting sweeps):
+	--   330 -> 170 : bites -2.2%, food -1.8%, forfeited 6.0% -> 6.8%
+	--   330 -> 110 : food -7.1%, forfeited 9.3%
+	-- (Those are WITH `sim.sweepBandFraction` shipped. Without the cap the same
+	-- change cost food -4.7% and 8.3% waste — the cap exists because the sweeps
+	-- are what height actually interacts with.)
+	-- ⚠ NOT free — and an earlier version of that scenario reported it as free
+	-- because it left the SWEEPS OUT. The sweeps are exactly what height
+	-- interacts with: `sliverSweepStuds` and `remnantSweep.nearFloorStuds` are
+	-- ABSOLUTE stud distances, so a thinner band has proportionally more of
+	-- itself inside the sweep zone — which is exactly what `sweepBandFraction`
+	-- now caps. 6.8% is well inside ADR-0011's tolerance (the failure it fixed
+	-- was ~25%), so 170 ships — but do NOT push below ~130: waste climbs fast,
+	-- the deepest band's density approaches `maxDensity` (11.7 of 12 at 110) and
+	-- the thinnest hits `minLayerThickness`.
+	maxTotalHeight = 170,
+	minLayerThickness = 3.5, -- a layer must stay something you can stand on
+	thicknessExponent = 0.6, -- how strongly thickness follows the scoop ramp
+
+	-- The scoop ramp (multiplies biteRadius; see the header above)
+	scoopTop = 2.23, -- icing: biteRadius 3.4 -> ~7.6 studs
+	scoopBottom = 0.558, -- deepest band: ~1.9 studs
+	-- Density reference: the thickness × scoop² of the solo-easy TOP band. Every
+	-- band's density is `refBandWeight / (thickness × scoop²)`, so one bite is
+	-- worth ~the same food anywhere in any cake.
+	refBandWeight = 25.4, -- = refThickness 5.1 × scoopTop² (2.23²)
+	maxDensity = 12,
+
+	-- Work scaling. `work` = MatchConfig difficulty workMultiplier ×
+	-- (1 + coopWork·(players−1)); it buys MORE LAYERS first (layerExponent) and
+	-- whatever the maxLayers cap cannot absorb becomes SMALLER SCOOPS.
+	coopWork = 0.5,
+	layerExponent = 0.55,
+	-- Calorie payout scaling: a shared loaf split N ways would pay each player a
+	-- fraction of a solo run, so the cake pays out per HEAD. 0.62 leaves co-op
+	-- slightly AHEAD of solo per minute — teaming up should be the better deal.
+	coopCalories = 0.62,
+	-- The SAME rule for the gems finds pay, and for the same reason: the find
+	-- COUNT comes from cake volume (roster-independent — the footprint is fixed
+	-- for any population) and a find is consumed by whoever reaches it first, so
+	-- 4 players collect ~10 finds each out of the same 40. Gems are what boosts
+	-- are priced against (500 = roughly one cleared solo cake), so without a
+	-- per-head term a co-op player needed FOUR cakes for one boost.
+	-- Deliberately NOT multiplied by the difficulty premium the way calories are:
+	-- difficulty already pays in calories, and leaving gems out of it keeps
+	-- "one cleared cake buys one boost" true on every difficulty.
+	coopFinds = 0.62,
+
 	-- Rare cakes (GDD §5): rolled per cake, announced server-wide.
 	rare = {
 		golden = { chance = 0.04, caloriesMult = 3 },
 		rainbow = { chance = 0.01, caloriesMult = 1.5, guaranteedRarity = "epic" },
 	},
 }
+
+-- ── Biomes ──────────────────────────────────────────────────────────────
+-- Palette + calorie multiplier per biome live in MapConfigData.biomes; this is
+-- just the ORDER. Rebirth used to unlock them one by one; with rebirth removed
+-- (2026-07-26) every cake uses `biomeOrder[1]` (ProgressService.BiomeFor), and
+-- this list is where a future unlock rule would plug back in.
+CakeConfig.biomeOrder = { "factory", "donut", "candy" }
 
 -- ── Layer gate (eat top-down, ONE layer at a time) ──────────────────────
 -- Bites may not dig below the current TOP band's bottom until that band is
@@ -507,11 +619,53 @@ CakeConfig.layerGate = {
 	cueInterval = 1.2, -- seconds between locked cues (client debounce)
 }
 
+-- ── Aim (client input: WHERE the bite in front of you lands) ─────────────
+-- You eat the cake directly in front of you (CakeSubsClient.computeBitePoint).
+-- The naive rule — "sample the surface exactly `reach` studs ahead" — breaks the
+-- single most common way a player eats: RUNNING HEAD-ON INTO THE WALL of the
+-- layer they are clearing. Standing in the crater they just made, the point
+-- `reach` ahead is still crater FLOOR, so:
+--   * the layer-gate pre-check reads it as "already eaten to the floor here"
+--     and SKIPS the bite outright (+ nags "eat the top layer first"), and
+--   * even when it does fire, ApplyBite centres on a floor cell (h == floor,
+--     nothing to remove) and only the falloff RIM reaches the wall — a sliver.
+-- Running ACROSS the top surface centres the scoop on full cake and clears the
+-- whole footprint to the floor, which is why the two felt so different (and why
+-- a real playtest ran ~50% longer than the mowing model predicted).
+-- So the aim point SEARCHES FORWARD for the nearest cake still standing above
+-- the active floor. When there IS cake at the nominal point (the fast
+-- surface-mowing case) nothing changes — the search only runs in the case that
+-- was broken.
+CakeConfig.aim = {
+	-- Nominal point: `max(minReachStuds, scoopedRadius * reachMult)` ahead.
+	-- ⚠ reachMult must stay under the front bite's own radius + the beneath
+	-- bite's, or the two craters stop touching and every pass leaves an un-eaten
+	-- RING around the eater (the densest cakes / smallest scoops hit this first).
+	minReachStuds = 2.5,
+	reachMult = 1.15,
+	-- Forward search for standing cake, in `stepStuds` increments out to
+	-- `max(nominalReach, scoopedRadius + probeStuds)`. Kept SHORT on purpose:
+	-- pressed against a wall the face is ~2-3 studs out, so this only ever needs
+	-- to step over the lip of the player's own crater. A long probe would let the
+	-- front crater detach from the beneath crater (the un-eaten ring above).
+	-- Everything here stays far inside the server's reach cap
+	-- (CakeConfigData.antiCheat.maxBiteReachStuds = 18 + biteRadius).
+	stepStuds = 0.6,
+	probeStuds = 4.5,
+}
+
 -- ── Cycle (GDD §9) ──────────────────────────────────────────────────────
 CakeConfig.cycle = {
 	newCakeDelay = 15, -- seconds between pet reveal and the next cake
-	bossDuration = 30, -- boss auto-defeats after this (never blocks the loop)
-	bossTapsPerPlayer = 40, -- boss HP = taps * max(1, players)
+	-- The FINALE of a 25-45 minute cake, so it has to be a real moment: HP is
+	-- sized for a ~20-30 s frantic tap fight, and the timer always leaves ~1.5x
+	-- the time a base eater needs (MatchConfig bossHp/bossDuration multipliers).
+	-- ⚠ Keep that margin when tuning: HP / (players x eatRate) must stay well
+	-- under the timer or the match is unwinnable by construction.
+	--   easy solo   90 taps / 67.5 s  |  hard solo  150 / 45 s
+	--   easy 4p    360 taps / 67.5 s  |  hard 4p    600 / 45 s
+	bossDuration = 45, -- boss timer; expiry is a LOSS in a reserved match
+	bossTapsPerPlayer = 120, -- boss HP = taps * max(1, players) * difficulty
 	bossName = "Cake Guardian",
 	-- Progress announcements (client hints "cotton candy in 18%").
 	progressBroadcastHz = 1,

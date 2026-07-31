@@ -11,6 +11,8 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Log = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Log"))
 
+local SCOPE = "PetService"
+
 local PetService = {}
 
 local profileData
@@ -32,7 +34,7 @@ function PetService.Init(data)
 	end
 	for _, rarity in ipairs(petCfg.rarities) do
 		if not byRarity[rarity.id] or #byRarity[rarity.id] == 0 then
-			Log.Warn("PetService", `rarity '{rarity.id}' has NO pets in PetConfig — rolls will reroll around it`)
+			Log.Warn(SCOPE, `rarity '{rarity.id}' has NO pets in PetConfig — rolls will reroll around it`)
 		end
 	end
 end
@@ -64,45 +66,74 @@ local function rollRarity(weightsOverride: { [string]: number }?): string
 	return entries[#entries].id
 end
 
+-- Odds for one draw: the egg's table, with everything below `minRarity` zeroed
+-- (the rainbow cake's "guaranteed Epic+").
+local function weightsFor(eggType: string?, minRarity: string?)
+	local egg = petCfg.eggs[eggType or "cycle"] or petCfg.eggs.cycle
+	local weights = egg.weights
+	if not minRarity then
+		return weights
+	end
+	local floor = {}
+	local reached = false
+	for _, rarity in ipairs(petCfg.rarities) do
+		if rarity.id == minRarity then
+			reached = true
+		end
+		floor[rarity.id] = if reached then (weights and weights[rarity.id] or rarity.weight) else 0
+	end
+	return floor
+end
+
 --API
--- Rolls one pet for the player and adds it to the collection.
+-- DECIDES a pet without granting it: the roll happens here, the collection is
+-- untouched. Lets a reward be SHOWN before it is earned — the boss fight
+-- advertises the squishy you are fighting for (features/cake-cycle.md) and then
+-- commits that exact id through Grant on a win, so the prize on screen is the
+-- prize you get.
+-- Returns { petId, rarity } or nil (profile not loaded — nothing to grant later).
+function PetService.Preview(userId: number, eggType: string?, minRarity: string?)
+	if not pets(userId) then
+		return nil
+	end
+	local rarityId = rollRarity(weightsFor(eggType, minRarity))
+	local pool = byRarity[rarityId]
+	local def = pool[math.random(#pool)]
+	return { petId = def.id, rarity = rarityId }
+end
+
+--API
+-- Adds a SPECIFIC pet to the collection (the commit half of Preview). Duplicates
+-- merge: owned[petId] counts copies.
+-- Returns { petId, rarity, copies, isNew } or nil (no profile / unknown id).
+function PetService.Grant(userId: number, petId: string)
+	local section = pets(userId)
+	local def = byId[petId]
+	if not section or not def then
+		return nil
+	end
+	local isNew = section.owned[def.id] == nil
+	section.owned[def.id] = (section.owned[def.id] or 0) + 1
+	return {
+		petId = def.id,
+		rarity = def.rarity,
+		copies = section.owned[def.id],
+		isNew = isNew,
+	}
+end
+
+--API
+-- Rolls one pet for the player and adds it to the collection (Preview + Grant in
+-- one step — the path for rewards that are revealed at the moment they are won).
 -- eggType: key of PetConfig.eggs (nil = "cycle" base odds).
 -- minRarity: optional floor (rainbow cake "guaranteed Epic+").
 -- Returns { petId, rarity, copies, isNew } or nil (profile not loaded).
 function PetService.Roll(userId: number, eggType: string?, minRarity: string?)
-	local section = pets(userId)
-	if not section then
+	local preview = PetService.Preview(userId, eggType, minRarity)
+	if not preview then
 		return nil
 	end
-	local egg = petCfg.eggs[eggType or "cycle"] or petCfg.eggs.cycle
-	local weights = egg.weights
-
-	if minRarity then
-		-- Zero out everything below the floor.
-		local floor = {}
-		local reached = false
-		for _, rarity in ipairs(petCfg.rarities) do
-			if rarity.id == minRarity then
-				reached = true
-			end
-			floor[rarity.id] = if reached then (weights and weights[rarity.id] or rarity.weight) else 0
-		end
-		weights = floor
-	end
-
-	local rarityId = rollRarity(weights)
-	local pool = byRarity[rarityId]
-	local def = pool[math.random(#pool)]
-
-	local isNew = section.owned[def.id] == nil
-	section.owned[def.id] = (section.owned[def.id] or 0) + 1
-
-	return {
-		petId = def.id,
-		rarity = rarityId,
-		copies = section.owned[def.id],
-		isNew = isNew,
-	}
+	return PetService.Grant(userId, preview.petId)
 end
 
 --API

@@ -28,6 +28,7 @@ local Net = require(Shared:WaitForChild("Net"))
 local Log = require(Shared:WaitForChild("Log"))
 local CakeConfig = require(Shared:WaitForChild("config"):WaitForChild("CakeConfig"))
 local JuiceConfig = require(Shared:WaitForChild("config"):WaitForChild("JuiceConfig"))
+local TreasureConfig = require(Shared:WaitForChild("config"):WaitForChild("TreasureConfig"))
 
 local SCOPE = "CakeSubsClient"
 
@@ -53,6 +54,8 @@ function CakeSubsClient.Start(data, modules)
 	local AppRoot = modules.AppRoot
 	local LocalEatState = modules.LocalEatState -- flat-while-eating gate (Task 4)
 	local PlayerControlService = modules.PlayerControlService
+	local FloatingNumbers = modules.FloatingNumbers
+	local LocaleData = data.LocaleData
 
 	local player = Players.LocalPlayer
 	local rEatAt = Net.Remote("EatAt")
@@ -84,6 +87,21 @@ function CakeSubsClient.Start(data, modules)
 	local isFull = false -- belly at capacity: eating is blocked (server + here)
 	local lastFullCueAt = 0
 	local lastLockCueAt = 0 -- layer gate: debounce the "eat the top layer first" cue
+	-- A layer FINISHES exactly while you are mowing its floor, which is also
+	-- when the locked cue wants to fire — so the nag used to stomp the
+	-- celebration within one frame (seen in playtest). The clear wins.
+	local lastLayerClearedAt = -math.huge
+	local LAYER_CLEAR_PRIORITY_SECONDS = 2.5
+	-- Spots where a buried find is close enough to the surface to glint through
+	-- the icing. Keyed by find+position so a new cake's finds never collide with
+	-- a stale entry; cleared when the crown breaks through (see TreasureUpdate)
+	-- AND wholesale on a new cake — a find left in the server's `loaded` state
+	-- when the cake resets never sends its `revealed`, so its marker would sit
+	-- here forever, glinting a spot on the NEXT cake that holds nothing and
+	-- eating the `maxMarkers` budget that real finds need.
+	local nearMarkers: { [string]: { x: number, z: number, color: Color3 } } = {}
+	local markersCakeIndex: number? = nil
+	local glintClock = 0
 	local lastComboSent = 1
 	local announceSeq = 0
 
@@ -106,6 +124,14 @@ function CakeSubsClient.Start(data, modules)
 		if typeof(buf) ~= "buffer" or type(meta) ~= "table" then
 			Log.Warn(SCOPE, "malformed snapshot payload — dropped")
 			return
+		end
+		-- Drop stale glint spots BEFORE the yielding rebuild below (the supersede
+		-- guard can early-return past it). Guarded on cakeIndex, NOT unconditional:
+		-- `near` fires once per find, and a mid-cake snapshot resend (a joining
+		-- player) would otherwise wipe still-valid markers permanently.
+		if meta.cakeIndex ~= markersCakeIndex then
+			markersCakeIndex = meta.cakeIndex
+			table.clear(nearMarkers)
 		end
 		LocalCakeField.ApplySnapshot(buf, meta)
 		CakeWrapper.OnSnapshot() -- pick this cake's wall texture (before the renderer rebuild yields)
@@ -171,6 +197,24 @@ function CakeSubsClient.Start(data, modules)
 		end
 		if payload.announce == "cake-cleared" then
 			SoundPool.Play("cakeCleared")
+		elseif payload.announce == "layer-cleared" then
+			-- A whole layer gone: chime, a soft punch and a ring of crumbs kicked
+			-- up around the eater. The rhythm beat of the whole session.
+			lastLayerClearedAt = os.clock()
+			SoundPool.Play("layerCleared")
+			CameraShake.Impulse(0.22)
+			local character = player.Character
+			local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if root then
+				for step = 0, 7 do
+					local angle = step * math.pi / 4
+					ParticlePool.Burst(
+						root.Position + Vector3.new(math.cos(angle) * 7, -2, math.sin(angle) * 7),
+						Color3.fromRGB(255, 236, 200),
+						7
+					)
+				end
+			end
 		elseif payload.announce and string.find(payload.announce, "rare-cake", 1, true) then
 			SoundPool.Play("rareCake")
 		end
@@ -184,6 +228,11 @@ function CakeSubsClient.Start(data, modules)
 			boss = payload.boss,
 			biome = payload.biome,
 			rareKind = payload.rareKind,
+			finds = payload.finds, -- per-cake find goal for the HUD bar
+			-- The squishy THIS player is fighting for, pre-rolled server-side when
+			-- the boss opened and attached per recipient (features/cake-cycle.md).
+			-- Server clears it on win/loss, so the card disappears with the fight.
+			pendingPet = if type(payload.pendingPet) == "table" then payload.pendingPet else nil,
 			announce = payload.announce,
 		} })
 	end)
@@ -208,18 +257,89 @@ function CakeSubsClient.Start(data, modules)
 	end)
 
 	-- ── Treasure FX ─────────────────────────────────────────────────────
+	-- Two beats, both worth selling (the finds ARE the reward loop of a
+	-- 40-minute cake): the CROWN breaking the surface, and the item popping
+	-- free. Loudness scales with the find's rarity (TreasureConfig.rarityFx).
+	local function rarityFx(rarity: string?)
+		return TreasureConfig.rarityFx[rarity or "common"] or TreasureConfig.rarityFx.common
+	end
+	local function rewardText(reward): string?
+		if type(reward) ~= "table" or LocaleData == nil then
+			return nil
+		end
+		local amount = tonumber(reward.amount)
+		if reward.kind == "gems" and amount then
+			return LocaleData.T("label-gems-n", { n = math.floor(amount) })
+		elseif reward.kind == "boost" then
+			return LocaleData.T("label-boost")
+		elseif reward.kind == "egg" then
+			return LocaleData.T(if reward.eggType == "lucky" then "label-egg-epic" else "label-egg")
+		end
+		return nil
+	end
+
 	Net.Update("TreasureUpdate").OnClientEvent:Connect(function(payload)
 		if type(payload) ~= "table" or typeof(payload.position) ~= "Vector3" then
 			return
 		end
-		if payload.event == "spawned" then
-			ParticlePool.Burst(payload.position, Color3.fromRGB(255, 240, 160), 10)
+		local color = if typeof(payload.color) == "Color3" then payload.color else Color3.fromRGB(255, 240, 160)
+		local fx = rarityFx(payload.rarity)
+
+		if payload.event == "near" then
+			-- Something is just under the icing here. Remember the spot; the
+			-- render step glints the SURFACE above it until the crown breaks
+			-- through. This is what turns mowing into "dig THERE".
+			nearMarkers[payload.findId .. tostring(payload.position)] = {
+				x = payload.position.X,
+				z = payload.position.Z,
+				color = color,
+			}
+		elseif payload.event == "revealed" then
+			-- A crown just broke through: a puff of crumbs off the top of it and
+			-- a soft "something's here" chime, so the dig has a payoff BEFORE the
+			-- item is free.
+			ParticlePool.Burst(payload.position, color, math.floor(fx.burst * 0.5))
 			SoundPool.Play("treasureSpawn")
+			CameraShake.Impulse(fx.shake * 0.4)
+			nearMarkers[payload.findId .. tostring(payload.position)] = nil
 		elseif payload.event == "collected" then
 			local mine = payload.byUserId == player.UserId
-			ParticlePool.Burst(payload.position, Color3.fromRGB(140, 230, 255), mine and 18 or 8)
+			-- A find you have NEVER dug up before is a one-off moment: treat it
+			-- as at least rare no matter what it actually is, so the first berry
+			-- lands and the fortieth does not.
+			local firstEver = mine and payload.firstEver == true
+			if firstEver then
+				fx = TreasureConfig.rarityFx.rare
+			end
+			-- The pop: a fat burst at the hole, plus a ring of crumbs for the
+			-- rarer finds. Everyone sees it (shared cake); the collector also
+			-- gets the shake, the chime and the floating reward.
+			ParticlePool.Burst(payload.position, color, mine and fx.burst or math.floor(fx.burst * 0.45))
+			if fx.ring then
+				for step = 0, 5 do
+					local angle = step * math.pi / 3
+					ParticlePool.Burst(
+						payload.position + Vector3.new(math.cos(angle) * 4, 0.5, math.sin(angle) * 4),
+						color,
+						6
+					)
+				end
+			end
+			SoundPool.Play(if mine then fx.sound else "treasureSpawn")
 			if mine then
-				SoundPool.Play("treasureGet")
+				CameraShake.Impulse(fx.shake)
+				local text = rewardText(payload.reward)
+				if text and FloatingNumbers ~= nil then
+					FloatingNumbers.Show(payload.position + Vector3.new(0, 3, 0), text, 1, color)
+				end
+				-- Only rare+ finds earn a banner — 40 finds a cake, so a banner
+				-- per find would be pure noise. A FIRST-EVER discovery always
+				-- does, and outranks the rarity banner.
+				if firstEver then
+					pushAnnounce("find-new")
+				elseif fx.ring and payload.rarity then
+					pushAnnounce(`find-{payload.rarity}`)
+				end
 			end
 		end
 	end)
@@ -230,6 +350,9 @@ function CakeSubsClient.Start(data, modules)
 	-- field. nil when you're facing off the loaf (nothing in front to eat) —
 	-- turn/walk to aim. The forward reach grows a little with bite radius and
 	-- stays well inside the server's reach cap (antiCheat.maxBiteReachStuds).
+	-- The point then SEARCHES FORWARD for cake still standing above the active
+	-- floor, so running head-on into a layer wall bites the wall instead of the
+	-- crater floor you are stood in (CakeConfig.aim).
 	local function computeBitePoint(root: BasePart): Vector3?
 		local look = root.CFrame.LookVector
 		local flat = Vector3.new(look.X, 0, look.Z)
@@ -241,11 +364,56 @@ function CakeSubsClient.Start(data, modules)
 				return nil
 			end
 		end
-		-- Close in front of you (~half the old distance — the cake was tearing
-		-- off too far ahead); still grows a touch with bite radius.
-		local reach = 3 + LocalStatsService.BiteRadius() * 0.25
-		local ahead = root.Position + flat.Unit * reach
-		return LocalCakeField.SurfacePoint(ahead.X, ahead.Z)
+		flat = flat.Unit
+		local aim = CakeConfig.aim
+		-- Just in front of you, scaled to the EFFECTIVE scoop on this band (the
+		-- pacing curve: a wide spoonful of icing, a small chip of dense core).
+		-- ⚠ It must stay under the front bite's own radius + the beneath bite's,
+		-- or the two craters stop touching and every pass leaves an un-eaten RING
+		-- around the eater — which the densest cakes (smallest scoops) would hit.
+		local scooped = LocalCakeField.ScoopedRadius(LocalStatsService.BiteRadius())
+		local reach = math.max(aim.minReachStuds, scooped * aim.reachMult)
+		local origin = root.Position
+		local function sampleAt(distance: number): Vector3?
+			return LocalCakeField.SurfacePoint(origin.X + flat.X * distance, origin.Z + flat.Z * distance)
+		end
+
+		local nominal = sampleAt(reach)
+		-- RUNNING HEAD-ON INTO A LAYER WALL (CakeConfig.aim): the nominal point is
+		-- the floor of the crater you are standing in, so a bite there removes
+		-- nothing AND the layer gate below reads it as "already eaten to the floor
+		-- here" and skips the bite outright. Step forward to the nearest cake still
+		-- standing above the active floor so the scoop centres on the WALL. When
+		-- there is already cake at the nominal point — the normal "mow across the
+		-- top surface" case — this returns immediately and nothing changes.
+		local activeFloor = LocalCakeField.ActiveFloorStuds()
+		if activeFloor == nil then
+			return nominal
+		end
+		local standing = activeFloor + CakeConfig.layerGate.lockEpsilon
+		local originY = CakeConfig.grid.origin.y
+		if nominal ~= nil and nominal.Y - originY > standing then
+			return nominal
+		end
+		-- The un-eaten-RING contract above still holds, and NOT because the probe is
+		-- short: the march stops at the FIRST point above the floor, so everything
+		-- between the eater and the bite point is already cleared. There is no cake
+		-- left in the gap to strand, however far it walked. (The cap is about
+		-- reach/latency and staying far inside the server's anti-cheat range —
+		-- worst case here is ~15 studs vs the server's 18 + biteRadius.)
+		local step = math.max(0.25, aim.stepStuds)
+		local maxReach = math.max(reach, scooped + aim.probeStuds)
+		local distance = step
+		while distance <= maxReach do
+			local candidate = sampleAt(distance)
+			if candidate ~= nil and candidate.Y - originY > standing then
+				return candidate
+			end
+			distance += step
+		end
+		-- Nothing ahead stands above the floor: keep the nominal point so the
+		-- caller's layer-gate branch still fires its "eat the top layer first" cue.
+		return nominal
 	end
 
 	local function doBite()
@@ -311,9 +479,17 @@ function CakeSubsClient.Start(data, modules)
 			then
 				if eating then
 					local now = os.clock()
-					if now - lastLockCueAt > CakeConfig.layerGate.cueInterval then
+					if
+						now - lastLockCueAt > CakeConfig.layerGate.cueInterval
+						and now - lastLayerClearedAt > LAYER_CLEAR_PRIORITY_SECONDS
+					then
 						lastLockCueAt = now
-						SoundPool.Play("blocked")
+						-- SILENT ON PURPOSE (user req): the layer gate refuses a
+						-- bite you take constantly while clearing a layer, so a
+						-- refusal sound here turned into a stutter of buzzes. The
+						-- banner alone carries it. Do NOT add SoundPool.Play back —
+						-- the full-belly refusal above is a different, rare event
+						-- and keeps its cue.
 						pushAnnounce("layer-locked")
 					end
 				end
@@ -468,6 +644,31 @@ function CakeSubsClient.Start(data, modules)
 		SoundPool.Step(dt)
 		ParticlePool.Step(dt)
 		BossView.Step(dt)
+
+		-- GLINT: a slow shimmer on the cake SURFACE directly above every find
+		-- that is nearly uncovered. It never shows the item itself (that would be
+		-- an x-ray and would delete the dig) — only that this SPOT is worth
+		-- eating. Pooled bursts, so zero allocation; capped so a swept layer
+		-- can't flood the particle budget.
+		glintClock += dt
+		if glintClock >= JuiceConfig.findGlint.interval then
+			glintClock = 0
+			local shown = 0
+			for _, marker in pairs(nearMarkers) do
+				if shown >= JuiceConfig.findGlint.maxMarkers then
+					break
+				end
+				local surface = LocalCakeField.SurfacePoint(marker.x, marker.z)
+				if surface then
+					ParticlePool.Burst(
+						surface + Vector3.new(0, JuiceConfig.findGlint.liftStuds, 0),
+						marker.color,
+						JuiceConfig.findGlint.particles
+					)
+					shown += 1
+				end
+			end
+		end
 
 		-- Walk crunch (§7.2): footstep-cadence crust sound + crumb puffs while
 		-- moving on the cake — the crust must FEEL crunchy. The wax-film cracks

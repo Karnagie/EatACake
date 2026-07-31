@@ -7,7 +7,7 @@
 	  { kind = "boost", boostId = s }    -- TreasureConfig.boosts
 	  { kind = "egg", eggType = s }      -- registered by PetSubs (pet roll)
 
-	Features (daily rewards, shop, codes, finds, quests) PRODUCE descriptors;
+	Features (daily rewards, shop, codes, finds) PRODUCE descriptors;
 	THIS module GRANTS them: the single R3-legal orchestration point that
 	coordinates services and fires the follow-up remoteUpdates.
 
@@ -21,7 +21,15 @@
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Net = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Net"))
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Net = require(Shared:WaitForChild("Net"))
+local Log = require(Shared:WaitForChild("Log"))
+
+-- Resolved from the subscriptions registry in Start. COMMON, so present in both
+-- places — still nil-tolerant, per the registry pattern (ADR-0014).
+local BoostSubs
+
+local SCOPE = "RewardGrantSubs"
 
 local RewardGrantSubs = {}
 
@@ -32,7 +40,7 @@ local handlers: { [string]: (Player, { [string]: any }, string?) -> { [string]: 
 -- "granted" descriptor (echoed to the client for celebration UI) or nil.
 function RewardGrantSubs.Register(kind: string, handler)
 	if handlers[kind] ~= nil then
-		warn(`[RewardGrantSubs] Handler for kind '{kind}' overwritten`)
+		Log.Warn(SCOPE, `Handler for kind '{kind}' overwritten`)
 	end
 	handlers[kind] = handler
 end
@@ -53,13 +61,14 @@ function RewardGrantSubs.Grant(player: Player, reward: { [string]: any }?, sourc
 	end
 	local handler = handlers[reward.kind]
 	if handler == nil then
-		warn(`[RewardGrantSubs] No handler for reward kind '{reward.kind}' (source: {source or "?"})`)
+		Log.Warn(SCOPE, `No handler for reward kind '{reward.kind}' (source: {source or "?"})`)
 		return nil
 	end
 	return handler(player, reward, source)
 end
 
-function RewardGrantSubs.Start(data, services)
+function RewardGrantSubs.Start(data, services, subscriptions)
+	BoostSubs = subscriptions.BoostSubs
 	local uCurrency = Net.Update("CurrencyUpdate")
 
 	local function sendCurrency(player: Player)
@@ -101,10 +110,34 @@ function RewardGrantSubs.Start(data, services)
 
 	RewardGrantSubs.Register("boost", function(player: Player, reward, source: string?)
 		if type(reward.boostId) ~= "string" then
+			-- Malformed descriptor from a reward table (R8 — never silent).
+			Log.Once(SCOPE, `boost-no-id-{source or "?"}`, `boost reward from '{source or "?"}' has no string boostId — dropped`)
 			return nil
 		end
 		if not services.StatsService.GrantBoost(player.UserId, reward.boostId) then
-			return nil -- unknown boost id or profile not loaded
+			-- Unknown id or unloaded profile. Worth a warn either way: a shop
+			-- product or reward table still pointing at a DELETED boost def sells
+			-- normally and grants nothing at all, which is invisible otherwise.
+			Log.Once(
+				SCOPE,
+				`boost-grant-failed-{reward.boostId}`,
+				`boost '{reward.boostId}' (source: {source or "?"}) NOT granted — no such TreasureConfig.boosts def, or the profile isn't loaded`
+			)
+			return nil
+		end
+		-- Three of the four boosts feed stats that are PUSHED or APPLIED once
+		-- (bite radius on the client, WalkSpeed on the Humanoid, capacity in the
+		-- StomachUpdate payload), so they do nothing until something re-applies
+		-- them. BoostSubs' sweep would get there within a tick, but a player who
+		-- just spent 500 gems should not watch a second of nothing.
+		if BoostSubs then
+			BoostSubs.Apply(player)
+		else
+			Log.Once(
+				SCOPE,
+				"boostsubs-missing",
+				`BoostSubs absent — boost '{reward.boostId}' granted, but bite radius / speed / capacity will not apply until something else refreshes them`
+			)
 		end
 		return { kind = "boost", boostId = reward.boostId }
 	end)

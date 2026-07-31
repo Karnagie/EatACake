@@ -38,7 +38,7 @@ end
 --API
 -- Schedules recovery and returns immediately. The caller never waits on a
 -- ProfileStore retry, so every member of a failed group begins recovery at once.
-function Recovery.Start(player: Player, teleportData, persistence, timeRewards, onRecovered): boolean
+function Recovery.Start(player: Player, teleportData, persistence, onRecovered): boolean
 	local userId = player.UserId
 	if player.Parent ~= Players then
 		teleportData.Clear(player)
@@ -107,10 +107,6 @@ function Recovery.Start(player: Player, teleportData, persistence, timeRewards, 
 
 		local profile = if ok then profileOrError else nil
 		if profile ~= nil and player.Parent == Players then
-			local sessionOk, sessionError = pcall(timeRewards.BeginSession, userId)
-			if not sessionOk then
-				Log.Warn(SCOPE, `TimeRewardService.BeginSession FAILED after recovering {player.Name}: {sessionError}`)
-			end
 			if type(onRecovered) == "function" then
 				local pushOk, pushError = pcall(onRecovered, player)
 				if not pushOk then

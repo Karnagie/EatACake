@@ -14,10 +14,15 @@
 		            whose purchase the server refused with no player-visible
 		            result: a silent failure, which R8 says is a bug. Now the UI
 		            states it.
+		unaffordable the SAME grey, disabled, but it keeps the currency glyph and
+		            the amount — for a gem-priced product the player cannot pay
+		            for yet. The price is exactly what they need to see, so it is
+		            not replaced by a word.
 
 	props:
 		text            -- "149" (buy) or an override label
-		state           -- "buy" | "owned" | "unavailable" (default "buy")
+		state           -- "buy" | "owned" | "unavailable" | "unaffordable"
+		                   (default "buy"; only "buy" is enabled)
 		iconName        -- Theme.Icons key, default UiRobux; nil in text-only states
 		size, position, zIndex, style (Theme.ShopPrice | Theme.ShopPriceWide)
 		onActivated()

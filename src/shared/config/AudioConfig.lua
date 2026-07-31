@@ -104,6 +104,10 @@ AudioConfig.sounds = {
 	bossDefeat = { asset = "success", volume = 0.9 },
 	bossLost = { asset = "lose" },
 	cakeCleared = { asset = "deeppositivereward" },
+	-- One layer of the cake finished — the game's core rhythm beat. Reuses an
+	-- already-authored sample (no new SFX content needed), pitched up so it
+	-- reads as a step, not as the end of the whole cake.
+	layerCleared = { asset = "success", volume = 0.85, pitch = 1.12 },
 	rareCake = { asset = "game reveal" },
 	newCake = { asset = "transition", volume = 0.8 },
 	land = { asset = "softhit", volume = 0.7, cut = 0.35 },
@@ -124,9 +128,10 @@ AudioConfig.sounds = {
 	gemGain = { asset = "medium light pickup gems", volume = 0.8, throttle = 0.5 },
 	reward = { asset = "deeppositivereward" },
 	rewardBig = { asset = "heavy reward reveal" },
-	questDone = { asset = "playerxplevelup" },
 	treasureSpawn = { asset = "mergeavailable", volume = 0.7 },
 	treasureGet = { asset = "itempickup", volume = 1.2 },
+	-- Rare+ find popping free of the cake — the loudest reward beat of a cake.
+	treasureBig = { asset = "heavy reward reveal", volume = 1.3 },
 
 	-- Gym / body
 	gymStart = { asset = "construct1", volume = 0.9 },
@@ -137,7 +142,6 @@ AudioConfig.sounds = {
 	purchaseStart = { asset = "purchasestart", volume = 0.7 },
 	purchaseOk = { asset = "lightpurchase" },
 	upgradeBuy = { asset = "brainrotupgrade1" },
-	rebirth = { asset = "success" },
 
 	-- Squishies (pets): the reveal is rarity-tiered — a legendary must SOUND
 	-- different from a common or the roll has no stakes.

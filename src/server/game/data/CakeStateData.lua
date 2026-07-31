@@ -15,10 +15,13 @@
 	                   only the core remains). Advances as layers are eaten.
 	  cakeIndex     increments per cake (clients drop stale deltas)
 	  rareKind      nil | "golden" | "rainbow"
-	  biome         current biome id (from rebirth progression)
+	  biome         current biome id (CakeConfig.biomeOrder[1] since 2026-07-26)
 	  phase         "eating" | "boss" | "reward" | "spawning"
 	  phaseTimer    seconds left in a timed phase (boss / spawning)
 	  boss          { hp, maxHp } during the boss phase
+	  pendingPetRolls  { [userId] = { petId, rarity } } — the squishy each player
+	                   is fighting the boss FOR (pre-rolled when the boss phase
+	                   opens so the HUD can show it), committed on a win
 	  progress      0..1 eaten fraction (1 Hz scan)
 	  edibleVolume  studs^3 of edible cake at spawn (progress denominator)
 
@@ -43,6 +46,13 @@ CakeStateData.activeBandIndex = 0
 CakeStateData.activeFloorUnits = 0
 CakeStateData.cakeIndex = 0
 CakeStateData.rareKind = nil :: string?
+-- Calorie payout scale of the CURRENT cake: difficulty premium × per-head co-op
+-- payout, fixed once at RollComposition so it cannot drift as players leave
+-- (CakeCycleService.CakeCaloriesMult, features/cake-cycle.md).
+CakeStateData.payoutScale = 1
+-- GEM payout scale of the CURRENT cake: per-head co-op term only, no difficulty
+-- premium (CakeCycleService.ScaleFindReward, CakeConfig.composition.coopFinds).
+CakeStateData.findPayoutScale = 1
 CakeStateData.biome = "factory"
 CakeStateData.phase = "spawning"
 CakeStateData.phaseTimer = 0
@@ -52,6 +62,15 @@ CakeStateData.edibleVolume = 0
 
 -- Hourly Cake Event (GDD §12.2): unix time of the last forced rare cake.
 CakeStateData.lastRareEventAt = 0
+
+-- The squishy each player is FIGHTING FOR, decided when the boss phase opens and
+-- shown in the boss HUD (features/cake-cycle.md, features/pets.md):
+--   { [userId] = { petId: string, rarity: string } }
+-- Committed on a win by granting exactly this petId, so the prize on screen is
+-- the prize you get. NOT owned yet — this is a pending intent, which is why it
+-- lives in runtime state and not in the profile. Cleared on win, loss, and on
+-- every new cake.
+CakeStateData.pendingPetRolls = {} :: { [number]: { petId: string, rarity: string } }
 
 CakeStateData.settleQueue = {} :: { number }
 CakeStateData.settleQueued = {} :: { [number]: boolean }
@@ -73,8 +92,12 @@ CakeStateData.simulationAccumulators = {
 CakeStateData.collisionParts = {} :: { BasePart }
 
 -- Treasures of the current cake: array of
--- { def, x, z, revealUnits, state = "buried"|"spawned"|"collected"|"gone",
---   part: BasePart? } — see TreasureService.
+-- { def, x, z, model: Instance?, parts: { BasePart }, sparkle: ParticleEmitter?,
+--   height, radiusCells, topUnits, bottomUnits, exposure (0..1, MONOTONIC),
+--   state = "buried"|"loaded"|"revealed"|"collected" } — see TreasureService.
+-- The model is a CLONE of the authored ReplicatedStorage.Assets.Items library,
+-- parented into workspace.CakeFinds at cake spawn and hidden (alpha 1) until
+-- the surface nears it.
 CakeStateData.treasures = {}
 
 function CakeStateData.Init()

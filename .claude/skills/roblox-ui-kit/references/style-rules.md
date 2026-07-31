@@ -36,7 +36,12 @@ Face   — gradient surface, inset deeper
 content (OutlinedText / vector glyphs / image icon)
 ```
 
-Thickness for an element of nominal height H (button scale, H 48-160):
+⚠ **This is the BUTTON recipe. A CARD uses a different one — see §2b.**
+Applying the thickness table below to a card is how the shop shipped cells that
+"looked like stretched buttons": measured 8px of outline at the top and 30px at
+the bottom on a 282x296 cell.
+
+Thickness for a PRESSABLE element of nominal height H (button scale, H 48-160):
 - Outer visible: **~6% H top/left/right, ~12% H bottom** (bottom is always
   ~2x thicker — the "weight" that makes elements look physically thick).
   Example (button 418x103): rim inset 6px top/side; face y 8..88.5 → outer
@@ -46,6 +51,40 @@ Thickness for an element of nominal height H (button scale, H 48-160):
 - Elements < 50px nominal may drop the Rim (2 layers: Outer + Face) — e.g.
   stat row inside inspector. Premium elements (close button) add an InnerRim
   (4 layers).
+
+## 2b. Card recipe — A CARD IS A FRAME, A BUTTON IS A SLAB
+
+A **button** is a slab: ONE colour field, outline bottom-weighted 2x+, squat.
+A **card** is a container: EVEN outline, and INTERNAL ZONES. Get either half
+wrong and the card reads as a big button no matter what colour it is.
+
+```
+Outer     dark outline, EVEN: ~2.5% of H top/left/right, ~3.5% bottom (≤1.5x —
+          enough weight for the kit, far under the 2x+ that says "press me")
+ Face     the card BODY — one neutral for the whole grid
+  ArtRing accent-coloured window, FULL content width, ~50% of the card height
+  ArtFace inset by an EVEN ring (3-5px) — a window, not a bevel
+   Icon   square, centred, ~85% of the window's SHORT side
+  Title / one perk line
+  Shelf   the price button — the ONLY part drawn with the §2 button recipe,
+          because it is the only part that is a button
+```
+
+- **Portrait, not square.** 0.78-0.85 (w/h). The shop's 282x296 (0.95) was the
+  second "button" tell after the bevel.
+- **Colour belongs in the ART WINDOW, not the body.** N cards in N saturated
+  hues have no hierarchy — every cell shouts equally. One neutral body + N
+  coloured windows reads as one object, and puts the strongest local contrast
+  around the product art, where the eye should land.
+- **The art window is load-bearing, not decoration.** `ScaleType.Fit` draws an
+  image at the SHORTER side of its box, so art of different aspect ratios drawn
+  straight on the face renders at wildly different visual sizes. One window
+  normalises them. (Worked example + measured before/after:
+  `docs/features/shop.md`.)
+- **Every zone shares one left and one right edge** — a single content column
+  for art, title, perk and price. Most of "tidy" is that alignment.
+- State changes colour, never geometry (the PetCard rule): selection/premium is
+  a gradient swap on the Outer.
 
 Panels use a different triple: `BodyShadow → BodyBorder → BodyFill`:
 - Visible dark border ~1.6% of panel width on all sides (8/512, 10/1000).

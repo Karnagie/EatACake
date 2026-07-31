@@ -42,6 +42,7 @@ local ASSETS_FOLDER = "Assets" -- ReplicatedStorage.Assets (place-authored, edit
 local mapCfg -- MapConfigData
 local gridCfg -- CakeConfigData.cake.grid
 local footprintCfg -- CakeConfigData.cake.composition.footprint (FIXED loaf)
+local compCfg -- CakeConfigData.cake.composition (cake height for the boot placeholder)
 
 local mapFolder: Folder?
 local floorPart: BasePart?
@@ -70,7 +71,8 @@ local cakeSpawnPart: BasePart? -- CakeSpawn pad; Y rides the cake top (SetCheckp
 function MapService.Init(data)
 	mapCfg = data.MapConfigData
 	gridCfg = data.CakeConfigData.cake.grid
-	footprintCfg = data.CakeConfigData.cake.composition.footprint
+	compCfg = data.CakeConfigData.cake.composition
+	footprintCfg = compCfg.footprint
 end
 
 -- ── Geometry generators (the DEFAULT look; used to author the assets) ────────
@@ -719,8 +721,18 @@ function MapService.Build()
 		Log.Warn("Map", "Assets.Checkpoint missing after GenerateAssets — no gym/upgrade platform")
 	end
 
-	-- Initial placement (spawnNewCake corrects it to the real top layer per cake).
-	MapService.SetCheckpointHeight(origin.y + gridCfg.maxHeight * 0.6)
+	-- Initial placement, live for the WHOLE reserved-round arrival window (the
+	-- real SpawnNewCake is deferred until the roster/profile barrier clears), so
+	-- it has to be a height a arriving player can actually stand at.
+	-- ⚠ Use the CAKE height (core + maxTotalHeight), NOT `grid.maxHeight` — that is
+	-- the u16 FIELD HEADROOM (340) and has no relation to how tall a cake is.
+	-- `maxHeight * 0.6` = 204 put the pad at 214 while `room.wallHeight` is 210:
+	-- arrivals spawned ON TOP of the collidable ceiling of a sealed room, outside
+	-- the level, and SpawnNewCake's rescue only lifts players BELOW the cake top so
+	-- they were never recovered. It only worked before because the room used to be
+	-- 380 studs tall. This value now matches what SpawnNewCake will set.
+	local placeholderTopY = origin.y + compCfg.coreThickness + compCfg.maxTotalHeight
+	MapService.SetCheckpointHeight(placeholderTopY)
 
 	-- Spawn: directly on the cake (§12.1) — invisible, non-colliding pad above
 	-- the frosting; players drop onto the crust. FUNCTIONAL (not art) so it stays
@@ -728,7 +740,7 @@ function MapService.Build()
 	local spawn = Instance.new("SpawnLocation")
 	spawn.Name = "CakeSpawn"
 	spawn.Size = Vector3.new(14, 1, 14)
-	spawn.CFrame = CFrame.new(origin.x, origin.y + gridCfg.maxHeight * 0.6 + mapCfg.spawnHeightAboveCake, origin.z)
+	spawn.CFrame = CFrame.new(origin.x, placeholderTopY + mapCfg.spawnHeightAboveCake, origin.z)
 	spawn.Transparency = 1
 	spawn.CanCollide = false
 	spawn.Anchored = true

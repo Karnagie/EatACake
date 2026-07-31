@@ -99,6 +99,21 @@ function LocalCakeField.ActiveFloorStuds(): number?
 end
 
 --API
+-- The EFFECTIVE bite radius on the band currently being eaten: the biteRadius
+-- stat × the active band's `scoop` (the cake's pacing curve — a soft top band
+-- scoops wide, a dense deep one only chips), floored so a bite can never miss
+-- every cell centre. MIRRORS CakeFieldService.ScoopedRadius exactly; used both
+-- for local prediction and to place the bite point in front of the eater.
+function LocalCakeField.ScoopedRadius(radiusStuds: number): number
+	local scoop = 1
+	if meta ~= nil and meta.composition ~= nil then
+		local band = meta.composition[math.clamp(activeBandIndex, 1, #meta.composition)]
+		scoop = (band and band.scoop) or 1
+	end
+	return math.max(radiusStuds * scoop, CakeConfig.sim.minBiteRadiusStuds)
+end
+
+--API
 -- Delta packet: [u16 cellIndex][u16 height]*n. Stale cake indices dropped.
 function LocalCakeField.ApplyDelta(cakeIndex: number, buf: buffer)
 	if meta == nil or cakeIndex ~= meta.cakeIndex then
@@ -140,9 +155,13 @@ function LocalCakeField.PredictBite(px: number, pz: number, radiusStuds: number,
 			floorUnits = GridUtil.StudsToUnits(activeFloor)
 		end
 	end
+	-- Mirror the server's per-band SCOOP (CakeFieldService.ScoopedRadius):
+	-- predicting with the raw radius would carve a crater the wrong SIZE and the
+	-- next delta would visibly snap it back.
+	local scoopedRadius = LocalCakeField.ScoopedRadius(radiusStuds)
 	local removed, changed = CakeOps.ApplyBite(
 		field, gridCfg, meta.footprint, meta.composition, layersCfg,
-		px, pz, radiusStuds, depthStuds, floorUnits, CakeConfig.sim.biteClearRefDepth
+		px, pz, scoopedRadius, depthStuds, floorUnits, CakeConfig.sim.biteClearRefDepth
 	)
 	for _, i in ipairs(changed) do
 		markChanged(i)

@@ -12,10 +12,10 @@ toucher are reconciled by overlap scan, up to the selected cap; stepping out
 removes them after the configured grace period.
 
 At expiry the current admitted roster is profile-released and sent by one
-`TeleportAsync` call to a reserved server in place `91726662453442`. The finite
+`TeleportAsync` call to a reserved server in place `136881957250247`. The finite
 roster/difficulty/result contract is `features/game-round.md`; profile handoff
 guarantees and retries are `features/persistence.md`. The public return lobby is
-place `80059832045175` (ADR-0010).
+place `126172008675265` (ADR-0010).
 
 ## Authored lobby contract
 

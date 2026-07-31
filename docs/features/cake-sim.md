@@ -3,23 +3,69 @@
 ## What it does
 ONE shared cake per server: a 64×64 u16 heightfield (fixed-point 0.01
 studs, `GridUtil` layout), FIXED rounded-rect "loaf" footprint
-(`composition.footprint`, 90×78 studs), ~3× TALLER as of 2026-07-20
-(`totalHeight` {150,180}, `grid.maxHeight` 270) with ~10–14 chunky layers,
-~1M studs³ solo — Drain-the-Lake scale; HEIGHT also scales up per player
-(cake-cycle.md `perPlayerScale`). The renderer draws only the CURRENT top
-layer (see `CakeRenderer` below), so the layer count is not capped by the mesh
-budget. A bite CLEARS its footprint down toward the current layer's floor (a
+(`composition.footprint`, 90×78 studs), ALWAYS `composition.maxTotalHeight`
+(**170** studs since 2026-07-26 — at 330 the loaf was 3.7× taller than wide and
+read as a striped tower; height is a PURE VISUAL knob, measured free by
+`tools/headless-sim/pacing_scenario.lua`, ⚠ don't go below ~130 or the deepest
+band's density hits `maxDensity`. `grid.maxHeight` 340) — ~2.25M studs³, Drain-the-Lake scale. A
+harder cake or a bigger party is never TALLER: it has more (thinner) layers and
+smaller per-band scoops (the pacing curve — cake-cycle.md, ADR-0011). The
+renderer draws only the current + next band (see `CakeRenderer` below), so the
+layer count is not capped by the mesh budget. A bite CLEARS its footprint down toward the current layer's floor (a
 clean scoop — `CakeOps.ApplyBite`, Req 2: one side of a layer clears completely,
 the other stays full — a clean cut edge), tapering to a soft rim. The angle-of-
 repose settle only SLOPES the cut edge (a small drip); it will NOT ooze into the
 cleared zone near the active floor (`sim.sliverSweepStuds`), so cleared cake stays
-clean — no puddles. Any thin bits on the active floor auto-sweep to it (1 Hz).
+clean — no puddles. Any thin bits on the active floor auto-sweep to it (1 Hz). ⚠ Every sweep
+distance is capped at `sim.sweepBandFraction` (0.25) of the ACTIVE BAND's own
+thickness — the raw values are absolute studs, so a thin band would otherwise be
+swallowed by a fixed rule (measured: 8.3% → 6.8% forfeited, +3.4% food, at the
+cost of +0.7 min clear time; `tools/headless-sim/pacing_scenario.lua` §C).
 Digging a shaft is impossible by construction (layer gate).
+
+## Where the bite LANDS: the forward aim search (2026-07-30)
+You eat the cake directly in front of you. The old rule — sample the surface a
+fixed `reach` ahead — broke the most common way people actually eat: **running
+head-on into the WALL of the layer they are clearing.** Standing in the crater you
+just made, the point `reach` ahead is still crater FLOOR, so
+1. the client's layer-gate pre-check read it as "already eaten to the floor here"
+   and **skipped the bite entirely**, popping "Eat the top layer first!", and
+2. any bite that did fire centred on a floor cell, where `ApplyBite`'s
+   `h > floorUnits` test fails — only the falloff RIM reached the wall, shaving a
+   sliver.
+
+Mowing ACROSS the top surface centres the scoop on full cake and clears its whole
+footprint to the floor, which is why the two felt nothing alike — and it got worse
+with depth, because `reach` scales with the shrinking scoop. Fix
+(`CakeSubsClient.computeBitePoint`, tuned in `CakeConfig.aim`): step forward in
+`stepStuds` increments out to `max(nominalReach, scoopedRadius + probeStuds)` and
+bite the first point standing above the active floor.
+- The fast path is **unchanged**: when there is cake at the nominal point it
+  returns immediately, so surface mowing behaves exactly as before.
+- The probe is deliberately SHORT — pressed against a wall the face is ~2-3 studs
+  out. A long probe would let the front crater detach from the beneath crater and
+  leave an un-eaten ring around the eater.
+- When nothing ahead is above the floor it returns the nominal point, so the
+  genuine "this layer is finished here" cue still fires.
+- Client-only: the server just validates reach (`antiCheat.maxBiteReachStuds` 18 +
+  biteRadius), and its own clamp is authoritative either way.
+
+## Bite size: the per-band SCOOP
+The eater's `biteRadius` stat is multiplied by the ACTIVE band's `scoop`
+(cake-cycle.md) and floored at `sim.minBiteRadiusStuds` — `CakeFieldService
+.ScoopedRadius` on the server, mirrored EXACTLY by `LocalCakeField.ScoopedRadius`
+on the client (prediction AND the placement of the bite point in front of the
+eater, which scales with it so the front + beneath craters always overlap).
+⚠ Change the rule on one side only and prediction pops. `CakeOps.ApplyBite` also
+always processes the cell UNDER the bite point, so a sub-cell scoop still bites.
+The band's `density` turns the removed volume into FOOD (`CakeSubs`): belly fill
+and calories are `removed × density`, never raw studs³.
 
 ## State & config
 - `CakeStateData` — field buffer, composition, queues, phase (ALL runtime state)
   + the LAYER GATE: `activeBandIndex` (current top edible band) and
-  `activeFloorUnits` (its bottom — the bite clamp).
+  `activeFloorUnits` (its bottom — the bite clamp) + `payoutScale` (this cake's
+  calorie multiplier).
 - `Shared/config/CakeConfig` — grid, sim budgets, net rates, layers (§5),
   composition rolls, cycle timings, `layerGate`. Server accesses it via
   `CakeConfigData` (which also owns anti-cheat caps).
@@ -210,11 +256,15 @@ stationary auto-eater keeps earning rather than stalling.
 - Chocolate never flows (`repose = huge`) — it's eaten through (hardness 3)
   with client shatter FX; the GDD's "convert to crumb" state is NOT simulated.
 - Auto-sweep, the sliver sweep AND the eaten-zone cleanup sweep (`sim.remnantSweep`:
-  any active-band cell TOUCHING a crater that is either eaten-into or an isolated
-  pillar / 1-cell wall snaps to the floor, so the eaten footprint is a clean cliff,
-  no ragged rim) all FORFEIT the swept volume (nobody gets calories) — the price of
-  never leaving hard-to-eat crumbs. Tune `clearedMarginStuds` / `eatenEpsilonStuds`
-  or set `enabled=false` if it eats too eagerly.
+  an active-band cell TOUCHING a crater snaps to the floor when it is itself
+  within `nearFloorStuds` of the floor — the soft RIM of a bite — or is an
+  isolated pillar / 1-cell wall) all FORFEIT the swept volume (nobody gets
+  calories) — the price of never leaving hard-to-eat crumbs.
+  ⚠ The rim rule is measured from the active FLOOR. It used to be measured from
+  the band TOP (`eatenEpsilonStuds`), which collapsed a chunky band's cell the
+  moment it was nicked: ~25% of every cake vanished uneaten, layer clear-time
+  stopped depending on the bite stats at all, and there was no room left to pace
+  the cake (ADR-0011). Keep it near the floor.
 - The footprint XZ is FIXED (`composition.footprint` loaf) — it does NOT
   scale with population (the 64-cell grid caps it); only the cake HEIGHT
   scales up per player (`composition.perPlayerScale`, cake-cycle.md). Auto-

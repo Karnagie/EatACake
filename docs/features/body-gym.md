@@ -11,9 +11,13 @@ the cake (the client gates too, with a soft cue), WalkSpeed is −40% (linear
 with fill), and the rig becomes a rolling **ball** (below). The gym is the only
 release valve. Glutton ×2 fires once — on the single bite that TOPS YOU OFF
 (`glutton = fill + volume ≥ capacity`), never on sustained overeating (now
-impossible). **Easy-mode**: `capacity` is large (base 2600 = ~50 s of eating per
-fill, ~50–160 bites — not the old ~4), so the loop is EATING-dominant and the gym
-is an occasional quick beat; see `features/upgrades.md` + `2026-07-19_easy-mode-balance.md`.
+impossible). **Pacing (2026-07-26)**: the belly is measured in FOOD units — a bite is worth
+`removed volume × the band's density` (features/cake-sim.md), which is what keeps
+one bite worth the same anywhere in any cake. `capacity` base 84000 ≈ **90 s of
+eating per fill at EVERY depth and party size**, so the loop is eating-dominant
+and the gym is a quick beat you take ~25 times a match — each one also being the
+moment you buy an upgrade tier at the checkpoint. See `features/upgrades.md` +
+`2026-07-26_cake-pacing-rebalance.md`.
 
 ## State
 Profile section `stomach` `{fill, stored}` (persists across rejoins).
@@ -134,19 +138,19 @@ burn.
 **Committed run / walk-away**: a treadmill run is COMMITTED — the player is
 ANCHORED on the belt, so the old "walk away to stop" rule (the user's earlier
 rule) is SUPERSEDED for a run; it ends only when the belly empties (or death /
-rebirth / an instant burn, which all release the mount). The walk-away stop
+an instant burn, which all release the mount). The walk-away stop
 still applies to the STANDING fallback (`treadmill.enabled=false` or a failed
 mount): that path re-checks `NearGym` each tick and ends on leaving
 (`{event="stopped"}`, no payout, the drained belly is kept). **Robust release**:
 a per-tick safety net unmounts any player who is still mounted but has NO session
-(so an external ender like **rebirth** `GymService.EndSession` can never leave
+(so an external ender calling `GymService.EndSession` can never leave
 them stuck anchored), firing `{event="stopped"}` to close the overlay;
 `CharacterRemoving` (death/reset) and `PlayerRemoving` also clear the mount.
 
 **Full burns** (`burnAll`, EndSession-first so a live session can't re-inflate
 the belly): Auto-Gym pass burns the whole belly every 6 s (`{event="auto"}`);
 reward kind `burn` (instant-burn dev product) does the same anywhere
-(`{event="instant"}`). Rebirth also ends any live session before emptying.
+(`{event="instant"}`).
 
 **Overlay** (`GymOverlay`, kit): a full-screen transparent layer with a
 bottom-**RIGHT** round TAP button (phone thumb), a "fat left" bar that eases

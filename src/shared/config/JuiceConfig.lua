@@ -75,4 +75,15 @@ JuiceConfig.squash = {
 	time = 0.12,
 }
 
+-- FIND GLINT: a shimmer on the cake SURFACE above a nearly-uncovered buried
+-- find (features/treasures.md). It marks the SPOT, never the item — showing
+-- the item through cake would be an x-ray and would delete the dig. Slow and
+-- small on purpose: a tell, not a firework.
+JuiceConfig.findGlint = {
+	interval = 0.45, -- seconds between shimmers per marker pass
+	particles = 4,
+	liftStuds = 0.6, -- just above the icing so it reads as ON the surface
+	maxMarkers = 4, -- a swept layer can expose many at once; keep the budget sane
+}
+
 return JuiceConfig

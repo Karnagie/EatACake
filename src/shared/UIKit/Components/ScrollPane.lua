@@ -1,6 +1,5 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
-local GuiService = game:GetService("GuiService")
 local React = require(ReplicatedStorage.Packages.React)
 local Theme = require(script.Parent.Parent.Theme)
 
@@ -141,15 +140,26 @@ local function ScrollPane(props)
 			AutoButtonColor = false,
 			ZIndex = zIndex,
 			ref = trackRef,
-			[React.Event.MouseButton1Down] = function()
+			[React.Event.InputBegan] = function(_, input: InputObject)
+				if
+					input.UserInputType ~= Enum.UserInputType.MouseButton1
+					and input.UserInputType ~= Enum.UserInputType.Touch
+				then
+					return
+				end
 				local frame = scrollRef.current
 				local track = trackRef.current
 				if not frame or not track then
 					return
 				end
-				-- GetMouseLocation includes the gui inset, AbsolutePosition does not; unify the space
-				local mouseY = UserInputService:GetMouseLocation().Y - GuiService:GetGuiInset().Y
-				local relative = (mouseY - track.AbsolutePosition.Y) / math.max(track.AbsoluteSize.Y, 1)
+				-- INSET-AGNOSTIC (2026-07-30). This was `GetMouseLocation() -
+				-- GuiService:GetGuiInset()`, which silently assumed an INSET root
+				-- ScreenGui. The root went FULL-BLEED so modal scrims could cover the
+				-- whole screen (UiRoot), which would have thrown every track click off
+				-- by the topbar height. `input.Position` is in the SAME space as
+				-- AbsolutePosition in either mode (the convention HexTreeOverlay uses
+				-- too), and it also picks up TOUCH — MouseButton1Down never fired for it.
+				local relative = (input.Position.Y - track.AbsolutePosition.Y) / math.max(track.AbsoluteSize.Y, 1)
 				local range = math.max(frame.AbsoluteCanvasSize.Y - frame.AbsoluteWindowSize.Y, 0)
 				frame.CanvasPosition = Vector2.new(0, math.clamp(relative, 0, 1) * range)
 			end,

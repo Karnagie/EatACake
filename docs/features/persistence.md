@@ -97,6 +97,26 @@ Initial state push is double-gated: profile loaded AND `ClientReady` received
 before the client connects listeners are silently lost). Feature join-pushes
 belong in `pushInitialState`.
 
+**Two discovered hooks**, both found by scanning the merged `subscriptions` table
+(so a sub absent in this place is simply skipped — that is what lets one file run
+in the lobby and the game place):
+
+| Hook | Fires | For |
+|---|---|---|
+| `OnProfileLoaded(player)` | right after `LoadProfile`, **before** the push gate opens | work that must MUTATE the profile before the client is told anything (`RunResetSubs` wipes the run-scoped tree/calories/belly — ADR-0013) |
+| `PushInitialState(player)` | after profile load **and** `ClientReady` | replicate to a client that is ready to listen |
+
+⚠ `PushInitialState` hooks run in **alphabetical order**, so they are not a safe
+place to mutate shared state: a reset there would race `EconomySubs`/`UpgradeSubs`
+(both sort earlier) and the client would keep the stale values with no later
+correction. That is precisely why `OnProfileLoaded` exists — and because it runs
+before any push, each domain's own `PushInitialState` then sends already-reset
+state, so no re-push code is needed anywhere.
+⚠ The catch-up sweep for players who joined before `Start` ran uses `task.defer`,
+not `task.spawn`: this module sorts before several of the subs whose hooks it
+discovers, and a spawned body runs immediately, so it could otherwise reach a hook
+before the sub owning it had armed.
+
 ## Config
 `PersistenceData`: `storeName` ("PlayerProfiles"), `useMockInStudio`,
 kick `messages`.
@@ -104,3 +124,19 @@ kick `messages`.
 ## Rules
 P1–P5 in `CLAUDE.md`. Recipe: `docs/recipes/add-profile-section.md`.
 Decision record: ADR-0001.
+
+## SaveAndWait — the money-path save
+
+`Save(userId)` is fire-and-forget: ProfileStore's `Profile:Save()` is a
+`task.spawn`, so it returns before anything reaches the DataStore. That is right
+for gameplay state (the autosave picks it up) and WRONG wherever the caller must
+then tell an external system the write happened.
+
+`SaveAndWait(userId, timeoutSeconds?)` saves and waits (default 10 s) on
+`session.OnAfterSave`, returning whether a save landed. `ShopSubs` uses it before
+returning `PurchaseGranted` — see ADR-0014. Two properties to keep in mind:
+
+- `OnAfterSave` is shared by every concurrent save of the profile, so a `true`
+  means "a save committed", not "mine did". For a caller that has already
+  mutated `Data`, that is equivalent.
+- It refuses (false) while a teleport release nonce is set, exactly like `Save`.
