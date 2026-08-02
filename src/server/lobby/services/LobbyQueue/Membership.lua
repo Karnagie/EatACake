@@ -86,7 +86,15 @@ function Membership.Admit(queueId: number, player: Player)
 
 	Core.Refresh(queue)
 	Log.Info("LobbyQueue", `{player.Name} admitted to queue {queueId} ({#queue.members}/{queue["max-players"]})`)
-	local result = { admitted = true, queueId = queueId }
+	-- `player`/`leader` are carried on the effect purely so the subscription
+	-- layer can instrument the admission (docs/features/analytics.md). The
+	-- service stays free of the analytics dependency (R2/R3).
+	local result = {
+		admitted = true,
+		queueId = queueId,
+		player = player,
+		leader = queue["leader-user-id"] == player.UserId,
+	}
 	if queue.state == "configuring" or queue.state == "failed" then
 		local effect = Core.OpenEffect(queue)
 		result.openPlayer = effect.openPlayer
@@ -121,6 +129,11 @@ function Membership.Remove(player: Player, blockUntilExit: boolean?)
 	local result = {
 		removed = true,
 		queueId = queue.id,
+		player = player,
+		leader = wasLeader,
+		-- "left while the countdown was running" is a different story from
+		-- "stepped off an idle pad"; the subscription layer logs both.
+		state = queue.state,
 		closePlayer = if wasLeader then player else nil,
 	}
 	if queue.state == "teleporting" then

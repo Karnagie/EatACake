@@ -12,12 +12,14 @@ local queueData
 local queueService
 local teleportSubs
 local Protocol
+local analytics -- optional; features/analytics.md
 
-function Launch.Init(data, service, teleport, protocol)
+function Launch.Init(data, service, teleport, protocol, analyticsSubs)
 	queueData = data
 	queueService = service
 	teleportSubs = teleport
 	Protocol = protocol
+	analytics = analyticsSubs
 end
 
 local function fail(launch, message: string)
@@ -54,6 +56,34 @@ function Launch.Perform(launch)
 			sourcePlaceId = game.PlaceId,
 		},
 	}
+
+	-- Hand the analytics session ids across with the roster. Without this the
+	-- initial-player-flow funnel breaks in half at exactly the teleport: the
+	-- lobby half would end at "teleport started" and the game half would open
+	-- at "arrived" under a brand-new session id, with nothing joining them.
+	-- GameRoundService validates only the fields it knows, so this extra key
+	-- is inert to admission (features/game-round.md).
+	if analytics ~= nil then
+		local okPayload, payload = pcall(analytics.HandoffPayload, launch.players)
+		if okPayload and type(payload) == "table" and #payload > 0 then
+			options.teleportData.analytics = payload
+		elseif not okPayload then
+			Log.Once("LobbyQueueSubs", "handoff-analytics", `analytics handoff payload FAILED (funnel will split at the teleport): {payload}`)
+		end
+		for _, player in ipairs(launch.players) do
+			pcall(function()
+				analytics.Flow(player, "launch")
+				analytics.Funnel(player, "queue", "launch")
+				analytics.SetMatch(player, options.teleportData.roundId, launch.difficulty)
+				analytics.Event(player, "queue-launch", 1, {
+					launch.difficulty,
+					tostring(#launch.players),
+					"lobby",
+				}, { tier = "critical" })
+			end)
+		end
+	end
+
 	local ok, sentOrError = pcall(teleportSubs.SendGroup, launch.players, options)
 	if not ok then
 		fail(launch, tostring(sentOrError))
@@ -64,6 +94,11 @@ function Launch.Perform(launch)
 		return
 	end
 
+	if analytics ~= nil then
+		for _, player in ipairs(launch.players) do
+			pcall(analytics.Funnel, player, "queue", "sent")
+		end
+	end
 	Log.Info("LobbyQueueSubs", `queue {launch.queueId} handed {#launch.players} player(s) to round {options.teleportData.roundId}`)
 	task.delay(queueData["queue-config"].launchResetSeconds, function()
 		if not queueService.CompleteLaunch(launch.queueId, launch.launchToken) then

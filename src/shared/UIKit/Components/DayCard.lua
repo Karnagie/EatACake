@@ -168,7 +168,7 @@ local function DayCard(props)
 		ZIndex = zIndex,
 		[React.Event.MouseButton1Click] = function()
 			if claimable and props.onActivated then
-				Interaction.Cue("press") -- only when the card can actually be claimed
+				Interaction.Cue("press", "DailyReward/Claim") -- only when the card can actually be claimed
 				props.onActivated(props.id)
 			end
 		end,

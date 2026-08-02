@@ -28,7 +28,10 @@ local function failClosed(RoundState, RoundService, reason: string)
 end
 
 --API
-function Return.Run(Result: string, RoundState, RoundService, PersistenceService, TeleportSubs)
+-- `AnalyticsSubs` is optional (features/analytics.md): it only supplies the
+-- session-id block that lets the returning player's funnel continue in the
+-- lobby instead of restarting there.
+function Return.Run(Result: string, RoundState, RoundService, PersistenceService, TeleportSubs, AnalyticsSubs)
 	local config = RoundState["match-config"]
 	local place_config = RoundState["place-config"]
 	task.wait(math.max(0, config.round.resultDelaySeconds))
@@ -65,15 +68,22 @@ function Return.Run(Result: string, RoundState, RoundService, PersistenceService
 				end
 			end
 			if #ready > 0 then
+				local teleport_data = {
+					version = config.protocolVersion,
+					kind = "match-result",
+					result = Result,
+					roundId = RoundState["round-id"],
+				}
+				if AnalyticsSubs ~= nil then
+					local ok_payload, payload = pcall(AnalyticsSubs.HandoffPayload, ready)
+					if ok_payload and type(payload) == "table" and #payload > 0 then
+						teleport_data.analytics = payload
+					end
+				end
 				local ok, sent_or_error = pcall(TeleportSubs.SendGroup, ready, {
 					targetPlaceId = place_config.lobbyPlaceId,
 					reserveServer = false,
-					teleportData = {
-						version = config.protocolVersion,
-						kind = "match-result",
-						result = Result,
-						roundId = RoundState["round-id"],
-					},
+					teleportData = teleport_data,
 				})
 				if not ok then
 					Log.Warn(SCOPE, `lobby return call FAILED for {#ready} player(s): {sent_or_error}`)

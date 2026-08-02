@@ -39,13 +39,37 @@ you asked for — it looks like a pass, of the wrong thing.
 |---|---|
 | `treasure_scenario.lua` | `easy` (solo), `hard` (4p, work ×5.5), anything else = no-library fallback orbs |
 | `pacing_scenario.lua` | mode unused — always runs sections A/B/C |
+| `analytics_scenario.lua` | mode unused — 66 assertions over the analytics pipeline |
 
 ```bash
 SCENARIO_FILE=pacing_scenario.lua python tools/headless-sim/build_sim.py 20260729 easy && luau tools/headless-sim/sim.luau
+SCENARIO_FILE=analytics_scenario.lua python tools/headless-sim/build_sim.py && luau tools/headless-sim/sim.luau
 ```
 
-`build_sim.py` inlines every module listed in `MODULES` plus `harness_head.lua`
-(the Roblox stub wiring) and the scenario file, and writes `sim.luau`.
+`build_sim.py` inlines every module in the scenario's `MODULE_SETS` entry plus
+`harness_head.lua` (the Roblox stub wiring) and the scenario file, and writes
+`sim.luau`. A module entry may carry a THIRD element — the `script` proxy path
+to point the global `script` at while that body loads — which is how a module
+that reaches SIBLINGS (`script.Parent:WaitForChild("Sink")`) resolves them.
+
+**Why analytics is here at all**: `AnalyticsService` is server-only and
+**published-place-only**, so every call throws in Studio. It is the one
+subsystem that cannot be verified where everything else is — and everything
+interesting about it is a behaviour under pressure (a rate limit, a priority
+reserve, a coalescing window, a trust boundary, a teleport that would otherwise
+split a funnel in half). See `docs/features/analytics.md` and ADR-0017.
+
+There is also a static check, which is faster and catches a different class:
+
+```bash
+python tools/headless-sim/catalog_xcheck.py
+```
+
+⚠ **A stub that records arguments verbatim is a test that cannot fail.** The
+analytics stub enforces the `customFields` **Dictionary** cast the real engine
+enforces, because a positional array passed 53 green checks here and would have
+thrown live — and three throws disable the sink. Same class as the `typeof`
+shim above: an over-permissive stub makes broken code look like passing code.
 
 ## How it works
 

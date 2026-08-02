@@ -551,14 +551,27 @@ function CakeSubsClient.Start(data, modules)
 	-- button's press primitive is finger-aware (refcounts touches), so onEatUp
 	-- fires only when the LAST finger lifts, including a drag-off release — no
 	-- stuck-on eating, no need to correlate a single finger here.
+	-- Optional (features/analytics.md). The EAT button's HOLD LENGTH is the
+	-- clearest measure of how the core verb is actually used — a screen full
+	-- of half-second taps and a screen full of ten-second holds are different
+	-- games, and only the client can tell them apart.
+	local Analytics = modules.LocalAnalyticsService
+	local eatHoldStartedAt: number? = nil
+
 	AppRoot.SetCallbacks({
 		onEatDown = function()
 			if inputLocked() then
 				eating = false
 				LocalEatState.Set(false)
+				-- A press that the input lock swallowed: they tried to eat and
+				-- the game did nothing visible. Counted as a dead press.
+				if Analytics then
+					Analytics.Press("EatButton/Locked", true)
+				end
 				return
 			end
 			eating = true
+			eatHoldStartedAt = os.clock()
 			-- A tap can begin and end within one frame; fire ONE bite right now so
 			-- a tap always lands ≥1 bite, then let the Heartbeat auto-repeat the
 			-- hold at the eat-rate cadence.
@@ -567,6 +580,10 @@ function CakeSubsClient.Start(data, modules)
 		end,
 		onEatUp = function()
 			eating = false
+			if Analytics and eatHoldStartedAt ~= nil then
+				Analytics.Hold("EatButton", math.floor((os.clock() - eatHoldStartedAt) * 10) / 10)
+			end
+			eatHoldStartedAt = nil
 		end,
 	})
 	-- PC: hold the mouse ANYWHERE (no joystick to clash with). Aim by turning /

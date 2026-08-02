@@ -16,6 +16,7 @@ doc covers integration only; do not duplicate the skill here.
 | React packages | `ReactLua-Packages.rbxmx` — vendored model (React + ReactRoblox + node_modules), rojo-mapped to `ReplicatedStorage.Packages` |
 | Demo selector | `UIKit.Demos.Selector` (`SHOW` constant: Hud / PetsInspect / Pets / Settings) |
 | Match selector | `Components.MatchChoice` + `Components.MatchmakingPanel`; integration in `features/lobby-matchmaking.md` |
+| Onboarding surfaces | `Components.TutorialSlides` / `TutorialHint` / `InputGlyph` / `HintArrow`; integration in `features/tutorial.md`. ⚠ `TutorialHint` is the kit's one deliberately NON-modal overlay (style-rules §9); `HintArrow` owns a RenderStepped (ADR-0016) |
 | Effect template | `Templates.UpgradeTreeBlur`; cloned by the lobby upgrade modal (R5) |
 
 ## Setup
@@ -54,6 +55,19 @@ To update React: replace the `.rbxmx` (re-export the jsdotlua packages under a
 - R5 note: the React tree is the kit's declarative "template"; do not
   hand-build Instance trees for kit UI. Studio-authored UI (UiData resolver)
   remains valid for non-kit bespoke visuals.
+- **Tonal-hierarchy gate**: new/changed screens are measured with
+  `tools/tonal-hierarchy/` per skill `.claude/skills/tonal-hierarchy/`
+  (part of the ui-kit verification checklist). Chrome recedes kit-wide:
+  `Theme.Scrollbar` thumb + track are a light slate family on purpose —
+  the dark button-well versions measurably out-shouted card titles.
+- **Modal scrim**: AppRoot renders `Theme.PanelScrim` (zIndex 40) under
+  every open panel except Upgrades (HexTreeOverlay carries its own) — dims
+  the world + HUD (panels floated over the full-brightness scene) and
+  closes the panel on tap-outside. New full-screen overlays either ride it
+  or bring their own; never neither.
+- **ScrollPane auto-hides its track** when `canvasHeightScale <= 1` (a
+  full-height thumb on a non-scrolling pane falsely advertises content);
+  the legacy `AutomaticCanvasSize` path keeps its track.
 - **Animation** (ADR-0006): base buttons already carry press/hover feedback via
   `Interaction.usePressable` + `pressLayer`; panels pop (`PanelShell`), badges
   pop-in, belly/cake bars glide, the settings toggle knob slides. Tune via

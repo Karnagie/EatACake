@@ -411,17 +411,33 @@ Theme.ActionButton = {
 
 -- Custom vertical scrollbar. Nominal bar 22 wide, track 367 tall.
 Theme.Scrollbar = {
-	TrackOuterGradient = Theme.Toggle.OuterGradient,
+	-- Track ring quieted with the thumb (tonal audit 2026-08-01): the Toggle's
+	-- near-black well made the whole track a dark stripe on the white panel —
+	-- a level-4 element out-shouting card titles. Same slate family, light.
+	TrackOuterGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(148, 166, 190)),
+		ColorSequenceKeypoint.new(0.06, Color3.fromRGB(140, 158, 184)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(122, 140, 166)),
+	}),
 	GrooveGradient = ColorSequence.new({
 		ColorSequenceKeypoint.new(0, Color3.fromRGB(225, 246, 255)),
 		ColorSequenceKeypoint.new(1, Color3.fromRGB(185, 225, 250)),
 	}),
 	GrooveInset = Vector2.new(4 / 22, 4 / 367),
-	ThumbOuterGradient = Theme.Button.OuterGradient,
+	-- The thumb is CHROME and must recede: the saturated button-blue thumb
+	-- with the near-black button outer measurably out-shouted card titles in
+	-- every scroll window (tonal audit 2026-08-01 — a level-4 element ranking
+	-- above level-3 content). Same hue family, pulled toward the groove's
+	-- value; still obviously draggable, no longer a competitor.
+	ThumbOuterGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(122, 158, 196)),
+		ColorSequenceKeypoint.new(0.06, Color3.fromRGB(114, 150, 188)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(100, 136, 174)),
+	}),
 	ThumbFaceGradient = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(73, 190, 255)),
-		ColorSequenceKeypoint.new(0.93, Color3.fromRGB(70, 160, 250)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 122, 228)),
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(178, 216, 248)),
+		ColorSequenceKeypoint.new(0.93, Color3.fromRGB(160, 200, 240)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(134, 176, 222)),
 	}),
 	ThumbFaceInset = Vector2.new(3 / 22, 0.02),
 	MinThumbFraction = 0.12,
@@ -1138,6 +1154,10 @@ Theme.ShopLayout = {
 	-- guarantee this clearance by accident; a single-section tab has none, so the
 	-- first row starts at canvas y = 0.
 	CanvasTopPadPx = 20,
+	-- Cap on the centering pad for content that FITS the window: pure
+	-- centering gave every tab a different content start and the block
+	-- jumped on tab switches (composition audit 2026-08-01).
+	CanvasMaxTopPadPx = 48,
 	CanvasBottomPadPx = 16,
 	-- Column packing on the 870 canvas:
 	--   tiles: 3*282 + 2*12 = 846 + 24 = 870 ✓
@@ -1151,7 +1171,7 @@ Theme.ShopLayout = {
 	PackStridePx = 220,
 
 	-- ===== CARD kinds (2026-07-30 redesign) =====
-	-- Two card sizes on purpose, so EVERY row is full and the hierarchy is
+	-- One smallcard grid for every product tab since 2026-08-01 (the hero is
 	-- visible: passes (6, the premium permanent perks) get the big card 3
 	-- across; eggs/boosts (4) and gem packs (4) get the small card 4 across.
 	-- At one shared column count a section always ended in a lonely orphan
@@ -1168,7 +1188,7 @@ Theme.ShopLayout = {
 	SmallCardColumns = 4,
 	SmallCardWidthPx = 208,
 	SmallCardStridePx = 220,
-	HeroPx = 260,
+	HeroPx = 300,
 	HeroGapPx = 16,
 
 	-- Retired portrait ShopRow still reads this for its default cell height.
@@ -1199,9 +1219,10 @@ Theme.ShopSectionHeader = {
 
 -- ===== SHOP TAB — the category selector row ==================================
 -- Nominal 217x56, four across the 904 content column (4*217 + 3*12 = 904 ✓).
--- Label only, CENTRED: an icon on the left of a 217-wide pill would push the
--- label off-centre by 8% of the tab, and the section content carries the icons
--- already.
+-- ICON-FIRST since 2026-08-01 (squint-test skill): each tab leads with its
+-- section's glyph and the label rides beside it — this audience may not read
+-- the labels at all. (The earlier label-only argument optimised for a centred
+-- word; a non-reader has no use for a centred word.)
 -- Selected wears the kit's gold selection accent (§4, the PetCard rule — the
 -- same "this one is active" language the pets grid and the hex tree use), idle
 -- is the neutral dark chip so the active tab is the only bright thing in the row.
@@ -1218,38 +1239,71 @@ Theme.ShopTab = {
 	FaceCorner = 0.19,
 	LabelPosition = Vector2.new(16 / 217, 13 / 56),
 	LabelSize = Vector2.new(185 / 217, 28 / 56),
+	-- Icon-first variant (squint-test skill, 2026-08-01: children may not
+	-- read the tab labels at all — every tab carries its section's glyph).
+	-- Horizontal with icon: 20 icon(34) 8 label(139) 16 = 217 ✓
+	IconPosition = Vector2.new(20 / 217, 11 / 56),
+	IconSize = Vector2.new(34 / 217, 34 / 56),
+	LabelWithIconPosition = Vector2.new(62 / 217, 13 / 56),
+	LabelWithIconSize = Vector2.new(139 / 217, 28 / 56),
 }
 Theme.ShopTabStates = {
 	selected = {
 		OutlineColor = Color3.fromRGB(92, 58, 0),
 		OuterGradient = Theme.PetCard.SelectOuterGradient,
 		RimGradient = Theme.PetCard.SelectRingGradient,
-		FaceGradient = Theme.Rarity.Legendary.Face,
+		-- Deeper than Rarity.Legendary.Face ON PURPOSE (same hue and keypoint
+		-- structure, V scaled ~0.85): the bright gold sat in the panel's own
+		-- L* band, so in grayscale the SELECTED tab was the least visible tab
+		-- (tonal audit 2026-08-01, tools/tonal-hierarchy). The anchor the
+		-- active state needs is VALUE, not more brightness.
+		FaceGradient = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(232, 176, 52)),
+			ColorSequenceKeypoint.new(0.50, Color3.fromRGB(214, 152, 38)),
+			ColorSequenceKeypoint.new(0.93, Color3.fromRGB(198, 138, 30)),
+			ColorSequenceKeypoint.new(0.96, Color3.fromRGB(162, 102, 16)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(176, 114, 24)),
+		}),
 		TextGradient = Theme.Rarity.Legendary.Text,
 	},
-	-- Idle: the Toggle's dark well plus a muted slate face. Deliberately LOW
-	-- contrast — an idle tab that competes with the selected one is the same
-	-- "everything shouts equally" failure the card colours had.
+	-- Idle: a LIGHT SKY-BLUE BUTTON — quieter than selected in both value and
+	-- chroma, but unmistakably alive. Two failed cuts, both measured (tonal
+	-- audit 2026-08-01): (1) a "muted" slate that was desaturated but DARK
+	-- (dL* −58 on the ~L* 90 panel — the three idle tabs out-shouted the
+	-- selected one 3.6x); (2) a near-gray wash that fixed the value but hit
+	-- the kit's LOCKED/DISABLED color language — the user read the tabs as
+	-- locked. The affordance rule that came out of it: quiet an interactive
+	-- element by LIGHTENING ITS OWN HUE FAMILY while keeping the pressable
+	-- recipe (rim flash + dark bottom lip); never by draining saturation.
+	-- Face mid L* ~71 (dL* ~ −19) vs selected's deeper gold ~66 (−24): the
+	-- selected tab leads on value AND chroma AND outline weight.
 	idle = {
-		OutlineColor = Color3.fromRGB(8, 26, 48),
-		OuterGradient = Theme.Toggle.OuterGradient,
+		-- text outline stays FULL dark (sticker text is self-contained);
+		-- only the SURFACES went light
+		OutlineColor = Color3.fromRGB(12, 34, 64),
+		OuterGradient = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(84, 128, 180)),
+			ColorSequenceKeypoint.new(0.06, Color3.fromRGB(76, 118, 170)),
+			ColorSequenceKeypoint.new(0.85, Color3.fromRGB(64, 102, 152)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(70, 110, 160)),
+		}),
 		RimGradient = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(118, 148, 186)),
-			ColorSequenceKeypoint.new(0.06, Color3.fromRGB(126, 156, 194)),
-			ColorSequenceKeypoint.new(0.72, Color3.fromRGB(88, 116, 154)),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(66, 92, 128)),
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(210, 234, 254)),
+			ColorSequenceKeypoint.new(0.06, Color3.fromRGB(196, 226, 252)),
+			ColorSequenceKeypoint.new(0.72, Color3.fromRGB(150, 192, 238)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(128, 172, 222)),
 		}),
 		FaceGradient = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(96, 126, 166)),
-			ColorSequenceKeypoint.new(0.05, Color3.fromRGB(80, 108, 148)),
-			ColorSequenceKeypoint.new(0.55, Color3.fromRGB(66, 92, 130)),
-			ColorSequenceKeypoint.new(0.93, Color3.fromRGB(56, 80, 116)),
-			ColorSequenceKeypoint.new(0.96, Color3.fromRGB(36, 54, 84)),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(46, 66, 100)),
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(164, 206, 248)),
+			ColorSequenceKeypoint.new(0.05, Color3.fromRGB(150, 196, 242)),
+			ColorSequenceKeypoint.new(0.55, Color3.fromRGB(128, 178, 232)),
+			ColorSequenceKeypoint.new(0.93, Color3.fromRGB(112, 162, 220)),
+			ColorSequenceKeypoint.new(0.96, Color3.fromRGB(86, 132, 190)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(96, 144, 202)),
 		}),
 		TextGradient = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(214, 230, 248)),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(178, 200, 226)),
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(216, 236, 252)),
 		}),
 	},
 }
@@ -1373,6 +1427,13 @@ Theme.ShopBanner = {
 -- Thickness by style-rules §2 on H=48: rim top 3 (6.3%) / bottom 7 (14.6%).
 -- Horizontal: 12 icon(26) 6 text(74) 12 = 130 ✓
 Theme.ShopPrice = {
+	-- Faint light disc behind the price glyph (squint-test
+	-- 2026-08-01): the dark Robux mark nearly vanished on the green
+	-- shelf; the plate lifts ANY glyph off ANY shelf color.
+	-- Pad is PER STYLE so the disc stays inside the Face — icon y 11..37, Face 4.5..39.5 -> 2.5px slack
+	-- (nothing light may sit on the button's dark bottom lip).
+	IconPlateTransparency = 0.72,
+	IconPlatePad = 0.08,
 	AspectRatio = 130 / 48,
 	OuterCorner = 0.20,
 	RimPosition = Vector2.new(3 / 130, 3 / 48),
@@ -1443,6 +1504,33 @@ local shopPriceGrey = {
 	}),
 }
 
+-- "Not enough gems" is its own state, not an alias of "SOON" (UX audit
+-- 2026-08-01): grey is overloaded in the genre (disabled / sold out /
+-- locked), so a broke player read the whole Boosts tab as dead. Same grey
+-- shelf — still not clickable — but the PRICE goes red (dark-maroon outline
+-- per the §4 hue rule): price-present-but-red = "need more currency",
+-- no-price = "nothing to buy here yet".
+local shopPriceCant = {
+	OutlineColor = Color3.fromRGB(61, 0, 10),
+	OuterGradient = shopPriceGrey.OuterGradient,
+	RimGradient = shopPriceGrey.RimGradient,
+	FaceGradient = shopPriceGrey.FaceGradient,
+	TextGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 158, 150)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(240, 110, 104)),
+	}),
+}
+
+-- OWNED is a STAMP, not a button (three review lenses flagged the raised
+-- sky-blue shelf as the most button-looking element on an owned card — a
+-- false affordance that also rhymed with the idle tabs). Flat per the tag
+-- recipe (style-rules §2c): one muted fill on every layer, no rim flash, no
+-- lip; the green check badge on the art corner stays the fast signal.
+local shopPriceOwnedFlat = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(104, 128, 160)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(94, 116, 146)),
+})
+
 -- Price button state accents. The two grey ones exist because their absence was
 -- a silent failure (R8): an unconfigured dev-product id used to render a live
 -- BUY button whose purchase the server refused with nothing shown to the
@@ -1456,20 +1544,22 @@ Theme.ShopPriceStates = {
 		TextGradient = Theme.EquipGreen.TextGradient,
 	},
 	owned = {
-		OutlineColor = Theme.Button.OutlineColor,
-		OuterGradient = Theme.Button.OuterGradient,
-		RimGradient = Theme.Button.RimGradient,
-		FaceGradient = Theme.Button.FaceGradient,
-		TextGradient = Theme.Button.TextGradient,
+		OutlineColor = Color3.fromRGB(20, 42, 70),
+		OuterGradient = shopPriceOwnedFlat,
+		RimGradient = shopPriceOwnedFlat,
+		FaceGradient = shopPriceOwnedFlat,
+		TextGradient = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(224, 236, 250)),
+		}),
 	},
 	-- "SOON" — no id yet, so there is no price to show and the label spans the
 	-- whole shelf (text-only, no glyph).
 	unavailable = shopPriceGrey,
-	-- "Not enough gems YET" — same grey shelf, but it KEEPS the gem glyph and
-	-- the amount, because that number is the information the player needs. It is
-	-- simply not clickable; a disabled kit button is correctly silent, so there
-	-- is no extra cue.
-	unaffordable = shopPriceGrey,
+	-- "Not enough gems YET" — grey shelf, KEEPS the gem glyph and the amount
+	-- (that number is the information the player needs), and the price is RED
+	-- so the state reads "too expensive", never "disabled" (shopPriceCant).
+	unaffordable = shopPriceCant,
 }
 
 -- Corner tag ("BEST VALUE", "ONE TIME"). Built from the kit's own layer recipe,
@@ -1730,6 +1820,13 @@ Theme.ShopCardSmall = {
 --   on a 246 shelf, which is under 4% and invisible in a grid.
 -- WideText (OWNED / SOON / FREE) is centred across 20..226.
 Theme.ShopPriceCard = {
+	-- Faint light disc behind the price glyph (squint-test
+	-- 2026-08-01): the dark Robux mark nearly vanished on the green
+	-- shelf; the plate lifts ANY glyph off ANY shelf color.
+	-- Pad is PER STYLE so the disc stays inside the Face — icon y 11..41, Face 5..43 -> 2px slack
+	-- (nothing light may sit on the button's dark bottom lip).
+	IconPlateTransparency = 0.72,
+	IconPlatePad = 0.06,
 	AspectRatio = 246 / 52,
 	OuterCorner = 0.20,
 	RimPosition = Vector2.new(4 / 246, 3.5 / 52),
@@ -1746,66 +1843,122 @@ Theme.ShopPriceCard = {
 	WideTextSize = Vector2.new(206 / 246, 28 / 52),
 }
 
--- HERO — the Starter Pack's own cell, full width. Nominal 870x260.
+-- Modal scrim behind every open panel (UX audit 2026-08-01): panels floated
+-- over the FULL-BRIGHTNESS world, so the busy scene + colorful HUD icons
+-- competed with panel content in every capture — the "hard to read" that no
+-- panel-internal fix could reach. Genre-standard dim; lighter than the
+-- upgrades overlay's 0.14 (that one replaces the screen, this one sits
+-- behind a windowed panel). The scrim is also the tap-outside-to-close
+-- surface (AppRoot).
+Theme.PanelScrim = {
+	Color = Color3.fromRGB(8, 12, 22),
+	Transparency = 0.42,
+}
+
+-- Hero buy shelf — ShopPriceCard's recipe re-cut for the hero's full-width
+-- 576x64 box (the card fractions assume a 246x52 grid; stretched to 576 the
+-- icon/text pair drifts apart). Glyph+amount centred as a pair; wide labels
+-- (OWNED) span the middle.
+-- Horizontal: pair = icon(34) 8 text(100) centred: icon x 217..251, text
+--   x 259..359 (pair 217..359, centre 288 ≈ 576/2 ✓)
+Theme.ShopPriceHero = {
+	-- Faint light disc behind the price glyph (squint-test
+	-- 2026-08-01): the dark Robux mark nearly vanished on the green
+	-- shelf; the plate lifts ANY glyph off ANY shelf color.
+	-- Pad is PER STYLE so the disc stays inside the Face — icon y 15..49, Face 6..53 -> 4px slack
+	-- (nothing light may sit on the button's dark bottom lip).
+	IconPlateTransparency = 0.72,
+	IconPlatePad = 0.10,
+	AspectRatio = 576 / 64,
+	OuterCorner = 0.20,
+	RimPosition = Vector2.new(9 / 576, 4 / 64),
+	RimSize = Vector2.new(558 / 576, 51 / 64),
+	RimCorner = 0.18,
+	FacePosition = Vector2.new(13 / 576, 6 / 64),
+	FaceSize = Vector2.new(550 / 576, 47 / 64),
+	FaceCorner = 0.17,
+	IconPosition = Vector2.new(217 / 576, 15 / 64),
+	IconSize = Vector2.new(34 / 576, 34 / 64),
+	TextPosition = Vector2.new(259 / 576, 15 / 64),
+	TextSize = Vector2.new(100 / 576, 34 / 64),
+	WideTextPosition = Vector2.new(60 / 576, 15 / 64),
+	WideTextSize = Vector2.new(456 / 576, 34 / 64),
+}
+
+-- HERO — the Starter Pack's own cell, full width. Nominal 870x300 (re-cut
+-- 2026-08-01 round 3 from 870x260: dropping the art plate left the 168px
+-- gift floating in the 206px zone the plate used to fill, and the card read
+-- as dead space with a small icon — "very bad sizes and positions". The art
+-- is now the plate's OWN size, and the taller card + bigger shelf also fill
+-- the single-hero Offers window instead of floating in it: 300 in the 370
+-- window leaves 35px symmetric margin).
 -- It is not a wide ShopCard: the bundle is the pitch, so the contents render as
--- a ROW OF CHIPS (what you get, one per grant) beside the art window and an
+-- a ROW OF CHIPS (what you get, one per grant) beside the art and an
 -- oversized price shelf. That row is the whole reason this component exists.
--- Same body/art-window language as the grid cells, plus the gold PREMIUM frame
--- — the featured offer is the one cell in the shop allowed to wear it.
--- The info column runs to the card's RIGHT EDGE and the buy shelf is CENTRED
--- under it. Packing title/desc/chips into a 416-wide column and parking a
--- 266-wide shelf at its left left a 160x160 void in the bottom-right quadrant —
--- the only dead area in the whole panel. Spread wide, centre the button, and
--- the leftover space becomes symmetric margin instead.
--- Horizontal: 22 art(206) 22 column(596) 24 = 870 ✓
---   chips 4 * 140 + 3 * 12 = 560 + 36 = 596 ✓ (was 3 * 188 + 2 * 16 — the
---   Starter Pack grants four things now, and a bundle whose chip row is capped
---   below its grant count is an offer that under-sells itself)
---   last chip 250 + 3*152 = 706, +140 = 846 = 250 + 596 ✓ closes on the edge
---   shelf 266 centred in the column: 415..681
--- Column vertical: 28 title(46) 4 desc(28) 12 bundle(50) 12 price(56) 24 = 260 ✓
---   (unchanged — the fourth chip is paid for in WIDTH, not height)
--- Art window: y 27..233 (206 square, vertically centred in 260)
+-- Same body language as the grid cells minus the art window (ArtPlate =
+-- false, below), plus the gold PREMIUM frame — the featured offer is the one
+-- cell in the shop allowed to wear it. The info column runs to the card's
+-- RIGHT EDGE and the buy shelf is CENTRED under it (packing it into a narrow
+-- column left a 160x160 void bottom-right — the old dead-area lesson).
+-- Horizontal: 30 art(220) 20 column(576) 24 = 870 ✓
+--   chips 4 * 136 + 3 * 10 = 574 ≤ 576 (2px slack, small-card precedent)
+--   last chip 270 + 3*146 = 708, +136 = 844; column edge 846
+--   shelf spans the FULL column (576x64, own fraction cut: ShopPriceHero)
+-- Column vertical: 38 title(46) 4 desc(28) 12 bundle(50) 14 price(64) 44 = 300 ✓
+-- Art: x 30..250, y 40..260 (220 square, vertically centred in 300)
 Theme.ShopHero = {
-	AspectRatio = 870 / 260,
-	OuterCorner = 0.105,
-	FacePosition = Vector2.new(8 / 870, 8 / 260),
-	FaceSize = Vector2.new(854 / 870, 241 / 260),
-	FaceCorner = 0.095,
-	ArtPosition = Vector2.new(22 / 870, 27 / 260),
-	ArtSize = Vector2.new(206 / 870, 206 / 260),
+	AspectRatio = 870 / 300,
+	OuterCorner = 0.09,
+	FacePosition = Vector2.new(8 / 870, 8 / 300),
+	FaceSize = Vector2.new(854 / 870, 283 / 300),
+	FaceCorner = 0.082,
+	ArtPosition = Vector2.new(22 / 870, 32 / 300),
+	ArtSize = Vector2.new(236 / 870, 236 / 300),
 	ArtCorner = 0.13,
-	ArtFacePosition = Vector2.new(27 / 870, 32 / 260),
-	ArtFaceSize = Vector2.new(196 / 870, 196 / 260),
+	ArtFacePosition = Vector2.new(27 / 870, 37 / 300),
+	ArtFaceSize = Vector2.new(226 / 870, 226 / 300),
 	ArtFaceCorner = 0.12,
-	IconPosition = Vector2.new(41 / 870, 46 / 260),
-	IconSize = Vector2.new(168 / 870, 168 / 260),
-	TitlePosition = Vector2.new(250 / 870, 28 / 260),
-	TitleSize = Vector2.new(596 / 870, 46 / 260),
-	DescPosition = Vector2.new(250 / 870, 78 / 260),
-	DescSize = Vector2.new(596 / 870, 28 / 260),
-	-- Bundle row: 4 * 140 + 3 * 12 = 596 ✓ (chips are laid out by stride)
-	BundlePosition = Vector2.new(250 / 870, 118 / 260),
-	BundleSize = Vector2.new(140 / 870, 50 / 260),
-	BundleStride = 152 / 870,
+	IconPosition = Vector2.new(30 / 870, 40 / 300),
+	IconSize = Vector2.new(220 / 870, 220 / 300),
+	TitlePosition = Vector2.new(270 / 870, 38 / 300),
+	TitleSize = Vector2.new(576 / 870, 46 / 300),
+	DescPosition = Vector2.new(270 / 870, 88 / 300),
+	DescSize = Vector2.new(576 / 870, 28 / 300),
+	-- Bundle row: 4 * 136 + 3 * 10 = 574 ✓ (chips are laid out by stride)
+	BundlePosition = Vector2.new(270 / 870, 128 / 300),
+	BundleSize = Vector2.new(136 / 870, 50 / 300),
+	BundleStride = 146 / 870,
 	BundleColumns = 4,
-	PricePosition = Vector2.new(415 / 870, 180 / 260),
-	PriceSize = Vector2.new(266 / 870, 56 / 260),
+	-- FULL-WIDTH shelf on the info column's own rails (composition audit
+	-- 2026-08-01: title left-aligned, chips justified, button centred on a
+	-- third axis read as adrift — and a 576-wide CTA is also the biggest tap
+	-- target on the panel). Uses Theme.ShopPriceHero fractions, cut for this
+	-- exact 576x64 box.
+	PricePosition = Vector2.new(270 / 870, 192 / 300),
+	PriceSize = Vector2.new(576 / 870, 64 / 300),
 	-- Overhangs the card's TOP edge, exactly like a grid cell's ribbon, instead
 	-- of floating inside the face where it needed a void around it to breathe.
-	RibbonPosition = Vector2.new(686 / 870, -12 / 260),
-	RibbonSize = Vector2.new(160 / 870, 40 / 260),
-	BadgeCenter = Vector2.new(222 / 870, 44 / 260),
-	BadgeSize = Vector2.new(46 / 870, 46 / 260),
+	RibbonPosition = Vector2.new(686 / 870, -12 / 300),
+	RibbonSize = Vector2.new(160 / 870, 40 / 300),
+	BadgeCenter = Vector2.new(250 / 870, 50 / 300),
+	BadgeSize = Vector2.new(46 / 870, 46 / 300),
 	Accent = "Legendary", -- the paid hero wears gold; the give stays green
 	Premium = true,
+	-- NO art plate on the hero (2026-08-01, user round 2). The grid card's
+	-- accent window earns its keep by normalising MIXED-aspect art across a
+	-- grid; a single-item hero has nothing to normalise, so the plate was a
+	-- pure attention magnet — first as neon Legendary gold (loudest patch on
+	-- the tab), then as "dirty" antique gold. The art now sits directly on
+	-- the navy body, where its own dark outlines carry it. Set true (or omit
+	-- with an ArtFaceGradient) only for styles that keep a plate.
+	ArtPlate = false,
 }
 
 -- One bundle chip ("x2 Cal"). Nominal 140x50 — under the 50px threshold, so it
 -- drops the Rim and is Outer + Face only (style-rules §2). Re-cut from 188x50
 -- when the row went to four chips; every fraction below is of the NEW 140 grid,
 -- because the old ones would have squashed a 34px icon into a 25px slot.
--- Horizontal: 8 icon(28) 6 text(90) 8 = 140 ✓ · Vertical: face 3..44,
+-- Horizontal (icon-first re-cut below): 6 icon(34) 6 text(86) 8 = 140 ✓ · Vertical: face 3..44,
 --   icon y 11..39 (28 square, centred in 50), text y 12..38 ✓
 -- CHIP COPY IS A LAYOUT CONSTRAINT, and a tighter one than before: TextScaled
 -- binds on WIDTH, and the text zone lost 38px. At the kit's measured Fredoka
@@ -1827,26 +1980,38 @@ Theme.ShopHeroItem = {
 	FacePosition = Vector2.new(3 / 140, 3 / 50),
 	FaceSize = Vector2.new(134 / 140, 41 / 50),
 	FaceCorner = 0.22,
-	IconPosition = Vector2.new(8 / 140, 11 / 50),
-	IconSize = Vector2.new(28 / 140, 28 / 50),
-	TextPosition = Vector2.new(42 / 140, 12 / 50),
-	TextSize = Vector2.new(90 / 140, 26 / 50),
-	-- Dark Outer pill (the Chip recipe) over a RAISED slate face — one value step
-	-- lighter than the card body, so the contents row separates from it. The
-	-- original deep-blue Chip face was chosen against a gold hero; on the navy
-	-- body it was navy-on-navy and the chips disappeared.
-	OuterGradient = Theme.Chip.OuterGradient,
+	-- Icon grown 28 -> 34 (squint-test 2026-08-01: the chips' GLYPHS are
+	-- the bundle contents for a non-reader; the icon is the carrier, the
+	-- text reinforces). Horizontal: 6 icon(34) 6 text(86) 8 = 140 ✓ — the
+	-- ~8-char copy cap stands (86px zone vs the old 90).
+	IconPosition = Vector2.new(6 / 140, 8 / 50),
+	IconSize = Vector2.new(34 / 140, 34 / 50),
+	TextPosition = Vector2.new(46 / 140, 12 / 50),
+	TextSize = Vector2.new(86 / 140, 26 / 50),
+	-- A FLAT TAG, not a button (round 2), and a DARK ENGRAVED one (round 4):
+	-- the light flat pill still rhymed with the idle tabs, and the gem chip
+	-- ("<gem> 200") in that style could be misread as a second price in the
+	-- first five seconds (UX audit 2026-08-01). Engraved = one fill on BOTH
+	-- layers, DARKER than the card face (dL* ~ −12) — an inset well is the
+	-- one surface language that can never read as pressable — with the kit's
+	-- self-contained sticker text on top (white + full-dark outline) so
+	-- readability holds on the dark fill. style-rules §2c.
+	OuterGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(46, 66, 98)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(40, 58, 88)),
+	}),
 	FaceGradient = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(134, 168, 212)),
-		ColorSequenceKeypoint.new(0.05, Color3.fromRGB(116, 150, 196)),
-		ColorSequenceKeypoint.new(0.60, Color3.fromRGB(98, 130, 176)),
-		ColorSequenceKeypoint.new(0.93, Color3.fromRGB(84, 114, 158)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(70, 98, 140)),
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(46, 66, 98)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(40, 58, 88)),
 	}),
 	TextGradient = ColorSequence.new({
 		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(222, 236, 252)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(228, 240, 252)),
 	}),
+	-- FULL-STRENGTH dark outline: the kit's sticker text is self-contained
+	-- (white glyph + dark outline reads on ANY face). Round 2 softened this
+	-- to mid-navy "to match the flat tag" and the labels washed out — the
+	-- flatness lives in the FILL, never in the text.
 	OutlineColor = Color3.fromRGB(8, 26, 48),
 }
 
@@ -2460,6 +2625,239 @@ Theme.HexTree = {
 Theme.HexTree.BuyButton = buttonStyleWithAspect(Theme.EquipGreen, 168 / 54)
 Theme.HexTree.ZoomButton = buttonStyleWithAspect(Theme.ActionButton, 1)
 
+-- ===== ONBOARDING / TUTORIAL (features/tutorial.md) =========================
+
+-- ── 1. Story slides: the 4-panel COMIC board ────────────────────────────────
+-- Archetype (not in window-archetypes.md — reasoned from the genre): a Roblox
+-- sim's first-session intro is a full-bleed scrim + a centred content block +
+-- ONE bottom-centre CTA. The content here is four sequential comic panels read
+-- TL -> TR -> BL -> BR.
+--
+-- A panel is a CARD, not a button (§2b): EVEN outline + internal zones. Applying
+-- the button bevel here would make four comic frames read as four huge buttons —
+-- the exact failure the shop shipped in July.
+--
+-- PANEL nominal 440x336 (source art is 716x535 = 1.3383; the art window is cut
+-- to match so nothing letterboxes):
+--   Outer 0..440 x 0..336, r 0.10
+--   Rim   inset 8   -> 424x320   (even ring, the "window frame" read)
+--   Art   inset 14  -> 412x308   412/308 = 1.3377 ≈ 1.3383 ✓ (0.04% drift)
+--   Order badge d44 centred (42, 42) — icon-first: this audience may not read
+--   the title, but 1-2-3-4 is universal.
+--
+-- BOARD 900x958:
+--   width   440 + 20 gap + 440 = 900 ✓
+--   height  64 title + 18 + 692 board + 64 + 120 skip = 958 ✓
+--   board   336 + 20 gap + 336 = 692 ✓
+--   skip    centred: (900 - 420) / 2 = 240 -> x 240..660 ✓
+-- The 22 -> 64 gap under the board and the 76 -> 120 CTA height are MEASURED
+-- changes, not taste. The board is a big BRIGHT block and the button's face
+-- sits in the same value band (L* 53 vs 59), so in GRAYSCALE at a squint the
+-- two merged into one mass however green the button was -- iron rule 5: hue is
+-- not hierarchy. Only a gap and a core wider than the blur kernel separate
+-- them, which is what these two numbers buy.
+Theme.TutorialSlides = {
+	-- Own dim, like HexTreeOverlay/PetRevealOverlay: this overlay does NOT ride
+	-- AppRoot's panel Scrim (it is not an `openPanel`, deliberately — see the
+	-- AppRoot note next to `eatButtonVisible`).
+	-- 0.35 -> 0.24 (tonal audit): at 0.35 the lit factory floor behind the board
+	-- still held enough value that the comic panels measured +4 dL* under blur —
+	-- the art was competing with the room instead of sitting on it.
+	DimColor = Color3.new(0, 0, 0),
+	DimTransparency = 0.24,
+	BoardAspect = 900 / 958,
+	BoardMaxViewportFraction = 0.90,
+	TitlePosition = Vector2.new(0, 0),
+	TitleSize = Vector2.new(900 / 900, 64 / 958),
+	TitleGradient = Theme.Header.TitleGradient,
+	-- Panel cells, top-left corners on the 900x958 board grid.
+	PanelSize = Vector2.new(440 / 900, 336 / 958),
+	PanelPositions = {
+		Vector2.new(0 / 900, 82 / 958), -- 1 top-left
+		Vector2.new(460 / 900, 82 / 958), -- 2 top-right
+		Vector2.new(0 / 900, 438 / 958), -- 3 bottom-left
+		Vector2.new(460 / 900, 438 / 958), -- 4 bottom-right
+	},
+	-- Grown 300x76 -> 420x120 and moved onto the GREEN accent (below). As a
+	-- 300x76 blue ActionButton it measured attention rank #9 and vanished
+	-- under blur, which is fatal for the ONLY control on the screen; the width
+	-- is what buys squint survival (the squint-test levers are colour, tone
+	-- and SIZE — never an outline, which blurs away first).
+	SkipPosition = Vector2.new(240 / 900, 838 / 958),
+	SkipSize = Vector2.new(420 / 900, 120 / 958),
+}
+
+-- The comic panel itself, on its OWN nominal 440x336 grid.
+Theme.TutorialPanel = {
+	AspectRatio = 440 / 336,
+	OuterCorner = 0.10,
+	OutlineColor = Theme.ShopCardBody.OutlineColor,
+	OuterGradient = Theme.ShopCardBody.OuterGradient,
+	RimPosition = Vector2.new(8 / 440, 8 / 336),
+	RimSize = Vector2.new(424 / 440, 320 / 336),
+	RimCorner = 0.09,
+	-- Light "window frame" ring, same family as the shop card's art ring.
+	RimGradient = Theme.Panel.FillGradient,
+	ArtPosition = Vector2.new(14 / 440, 14 / 336),
+	ArtSize = Vector2.new(412 / 440, 308 / 336),
+	ArtCorner = 0.085,
+	-- Order badge. It began as the kit's GOLD selection accent and measured as
+	-- the screen's #1 attention magnet — a level-3 reading aid out-shouting the
+	-- comic it numbers (tonal audit: `attention-sink`). Quieted on the two
+	-- levers that matter: AREA (56 -> 44) and VALUE (gold fill -> the panel's
+	-- own dark navy, cream numeral). It is decor, not a control, so flattening
+	-- it costs no affordance (style-rules §2c).
+	BadgeCenter = Vector2.new(42 / 440, 42 / 336),
+	BadgeSize = Vector2.new(44 / 440, 44 / 336),
+	BadgeRingColor = Theme.ShopCardBody.OutlineColor,
+	BadgeFillGradient = Theme.ShopCardBody.OuterGradient,
+	BadgeTextInset = 0.20,
+	BadgeTextGradient = Theme.ShopCardBody.TitleGradient,
+	BadgeTextOutline = Theme.ShopCardBody.OutlineColor,
+}
+
+-- ── 2. Instruction popup ("eat the cake") ───────────────────────────────────
+-- Archetype: the small centred dialog row of window-archetypes, minus the
+-- confirm/cancel PAIR — a hint has one way out.
+--
+-- ⚠ It brings NO full-screen click catcher. PC eating is a global
+-- `UserInputService.InputBegan` guarded by `gameProcessed` (CakeSubsClient), so
+-- a catcher over this popup would swallow the very left-click it is teaching.
+-- Only the CTA is a TextButton; everything else is inert.
+--
+-- NOMINAL 620x260 (card recipe, even outline 10):
+--   HORIZONTAL  26 · 150 glyph · 24 · 394 text column · 26 = 620 ✓
+--   VERTICAL    44 · 52 title · 8 · 64 body · 14 · 56 cta · 22 = 260 ✓
+--               title 44..96 · body 104..168 · cta 182..238
+--   glyph plate d150 at y 55..205 (centre 130 = 260/2 ✓)
+Theme.TutorialHint = {
+	Aspect = 620 / 260,
+	MaxViewportFraction = 0.52,
+	-- Vertically centred-ish, and the Y is load-bearing in BOTH directions.
+	-- ABOVE: the card's top edge is a constant viewport fraction, but the HUD
+	-- CakeBar's bottom edge is inside the topbar-INSET Hud frame and so slides
+	-- DOWN as the window gets shorter. At 0.30 the two cleared by 7px at the
+	-- 1920x1080 reference and COLLIDED on every smaller window (at 800x450 the
+	-- card covered ~90% of the bar). 0.40 clears it on every size.
+	-- BELOW: the card's bottom must stay off the bottom-centre belly bar / TO
+	-- CHECKPOINT button and off the bottom-right touch EAT button, which on
+	-- phones is the control this very card is pointing at. At 16:9 the card
+	-- spans y 0.206..0.594 and x 0.24..0.76; the EAT button starts at x 0.76,
+	-- y 0.56 — adjacent, never overlapping.
+	Position = Vector2.new(0.5, 0.40), -- anchor (0.5, 0.5)
+	OuterCorner = 0.14,
+	OutlineColor = Theme.ShopCardBody.OutlineColor,
+	OuterGradient = Theme.ShopCardBody.OuterGradient,
+	FacePosition = Vector2.new(10 / 620, 10 / 260),
+	FaceSize = Vector2.new(600 / 620, 240 / 260),
+	FaceCorner = 0.12,
+	FaceGradient = Theme.ShopCardBody.FaceGradient,
+	GlyphPosition = Vector2.new(26 / 620, 55 / 260),
+	GlyphSize = Vector2.new(150 / 620, 150 / 260),
+	TitlePosition = Vector2.new(200 / 620, 44 / 260),
+	TitleSize = Vector2.new(394 / 620, 52 / 260),
+	TitleGradient = Theme.ShopCardBody.TitleGradient,
+	BodyPosition = Vector2.new(200 / 620, 104 / 260),
+	BodySize = Vector2.new(394 / 620, 64 / 260),
+	BodyGradient = Theme.ShopCardBody.PerkGradient,
+	ButtonPosition = Vector2.new(394 / 620, 182 / 260),
+	ButtonSize = Vector2.new(200 / 620, 56 / 260),
+}
+
+-- Input glyph (the popup's hero). Two modes, both drawn from kit primitives —
+-- there is no mouse/finger art in the registry, and the kit's tradition is to
+-- vector small glyphs (the HUD bolt, the badge check, the close X).
+--   "mouse" — rounded body, TOP-LEFT quadrant lit = the left button, plus a
+--             wheel pill. Fractions of the glyph's own square box.
+--   "tap"   — a MINIATURE of the real EAT button (same Epic-pink recipe) inside
+--             a white ripple ring: "press THAT button", not "press something".
+Theme.TutorialGlyph = {
+	MouseOutline = Theme.Colors.Outline,
+	MouseBodyPosition = Vector2.new(0.235, 0.10),
+	MouseBodySize = Vector2.new(0.53, 0.80),
+	MouseBodyCorner = 0.42,
+	MouseBodyGradient = Theme.Panel.FillGradient,
+	-- BOTH top buttons are drawn, and only the left one is lit. A single lit
+	-- rectangle floating on a white blob reads as "a blob with a sticker";
+	-- the pair plus the seam between them is what makes it read as a MOUSE,
+	-- and therefore what makes "the LEFT one" mean anything.
+	MouseButtonPosition = Vector2.new(0.255, 0.125),
+	MouseButtonSize = Vector2.new(0.235, 0.315),
+	MouseButtonCorner = 0.30,
+	MouseButtonGradient = Theme.Rarity.Epic.Face,
+	MouseRightPosition = Vector2.new(0.510, 0.125),
+	MouseRightSize = Vector2.new(0.235, 0.315),
+	MouseRightGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(214, 230, 244)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(186, 208, 228)),
+	}),
+	MouseWheelPosition = Vector2.new(0.484, 0.155),
+	MouseWheelSize = Vector2.new(0.032, 0.155),
+	MouseWheelCorner = 1,
+	MouseWheelColor = Color3.fromRGB(52, 74, 104),
+	-- Touch: ripple ring + the EAT button's own face.
+	TapRingPosition = Vector2.new(0.06, 0.06),
+	TapRingSize = Vector2.new(0.88, 0.88),
+	TapRingThickness = 0.055, -- fraction of the box, UIStroke ScaledSize
+	TapRingColor = Color3.fromRGB(255, 236, 250),
+	TapButtonPosition = Vector2.new(0.20, 0.20),
+	TapButtonSize = Vector2.new(0.60, 0.60),
+	TapOutline = Theme.EatButton.Outline,
+	TapOuterGradient = Theme.EatButton.OuterGradient,
+	TapFaceInset = Vector2.new(0.10, 0.10),
+	TapFaceGradient = Theme.EatButton.FaceGradient,
+	-- The real button's own word, so the glyph is a MINIATURE of the control
+	-- rather than a generic pink dot. Caller passes the same locale string the
+	-- HUD button uses; without it the disc simply renders wordless.
+	TapLabelPosition = Vector2.new(0.28, 0.40),
+	TapLabelSize = Vector2.new(0.44, 0.20),
+	TapLabelGradient = Theme.EatButton.TextGradient,
+	TapLabelOutline = Theme.EatButton.Outline,
+}
+
+-- ── 3. Hint arrow (world-tracking objective pointer) ────────────────────────
+-- On-screen target: bobs ABOVE it pointing down. Off-screen: pins to the
+-- viewport edge and rotates toward it — the standard objective marker.
+-- Sizes are viewport-height fractions (the GymOverlay convention).
+Theme.TutorialArrow = {
+	ArrowHeight = 96 / 1080,
+	ArrowAspect = 1,
+	ArrowIcon = "UiArrowRight", -- rotated; 0deg points +X
+	ArrowColor = Color3.fromRGB(255, 236, 250),
+	-- Screen-edge keep-out so a pinned arrow never sits half off the viewport.
+	EdgePadding = 0.075,
+	-- Vertical offset above the target while it is on screen (viewport fraction)
+	-- and the idle bob applied on top of it.
+	OnScreenLift = 0.085,
+	BobAmplitude = 0.014,
+	BobPeriod = 1.15,
+	LabelOffset = 0.055, -- below the arrow, viewport fraction
+	LabelHeight = 34 / 1080,
+	LabelAspect = 320 / 34,
+	LabelOuterGradient = Theme.Chip.OuterGradient,
+	LabelFaceGradient = Theme.Chip.FaceGradient,
+	LabelFaceInset = Vector2.new(4 / 320, 4 / 34),
+	LabelTextGradient = Theme.Button.TextGradient,
+}
+
+-- Button styles for the tutorial's two CTA zones (a style's AspectRatio must
+-- MATCH its zone or Components.Button letterboxes itself inside it).
+-- GREEN, not the blue ActionButton: on a 76%-opaque black scrim the blue face
+-- sat in the same value band as the dimmed world and dissolved at a squint —
+-- and this button is the screen's only exit.
+Theme.TutorialSkipButton = buttonStyleWithAspect(Theme.EquipGreen, 420 / 120)
+Theme.TutorialHintButton = buttonStyleWithAspect(Theme.EquipGreen, 200 / 56)
+
+-- Attention PULSE for an existing button (Components.Button `pulse` prop).
+-- Reverses forever, so the tween is the only writer of that UIScale's Scale
+-- (ADR-0006) and a `pulse = false` render simply cancels it back to 1.
+Theme.Feel.Pulse = {
+	Scale = 1.10,
+	Tween = TweenInfo.new(0.62, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+	StopTween = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+}
+table.freeze(Theme.Feel.Pulse)
+
 table.freeze(Theme.Rarity.Uncommon)
 table.freeze(Theme.Rarity.Secret)
 table.freeze(Theme.BuyButton)
@@ -2494,12 +2892,21 @@ table.freeze(Theme.HexTree.Notifier)
 table.freeze(Theme.HexTree.BuyButton)
 table.freeze(Theme.HexTree.ZoomButton)
 table.freeze(Theme.HexTree)
+table.freeze(Theme.TutorialSlides.PanelPositions)
+table.freeze(Theme.TutorialSlides)
+table.freeze(Theme.TutorialPanel)
+table.freeze(Theme.TutorialHint)
+table.freeze(Theme.TutorialGlyph)
+table.freeze(Theme.TutorialArrow)
+table.freeze(Theme.TutorialSkipButton)
+table.freeze(Theme.TutorialHintButton)
 
 table.freeze(Theme.Feel)
 table.freeze(Theme.Colors)
 table.freeze(Theme.Gradients)
 table.freeze(Theme.Toggle)
 table.freeze(Theme.Panel)
+table.freeze(Theme.PanelScrim)
 table.freeze(Theme.Header)
 table.freeze(Theme.Button)
 table.freeze(Theme.Exit)
@@ -2541,8 +2948,7 @@ table.freeze(Theme.ShopPriceWide)
 table.freeze(Theme.ShopPriceStates.buy)
 table.freeze(Theme.ShopPriceStates.owned)
 table.freeze(Theme.ShopPriceStates.unavailable)
--- NOT frozen again: `unaffordable` IS `unavailable` (one shared grey table), and
--- table.freeze errors on an already-frozen table.
+table.freeze(Theme.ShopPriceStates.unaffordable)
 table.freeze(Theme.ShopPriceStates)
 table.freeze(Theme.ShopRibbon.Variants)
 table.freeze(Theme.ShopRibbon)
@@ -2554,6 +2960,7 @@ table.freeze(Theme.ShopCardAccents)
 table.freeze(Theme.ShopCard)
 table.freeze(Theme.ShopCardSmall)
 table.freeze(Theme.ShopPriceCard)
+table.freeze(Theme.ShopPriceHero)
 table.freeze(Theme.ShopCardBody)
 table.freeze(Theme.ShopTab)
 table.freeze(Theme.ShopTabStates.selected)

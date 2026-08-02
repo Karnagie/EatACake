@@ -86,6 +86,26 @@ Outer     dark outline, EVEN: ~2.5% of H top/left/right, ~3.5% bottom (≤1.5x �
 - State changes colour, never geometry (the PetCard rule): selection/premium is
   a gradient swap on the Outer.
 
+## 2c. Tag recipe — a TAG is FLAT
+
+Three surface languages, one per interaction class:
+**button** = slab (one field, bottom-weighted outline, rim flash) ·
+**card** = frame (even outline, internal zones) · **tag** = FLAT.
+
+A passive label (bundle chip, badge, counter, "what you get" row) never
+wears the button recipe — a dark outer pill under a raised lighter face
+reads PRESSABLE no matter how small it is (the hero's bundle chips shipped
+that way and the user tried to read them as buttons). A tag is ONE flat
+fill (if the geometry has two layers, give both the same gradient), a
+near-flat vertical shade at most, no bright top flash, no dark bottom lip,
+and a soft mid-value text outline. Separate it from its surface by VALUE
+(~one band, dL* ~ +12-15), not by chrome. Prototype: `Theme.ShopHeroItem`.
+
+The inverse holds for quieting INTERACTIVE elements: lighten their own hue
+family but KEEP the rim flash + bottom lip — strip those (or drain the
+saturation) and the element reads DISABLED (the kit's locked-gray
+language), which is how the idle shop tabs briefly shipped looking locked.
+
 Panels use a different triple: `BodyShadow → BodyBorder → BodyFill`:
 - Visible dark border ~1.6% of panel width on all sides (8/512, 10/1000).
 - Shadow = same dark color, offset DOWN ~1% of height, extending ~2% of height
@@ -143,6 +163,13 @@ Existing accent sets to reuse before inventing: `Theme.Rarity.{Common,Rare,
 Epic,Legendary}`, `Theme.EquipGreen`, `Theme.UnequipRed`, `Theme.PetCard.
 SelectOuterGradient/SelectRingGradient` (gold selection).
 
+**QUIET means close in VALUE to the surface, not merely low chroma.** A
+desaturated slate that is still dark reads dL* −58 on the white panel and
+out-shouts the selected gold tab in grayscale (measured — the shop's idle
+tabs shipped that way twice). Idle/inactive/chrome states are LIGHT washes
+of the surface they sit on (target |dL*| ≤ ~15); verify with the
+`tonal-hierarchy` skill, not by eye.
+
 ## 5. Text (OutlinedText)
 
 - Font: Fredoka One (`Theme.Font`), always `TextScaled`.
@@ -197,5 +224,33 @@ SelectOuterGradient/SelectRingGradient` (gold selection).
   `Theme.Hud.Icons` or ids the task supplies), no UIStroke on big text.
 - No hardcoded colors in components; no new palettes.
 - No `AutomaticCanvasSize` with scale-sized grid cells (see patterns pitfalls).
-- No hover/press animations, tweens, or sounds (current art direction).
+- No HAND-ROLLED animation. (This line used to read "no animations, tweens or
+  sounds (current art direction)" — that is STALE and was contradicted by
+  ADR-0006, SKILL.md iron rule 8, the shipped `Interaction` primitive and every
+  press/pop/glide in the kit. The live rule: motion comes from `Interaction`
+  and `Theme.Feel`; a component may own a ref-driven tween of a property React
+  never writes; nothing animates a prop React recomputes.)
 - No API-breaking edits to shipped components.
+
+## 9. Instruction surfaces must not consume the input they teach
+
+A popup that says "click to eat" / "press this button" is the one overlay class
+that must NOT be modal.
+
+Roblox sets `gameProcessed = true` on `UserInputService.InputBegan` for any
+click that lands on an `Active` GUI surface. Gameplay input in this project is
+read exactly that way (`CakeSubsClient`), so the kit's usual full-screen click
+catcher — `PetRevealOverlay.ClickCatcher`, `Active = true` — silently swallows
+the very click the popup is pointing at. Nothing about the component looks
+wrong; the feature just stops working while the lesson is on screen.
+
+- Teaching surface: **no scrim, no catcher.** Only its CTA is a `TextButton`;
+  everything else is an inert Frame. Position it clear of the control it names.
+  It should also self-dismiss the first time the taught action succeeds.
+- Blocking surface (a story board, a reveal): take the catcher deliberately,
+  and hide the whole **HUD layer** rather than element-by-element — a
+  translucent scrim shows every element you forgot. A HOLD button still needs
+  its own `visible` gate: `usePressable` releases a hold when `enabled` flips,
+  not when an ancestor's `Visible` does.
+
+Worked example: `TutorialHint` vs `TutorialSlides` (`features/tutorial.md`).

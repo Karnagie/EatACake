@@ -131,13 +131,13 @@ UpgradeConfig.upgrades = {
 		-- Because a bite clears to the layer floor, clear time scales with the
 		-- bite AREA: this is the single strongest eating stat (each tier is ~15%
 		-- more area) and it is priced accordingly.
-		base = 3.4,
+		base = 2.4,
 		tiers = {
-			{ value = 3.65, cost = 850 },
-			{ value = 3.9, cost = 2800 },
-			{ value = 4.2, cost = 8750 },
+			{ value = 2.65, cost = 850 },
+			{ value = 2.9, cost = 2800 },
+			{ value = 3.2, cost = 8750 },
 			{ value = 4.5, cost = 22500 },
-			{ value = 4.8, cost = 54000 },
+			{ value = 5.8, cost = 54000 },
 		},
 	},
 	biteDepth = {
@@ -151,11 +151,11 @@ UpgradeConfig.upgrades = {
 		-- refDepth) / hardness. At the base value the centre of the scoop clears
 		-- a soft layer in one bite; upgrading WIDENS the fully-cleared core (and
 		-- lets you chew the dense deep layers in one bite instead of three).
-		base = 3.6,
+		base = 2.6,
 		tiers = {
-			{ value = 4.1, cost = 800 },
-			{ value = 4.6, cost = 2650 },
-			{ value = 5.1, cost = 8000 },
+			{ value = 3.1, cost = 800 },
+			{ value = 3.6, cost = 2650 },
+			{ value = 4.1, cost = 8000 },
 			{ value = 5.6, cost = 20500 },
 			{ value = 6.2, cost = 50500 },
 		},

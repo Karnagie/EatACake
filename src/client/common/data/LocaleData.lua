@@ -35,9 +35,12 @@ LocaleData.strings = {
 	-- under 14px, which is where "+100 Gems" and "EPIC Egg!" already sit.
 	-- "Extra Bite Size" (15) would render at ~8.5px there, the same unreadable
 	-- failure "One squishy, better odds" hit on a shop card.
+	-- "x2" prefix, matching ShopData labels exactly — ONE name per perk
+	-- everywhere (the shop card and the daily card must never disagree;
+	-- copy convention unified 2026-08-01).
 	["boost-bite"] = "Extra Bite",
-	["boost-speed"] = "2x Speed",
-	["boost-capacity"] = "2x Stomach",
+	["boost-speed"] = "x2 Speed",
+	["boost-capacity"] = "x2 Stomach",
 	-- The calories boost's own name, for the nameKey contract. The daily card
 	-- deliberately shows `label-boost` for it instead: same perk, three
 	-- characters shorter in a zone that is short of them.
@@ -279,6 +282,17 @@ LocaleData.strings = {
 	["status-code-expired"] = "This code has expired",
 	["status-code-already"] = "Already redeemed",
 	["status-code-cooldown"] = "Please wait a moment...",
+	-- onboarding / tutorial (features/tutorial.md)
+	["tutorial-title"] = "THE CHALLENGE",
+	["tutorial-skip"] = "LET'S GO!",
+	["tutorial-eat-title"] = "EAT THE CAKE!",
+	-- Two bodies, one per input device (AppRoot picks by IS_TOUCH). Kept SHORT:
+	-- the hint card's body zone is 394x64 nominal and TextScaled binds on WIDTH,
+	-- so a third line renders at a size this audience will not read.
+	["tutorial-eat-body-pc"] = "Hold the LEFT MOUSE BUTTON to eat what's in front of you.",
+	["tutorial-eat-body-touch"] = "Hold the pink EAT button to eat what's in front of you.",
+	["tutorial-eat-ok"] = "GOT IT!",
+	["tutorial-arrow-upgrades"] = "UPGRADES",
 	-- reserved (celebration hook not implemented yet)
 	["toast-claimed"] = "Claimed!",
 	["toast-claimed-gold"] = "+{n} Gold!",

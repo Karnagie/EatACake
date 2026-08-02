@@ -32,6 +32,42 @@ local TeleportSubs = {}
 local services_
 local teleportData_
 local subscriptions_
+local analytics_ -- optional; features/analytics.md
+
+-- Telemetry only, and never on the handoff's critical path: a failure here
+-- must not be able to strand a player mid-release (R8).
+local function beat(player: Player, flowStep: string?, eventKey: string?, reason: string?)
+	if analytics_ == nil then
+		return
+	end
+	local ok, err = pcall(function()
+		if flowStep then
+			analytics_.Flow(player, flowStep)
+		end
+		if eventKey then
+			analytics_.Event(player, eventKey, 1, { reason or "ok", PlaceConfig.current(), "teleport" }, {
+				tier = "critical",
+			})
+		end
+	end)
+	if not ok then
+		Log.Once(SCOPE, "teleport-analytics", `teleport analytics beat FAILED (telemetry only): {err}`)
+	end
+end
+
+local function beatGroup(group: { Player }, flowStep: string?, eventKey: string?, reason: string?)
+	for _, player in ipairs(group) do
+		beat(player, flowStep, eventKey, reason)
+	end
+end
+
+-- One definition of "this player came back from a failed handoff": push the
+-- authoritative resync, then count it. A rising `teleport_recovered` is the
+-- clearest early warning there is that the release path is degrading.
+local function onRecovered(recoveredPlayer: Player)
+	Resync.Push(recoveredPlayer, subscriptions_)
+	beat(recoveredPlayer, nil, "teleport-recovered", "recovered")
+end
 
 export type GroupOptions = {
 	targetPlaceId: number,
@@ -64,9 +100,7 @@ function TeleportSubs.RecoverPlayer(player: Player)
 		player,
 		teleportData_,
 		services_.PersistenceService,
-		function(recoveredPlayer)
-			Resync.Push(recoveredPlayer, subscriptions_)
-		end
+		onRecovered
 	)
 end
 
@@ -89,9 +123,7 @@ local function recoverPresentGroup(group: { Player })
 				player,
 				teleportData_,
 				services_.PersistenceService,
-				function(recoveredPlayer)
-					Resync.Push(recoveredPlayer, subscriptions_)
-				end
+				onRecovered
 			)
 		else
 			teleportData_.Clear(player)
@@ -176,6 +208,7 @@ function TeleportSubs.SendGroup(players: { Player }, options: GroupOptions): boo
 	local releaseResult = Release.Wait(group, teleportData_, services_.PersistenceService)
 	if releaseResult == "timeout" then
 		Log.Warn(SCOPE, `group release not confirmed in {timeoutSeconds}s -- cancelling handoff to avoid stale destination reads`)
+		beatGroup(group, nil, "teleport-fail", "release-timeout")
 		for _, player in ipairs(group) do
 			if player.Parent == Players then
 				if services_.PersistenceService.IsReleased(player.UserId) then
@@ -183,9 +216,7 @@ function TeleportSubs.SendGroup(players: { Player }, options: GroupOptions): boo
 						player,
 						teleportData_,
 						services_.PersistenceService,
-						function(recoveredPlayer)
-							Resync.Push(recoveredPlayer, subscriptions_)
-						end
+						onRecovered
 					)
 				else
 					clearHandoff(player)
@@ -199,6 +230,7 @@ function TeleportSubs.SendGroup(players: { Player }, options: GroupOptions): boo
 		return false
 	elseif releaseResult == "departed" then
 		Log.Warn(SCOPE, "a player left during the release wait -- group handoff cancelled; recovering remaining players")
+		beatGroup(group, nil, "teleport-fail", "peer-departed")
 		recoverPresentGroup(group)
 		return false
 	end
@@ -222,12 +254,18 @@ function TeleportSubs.SendGroup(players: { Player }, options: GroupOptions): boo
 	end
 	if not ok then
 		Log.Warn(SCOPE, `TeleportAsync to place {targetPlaceId} exhausted synchronous retries for group of {#group}`)
+		beatGroup(group, nil, "teleport-fail", "teleport-async")
 		recoverPresentGroup(group)
 		return false
 	end
 
 	-- Keep the guard/attribute set until PlayerRemoving confirms departure, or
 	-- TeleportInitFailed recovers that individual player.
+	-- The flow beat lands HERE rather than at the top of SendGroup: a handoff
+	-- that never reached TeleportAsync is a failure, not a teleport, and
+	-- logging it as a teleport would hide the release bugs this whole
+	-- verified-release dance exists to prevent.
+	beatGroup(group, "teleport", "teleport-start", `place-{targetPlaceId}`)
 	Log.Info(SCOPE, `group of {#group} handed off to place {targetPlaceId} (reserved={options.reserveServer == true})`)
 	return true
 end
@@ -251,6 +289,10 @@ function TeleportSubs.Start(data, services, subscriptions)
 	services_ = services
 	teleportData_ = data.TeleportData
 	subscriptions_ = subscriptions
+	analytics_ = subscriptions and subscriptions.AnalyticsSubs
+	if analytics_ == nil then
+		Log.Warn(SCOPE, "AnalyticsSubs missing -- teleport start/failure beats will not be logged")
+	end
 	if teleportData_ == nil then
 		Log.Warn(SCOPE, "TeleportData missing -- teleport handoffs disabled")
 		return

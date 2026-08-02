@@ -2,7 +2,8 @@
 	LocalShopService — shop view-model (R2, logic only). Turns ShopUpdate /
 	GroupRewardUpdate snapshots into UIKit.ShopPanel sections.
 
-	Tab shape:     { id, label, sections }
+	Tab shape:     { id, label, icon, sections }  -- icon = Theme.Icons key
+	               -- (icon-first tabs; ShopPanel's liveTabs must carry it)
 	Section shape: { id, title, iconName, count, kind, items }
 	  kind = "banner"    -> full-width GIVE row      (ShopBanner, green)
 	       | "hero"      -> full-width bundle offer  (ShopHeroCard, gold)
@@ -49,6 +50,22 @@ end
 -- it, and `price-robux` ("R$ {n}") next to that glyph rendered "⬡ R$ 199" on
 -- every card. `price-gems-short` exists for exactly the same reason on the gem
 -- row. OWNED / SOON are text-only, so they keep the full word.
+-- "2000" beside a card titled "2,500 Gems" reads as a different kind of
+-- number — one comma format panel-wide (readability audit 2026-08-01).
+-- Floors nil/garbage to 0: a Robux product with an id but no priceRobux
+-- passes the `configured` guard, and "nil" must never reach a shelf.
+local function withCommas(amount: number?): string
+	local s = tostring(tonumber(amount) or 0)
+	while true do
+		local replaced, hits = s:gsub("^(-?%d+)(%d%d%d)", "%1,%2")
+		s = replaced
+		if hits == 0 then
+			break
+		end
+	end
+	return s
+end
+
 local function priceText(entry): string
 	if entry.owned then
 		return locale.T("btn-owned")
@@ -57,16 +74,21 @@ local function priceText(entry): string
 		return locale.T("btn-soon")
 	end
 	if entry.currency == "gems" then
-		return locale.T("price-gems-short", { n = entry.priceGems })
+		return locale.T("price-gems-short", { n = withCommas(entry.priceGems) })
 	end
-	return locale.T("price-robux-short", { n = entry.priceRobux })
+	return locale.T("price-robux-short", { n = withCommas(entry.priceRobux) })
 end
 
 -- Currency glyph on any actual price, INCLUDING the unaffordable one — a grey
 -- shelf reading "500" with no glyph says nothing about what is missing. OWNED /
 -- SOON are text-only so the label can span the whole button.
 local function priceIcon(entry): string?
-	if entry.owned or entry.configured == false then
+	if entry.owned then
+		-- Icon-first (squint-test skill): state reads glyph-first — a
+		-- check beside "Owned" for the players who never read the word.
+		return "UiCheck"
+	end
+	if entry.configured == false then
 		return nil
 	end
 	return if entry.currency == "gems" then "UiGem" else "UiRobux"
@@ -160,6 +182,7 @@ function LocalShopService.BuildTabs(shop, group, gems)
 				else locale.T("sub-group-reward"),
 			iconName = "UiFriend",
 			priceText = if group.claimed then locale.T("btn-owned") else locale.T("btn-free"),
+			priceIcon = if group.claimed then "UiCheck" else nil,
 			state = if group.claimed then "owned" else "buy",
 			accent = "free",
 		})
@@ -170,11 +193,10 @@ function LocalShopService.BuildTabs(shop, group, gems)
 	-- reward and the one-time starter offer — and a shop that opens on a price
 	-- converts worse than one that opens on something you can take right now.
 	--
-	-- Passes get the BIG card (3 across), boosts and gems the small one (4
-	-- across). Not a style choice: it is the only split where every row is full
-	-- (6 passes = 2x3, 4 boosts = 1x4, 4 packs = 1x4) instead of ending in a lone
-	-- orphan cell, and the permanent perks earning the larger cell is the
-	-- hierarchy the shop wants anyway.
+	-- Every product tab shares ONE smallcard grid (4 across) — the hero is
+	-- the only bigger cell. The passes' old 3-across big card ended row 2
+	-- exactly at the window bottom (passes 4-6 invisible); see the section
+	-- comment below and docs/features/shop.md.
 	--
 	-- ShopPanel drops a tab whose sections are all empty, so an unconfigured
 	-- group reward or an empty category never opens onto a blank window.
@@ -182,6 +204,9 @@ function LocalShopService.BuildTabs(shop, group, gems)
 		{
 			id = "featured",
 			label = locale.T("shop-tab-featured"),
+			-- icon-first tabs (squint-test skill): a non-reader navigates
+			-- the row by glyphs; each tab wears its section's icon
+			icon = "UiGift",
 			sections = {
 				{
 					id = "free",
@@ -202,13 +227,22 @@ function LocalShopService.BuildTabs(shop, group, gems)
 		{
 			id = "passes",
 			label = locale.T("shop-tab-passes"),
+			icon = "UiVerified",
 			sections = {
 				{
 					id = "passes",
 					title = locale.T("shop-section-passes"),
 					iconName = "UiVerified",
 					count = count(passes),
-					kind = "card",
+					-- smallcard (4-across), same grid as boosts/gems (UX audit
+					-- 2026-08-01): at 3-across the 338px cards, row 2 ended
+					-- EXACTLY at the window bottom — passes 4-6 were invisible
+					-- (players assume 3 passes exist), and adjacent tabs
+					-- switched grid rhythm for no signalled reason. At
+					-- 4-across, row 2 peeks above the fold — the genre's
+					-- standard scroll cue (the measured peek height lives in
+					-- docs/features/shop.md).
+					kind = "smallcard",
 					items = passes,
 				},
 			},
@@ -216,6 +250,7 @@ function LocalShopService.BuildTabs(shop, group, gems)
 		{
 			id = "boosts",
 			label = locale.T("shop-tab-boosts"),
+			icon = "UiBoost",
 			sections = {
 				{
 					-- Section id renamed with its contents: it held eggs AND
@@ -234,6 +269,7 @@ function LocalShopService.BuildTabs(shop, group, gems)
 		{
 			id = "gems",
 			label = locale.T("shop-tab-gems"),
+			icon = "UiGem",
 			sections = {
 				{
 					id = "gems",

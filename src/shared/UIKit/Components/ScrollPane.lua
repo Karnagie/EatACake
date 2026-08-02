@@ -129,7 +129,12 @@ local function ScrollPane(props)
 			ZIndex = zIndex,
 			ref = scrollRef,
 		}, props.children),
-		Track = React.createElement("TextButton", {
+		-- No track when the canvas provably fits (composition audit
+		-- 2026-08-01): a full-height thumb on a non-scrolling tab is dead
+		-- chrome that falsely advertises scrollable content. Only the
+		-- deterministic-canvas path can know this statically; the
+		-- AutomaticCanvasSize path keeps its track.
+		Track = (props.canvasHeightScale == nil or props.canvasHeightScale > 1.001) and React.createElement("TextButton", {
 			Name = "Track",
 			AnchorPoint = Vector2.new(1, 0),
 			Position = UDim2.fromScale(1, 0),
@@ -236,7 +241,7 @@ local function ScrollPane(props)
 					}),
 				}),
 			}),
-		}),
+		}) or nil,
 	})
 end
 

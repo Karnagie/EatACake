@@ -27,7 +27,9 @@
 
 	props:
 		title, size, visible, zIndex, onClose
-		tabs -- ARRAY of { id, label, sections = ARRAY of section }  (preferred)
+		tabs -- ARRAY of { id, label, icon?, sections = ARRAY of section }
+		     -- (preferred; icon = Theme.Icons key for the tab's glyph — the
+		     -- liveTabs REBUILD must carry every field here or it is dropped)
 		sections -- ARRAY of section (legacy, untabbed: renders as one scroll)
 		    section = {
 		        id, title, iconName, count,
@@ -38,7 +40,10 @@
 		             | "tile"|"pack" -> the retired button-style cells, kept working
 		        items = ARRAY of cell props
 		    }
-		balances -- ARRAY of { iconName, value } (chips in the header band)
+		balances -- ARRAY of { iconName, value, jumpTabId? } (chips in the
+		         -- header band; jumpTabId adds a green "+" badge and makes
+		         -- the chip a tap-shortcut to that tab — the genre's "get
+		         -- more currency" loop)
 		onActivated(id)
 ]]
 
@@ -56,6 +61,7 @@ local ShopPackCard = require(script.Parent.ShopPackCard)
 local ShopBanner = require(script.Parent.ShopBanner)
 local ShopCard = require(script.Parent.ShopCard)
 local ShopHeroCard = require(script.Parent.ShopHeroCard)
+local OutlinedText = require(script.Parent.OutlinedText)
 
 -- Per-kind cell metrics. ONE table so `sectionHeightPx` and the placement loop
 -- can never disagree: they used to read the same constants from two places, and
@@ -147,7 +153,14 @@ local function liveTabs(tabs, sections)
 	for _, tab in ipairs(tabs) do
 		local kept = liveSections(tab.sections, empties)
 		if #kept > 0 then
-			table.insert(live, { id = tab.id, label = tab.label, sections = kept })
+			table.insert(live, {
+				id = tab.id,
+				label = tab.label,
+				-- carried through explicitly — this rebuild silently ATE the
+				-- icon field once (icon-first tabs rendered text-only)
+				icon = tab.icon,
+				sections = kept,
+			})
 		else
 			table.insert(hiddenTabs, tostring(tab.id))
 		end
@@ -220,8 +233,18 @@ local function ShopPanel(props)
 	-- untabbed legacy path always keeps them (nothing else names the sections).
 	local withHeaders = (not tabbed) or #sections > 1
 
+	-- `onTabChanged` is observation only (the state above already switched) —
+	-- which tab a player browses never reaches the server unless they buy,
+	-- so this is the only place a browse can be seen (features/analytics.md).
+	-- It rides a ref so the memo deps stay empty and the four tab buttons keep
+	-- their stable callback prop.
+	local tabChangedRef = React.useRef(nil)
+	tabChangedRef.current = props.onTabChanged
 	local selectTab = React.useCallback(function(id)
 		setActiveId(id)
+		if tabChangedRef.current then
+			tabChangedRef.current(id)
+		end
 	end, {})
 
 	-- R8: a shop with no live tab renders an empty window. That is EXPECTED for
@@ -265,8 +288,18 @@ local function ShopPanel(props)
 	-- its card's top edge by up to 12px, and with section headers gone from
 	-- single-section tabs the first row starts at canvas y = 0, where that
 	-- overhang would be clipped by the scroll window.
+	-- Centering is CAPPED (composition audit 2026-08-01): pure centering gave
+	-- every tab a different content start (fitting tabs ~53px, scrolling tabs
+	-- 20px) so the whole block jumped vertically on every tab switch. The cap
+	-- keeps short content visually seated without the jump.
+	-- max is floored at min: `layout` is a public prop, and math.clamp ERRORS
+	-- on min > max — one bad custom layout must not kill the whole panel.
 	local topPad = if naturalPx < windowHeight
-		then math.max((windowHeight - contentPx) / 2, layout.CanvasTopPadPx)
+		then math.clamp(
+			(windowHeight - contentPx) / 2,
+			layout.CanvasTopPadPx,
+			math.max(layout.CanvasMaxTopPadPx or math.huge, layout.CanvasTopPadPx)
+		)
 		else layout.CanvasTopPadPx
 
 	-- Pass 2: place everything.
@@ -403,16 +436,94 @@ local function ShopPanel(props)
 
 	local balanceChildren = {}
 	for balanceIndex, balance in ipairs(balances) do
-		balanceChildren[`Balance{balanceIndex}`] = React.createElement(StatPill, {
-			name = `Balance{balanceIndex}`,
-			position = UDim2.fromScale((balanceIndex - 1) * layout.BalanceChipStride, 0),
-			size = UDim2.fromScale(layout.BalanceChipWidth, 1),
-			iconImage = Theme.Icon(balance.iconName),
-			value = balance.value,
-			-- Above the header's own layers (Header draws Outer/Rim/Face at
-			-- zIndex 10..12 and its close button at 20).
-			zIndex = 15,
-		})
+		local key = `Balance{balanceIndex}`
+		local chipChildren = {
+			Pill = React.createElement(StatPill, {
+				name = "Pill",
+				-- StatPill holds a hard 190/48 aspect, so in this slot it
+				-- renders slightly shorter than the frame — anchor it to the
+				-- vertical CENTER or it sags to the top and the Jump badge
+				-- (centered on the slot) sits visibly off its midline.
+				anchorPoint = Vector2.new(0, 0.5),
+				position = UDim2.fromScale(0, 0.5),
+				size = UDim2.fromScale(1, 1),
+				iconImage = Theme.Icon(balance.iconName),
+				value = balance.value,
+				-- Above the header's own layers (Header draws Outer/Rim/Face
+				-- at zIndex 10..12 and its close button at 20).
+				zIndex = 15,
+			}),
+		}
+		if balance.jumpTabId ~= nil then
+			-- The genre's "get more" loop: a green "+" on the currency chip,
+			-- and the WHOLE chip taps through to the named tab (a broke
+			-- player on a gem price otherwise dead-ends with no visible path
+			-- to the gem packs — UX audit 2026-08-01).
+			chipChildren.Jump = React.createElement("Frame", {
+				Name = "Jump",
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.fromScale(1.04, 0.5),
+				Size = UDim2.fromScale(0.30, 0.66),
+				BackgroundColor3 = Color3.new(1, 1, 1),
+				BorderSizePixel = 0,
+				ZIndex = 17,
+			}, {
+				Aspect = React.createElement("UIAspectRatioConstraint", {
+					AspectRatio = 1,
+					DominantAxis = Enum.DominantAxis.Height,
+				}),
+				Corner = React.createElement("UICorner", { CornerRadius = UDim.new(1, 0) }),
+				Gradient = React.createElement("UIGradient", {
+					Color = Theme.EquipGreen.OuterGradient,
+					Rotation = 90,
+				}),
+				Face = React.createElement("Frame", {
+					Name = "Face",
+					Position = UDim2.fromScale(0.1, 0.1),
+					Size = UDim2.fromScale(0.8, 0.8),
+					BackgroundColor3 = Color3.new(1, 1, 1),
+					BorderSizePixel = 0,
+					ZIndex = 18,
+				}, {
+					Corner = React.createElement("UICorner", { CornerRadius = UDim.new(1, 0) }),
+					Gradient = React.createElement("UIGradient", {
+						Color = Theme.EquipGreen.FaceGradient,
+						Rotation = 90,
+					}),
+				}),
+				Plus = React.createElement(OutlinedText, {
+					text = "+",
+					position = UDim2.fromScale(0.16, 0.08),
+					size = UDim2.fromScale(0.68, 0.78),
+					textGradient = Theme.EquipGreen.TextGradient,
+					outlineColor = Theme.EquipGreen.OutlineColor,
+					zIndex = 19,
+				}),
+			})
+			chipChildren.Hit = React.createElement("TextButton", {
+				Name = "Hit",
+				-- 1.06, not more: covers the badge overhang (1.04) while
+				-- staying inside the chip stride, so a second jump chip's hit
+				-- zone could never eat its neighbour's left edge.
+				Size = UDim2.fromScale(1.06, 1),
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				Text = "",
+				AutoButtonColor = false,
+				ZIndex = 20,
+				[React.Event.MouseButton1Click] = function()
+					selectTab(balance.jumpTabId)
+				end,
+			})
+		end
+		balanceChildren[key] = React.createElement("Frame", {
+			Name = key,
+			Position = UDim2.fromScale((balanceIndex - 1) * layout.BalanceChipStride, 0),
+			Size = UDim2.fromScale(layout.BalanceChipWidth, 1),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			ZIndex = 15,
+		}, chipChildren)
 	end
 
 	local panelChildren = {
@@ -461,6 +572,7 @@ local function ShopPanel(props)
 			tabChildren[`Tab_{tostring(tab.id or tabIndex)}`] = React.createElement(ShopTab, {
 				id = tab.id,
 				label = tab.label,
+				iconName = tab.icon,
 				selected = tabIndex == index,
 				position = UDim2.fromScale((tabIndex - 1) * layout.TabStride, 0),
 				size = UDim2.fromScale(layout.TabWidth, 1),

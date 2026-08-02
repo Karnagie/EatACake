@@ -23,8 +23,32 @@ local cakeCfg
 local services_
 local PetSubs
 local GameRoundSubs
+local AnalyticsSubs -- optional; features/analytics.md
 local uSnapshot
 local uCycle
+
+-- Telemetry, never on the cycle's critical path (R8).
+local function beatCycle(players: { Player }, funnelStep: string?, eventKey: string?, a: any?, b: any?)
+	if AnalyticsSubs == nil then
+		return
+	end
+	for _, player in ipairs(players) do
+		local ok, err = pcall(function()
+			if funnelStep then
+				AnalyticsSubs.Funnel(player, "match", funnelStep)
+			end
+			if eventKey then
+				AnalyticsSubs.Event(player, eventKey, 1, { a, b, "game" }, { tier = "critical" })
+			end
+		end)
+		if not ok then
+			-- `continue`, not `return`: one player's failure must not cost the
+			-- rest of the party their beat.
+			Log.Once(SCOPE, "cycle-analytics", `cycle analytics beat FAILED (telemetry only): {err}`)
+			continue
+		end
+	end
+end
 
 local function matchExpectedCount(): number?
 	if GameRoundSubs == nil then
@@ -293,6 +317,16 @@ function CakeCycleSubs.BeginBoss(playerCount: number): boolean
 	end
 	services_.CakeCycleService.BeginBoss(playerCount)
 	prepareBossPrizes()
+	-- Reaching the boss is the end of the cake and the start of the finale;
+	-- it is also the last flow step anyone gets to before the result, so the
+	-- gap between it and `match-win` is the fight's own difficulty curve.
+	local fighters = loadedCakePlayers()
+	if AnalyticsSubs ~= nil then
+		for _, player in ipairs(fighters) do
+			pcall(AnalyticsSubs.Flow, player, "boss")
+		end
+	end
+	beatCycle(fighters, "boss", "boss-start", tostring(playerCount), nil)
 	return true
 end
 
@@ -324,6 +358,7 @@ function CakeCycleSubs.FinishBoss(result: string): boolean
 	-- BeginReward changes phase immediately, guarding reward/result from a
 	-- simultaneous boss tap and timeout transition.
 	services_.CakeCycleService.BeginReward()
+	beatCycle(loadedCakePlayers(), nil, "boss-end", result, nil)
 	local expectedCount = matchExpectedCount()
 	local matchMode = expectedCount ~= nil
 	if result == "win" then
@@ -367,6 +402,10 @@ function CakeCycleSubs.Start(data, services, subscriptions)
 	services_ = services
 	PetSubs = subscriptions and subscriptions.PetSubs
 	GameRoundSubs = subscriptions and subscriptions.GameRoundSubs
+	AnalyticsSubs = subscriptions and subscriptions.AnalyticsSubs
+	if AnalyticsSubs == nil then
+		Log.Warn(SCOPE, "AnalyticsSubs missing -- boss start/end beats will not be logged")
+	end
 	if state == nil or cakeCfg == nil then
 		Log.Warn(SCOPE, "CakeStateData/CakeConfigData missing -- cake lifecycle disabled")
 		return

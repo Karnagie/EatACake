@@ -60,6 +60,11 @@ local Components = {
 	PetRevealOverlay = require(ComponentsFolder.PetRevealOverlay),
 	MatchChoice = require(ComponentsFolder.MatchChoice),
 	MatchmakingPanel = require(ComponentsFolder.MatchmakingPanel),
+	-- Onboarding / tutorial (features/tutorial.md)
+	InputGlyph = require(ComponentsFolder.InputGlyph),
+	TutorialSlides = require(ComponentsFolder.TutorialSlides),
+	TutorialHint = require(ComponentsFolder.TutorialHint),
+	HintArrow = require(ComponentsFolder.HintArrow),
 }
 
 table.freeze(Components)
@@ -71,6 +76,10 @@ return table.freeze({
 	-- Shared code cannot require a client module, so the kit takes the handler
 	-- instead — see Interaction's SOUND section and docs/features/audio.md.
 	SetSoundHandler = Interaction.SetSoundHandler,
+	-- Same shape, for telemetry: injected once by AnalyticsSubsClient, it
+	-- counts EVERY kit press (live or disabled) with no per-button wiring.
+	-- See Interaction's ANALYTICS section and docs/features/analytics.md.
+	SetTrackHandler = Interaction.SetTrackHandler,
 	-- Demo apps (reference compositions): require lazily, e.g. require(UIKit.Demos.HudDemo)
 	Demos = script.Demos,
 })

@@ -88,10 +88,12 @@ ShopData.products = {
 		priceRobux = 99,
 		label = "Starter Pack",
 		-- The hero cell spells the contents out in `bundle`, so `desc` is the
-		-- PITCH, not the inventory. (It used to be the inventory, at 35
-		-- characters. The hero's desc zone is 596px wide, so it is the one place
-		-- in the shop with room to spare — the grid cells are not.)
-		desc = "The best way to start",
+		-- PITCH, not the inventory — and the pitch is the DEAL, quantified
+		-- (genre audit 2026-08-01: starter packs live or die on a value
+		-- multiplier the player can scan; "the best way to start" merchandised
+		-- nothing). x4 is real: 200 gems alone ≈ 200 R$ at the baseline
+		-- gem-pack rate, plus three 500-gem boosts, for 99 R$.
+		desc = "Over x4 the value",
 		icon = "UiMoreGift",
 		order = 1,
 		accent = "Legendary",
@@ -142,12 +144,12 @@ ShopData.products = {
 	-- zone, exactly as `desc` is on the perk line below it. At the kit's measured
 	-- Fredoka advance (~0.75 x font size per glyph) that zone renders N
 	-- characters at 176 / (0.75 N) px, capped at 28:
-	--   "2x Speed" (8)        28px      "2x Stomach" (10)  23.5px
+	--   "x2 Speed" (8)        28px      "x2 Stomach" (10)  23.5px
 	--   "x2 Calories" (11)    21.3px    "Extra Bite" (10)  23.5px
-	-- The boosts were requested as "Extra Bite Size" and "2x Stomach Capacity".
+	-- The boosts were requested as "Extra Bite Size" and "x2 Stomach Capacity".
 	-- "Extra Bite Size" (15) renders at 15.6px — SMALLER than its own 16px perk
 	-- line, which inverts the card's hierarchy — so both are shortened to the
-	-- 10-character forms above, which sit level with "2x Stomach" and read as the
+	-- 10-character forms above, which sit level with "x2 Stomach" and read as the
 	-- same names rather than different ones. ONE name per perk everywhere (locale
 	-- keys `boost-bite` / `boost-capacity`): the daily card and the hero chip are
 	-- narrower than this title zone, not wider, so a long form there would only
@@ -156,7 +158,7 @@ ShopData.products = {
 		currency = "gems",
 		priceGems = 500,
 		label = "x2 Calories",
-		desc = "x2 for 15 min",
+		desc = "x2 cals (15m)",
 		icon = "UiBoost",
 		order = 1,
 		accent = "Uncommon",
@@ -167,7 +169,7 @@ ShopData.products = {
 		currency = "gems",
 		priceGems = 500,
 		label = "Extra Bite",
-		desc = "+40% bite 15m",
+		desc = "+40% bite (15m)",
 		icon = "UiStrength",
 		order = 2,
 		accent = "Rare",
@@ -177,8 +179,8 @@ ShopData.products = {
 	["boost-speed"] = {
 		currency = "gems",
 		priceGems = 500,
-		label = "2x Speed",
-		desc = "x2 speed 15m",
+		label = "x2 Speed",
+		desc = "x2 speed (15m)",
 		icon = "PassSpeed",
 		order = 3,
 		accent = "Blue",
@@ -188,8 +190,8 @@ ShopData.products = {
 	["boost-capacity"] = {
 		currency = "gems",
 		priceGems = 500,
-		label = "2x Stomach",
-		desc = "x2 belly 15m",
+		label = "x2 Stomach",
+		desc = "x2 belly (15m)",
 		icon = "PassStorageX2",
 		order = 4,
 		accent = "Epic",
@@ -211,7 +213,7 @@ ShopData.products = {
 		devProductId = 3612534248,
 		priceRobux = 400,
 		label = "450 Gems",
-		desc = "Most popular",
+		desc = "+12% bonus",
 		icon = "GemPackM",
 		order = 2,
 		accent = "Legendary",
@@ -222,7 +224,7 @@ ShopData.products = {
 		devProductId = 3612534252,
 		priceRobux = 900,
 		label = "1,050 Gems",
-		desc = "Big value",
+		desc = "+17% bonus",
 		icon = "GemPackL",
 		order = 3,
 		accent = "Legendary",
@@ -236,7 +238,7 @@ ShopData.products = {
 		devProductId = 3612534255,
 		priceRobux = 2000,
 		label = "2,500 Gems",
-		desc = "Best rate",
+		desc = "+25% bonus",
 		icon = "GemPackXL",
 		order = 4,
 		accent = "Legendary",
@@ -256,7 +258,7 @@ ShopData.gamepasses = {
 		gamePassId = 1933472819,
 		priceRobux = 199,
 		label = "x2 Calories",
-		desc = "Permanent, no timer",
+		desc = "All cals x2",
 		icon = "PassCashX2",
 		order = 1,
 		accent = "Epic",
@@ -265,7 +267,7 @@ ShopData.gamepasses = {
 		gamePassId = 1930993460,
 		priceRobux = 299,
 		label = "x2 Gems",
-		desc = "Every find pays x2",
+		desc = "Gem finds x2",
 		icon = "PassGemX2",
 		order = 2,
 		accent = "Uncommon",
@@ -274,7 +276,7 @@ ShopData.gamepasses = {
 		gamePassId = 1933322816,
 		priceRobux = 399,
 		label = "Auto-Eat",
-		desc = "Hands-free eating",
+		desc = "Eats for you",
 		icon = "PassAutoClick",
 		order = 3,
 		accent = "Blue",
@@ -283,7 +285,7 @@ ShopData.gamepasses = {
 		gamePassId = 1932437169,
 		priceRobux = 349,
 		label = "Auto-Gym",
-		desc = "Burns fat while away",
+		desc = "Trains for you",
 		icon = "PassAutoRebirth",
 		order = 4,
 		accent = "Rare",
@@ -292,7 +294,7 @@ ShopData.gamepasses = {
 		gamePassId = 1931927238,
 		priceRobux = 249,
 		label = "x2 Stomach",
-		desc = "Twice the capacity",
+		desc = "Double capacity",
 		icon = "PassStorageX2",
 		order = 5,
 		accent = "Secret",
@@ -301,7 +303,7 @@ ShopData.gamepasses = {
 		gamePassId = 1934984583,
 		priceRobux = 799,
 		label = "VIP",
-		desc = "All perks + 5 slots",
+		desc = "Perks + 5 slots",
 		icon = "PassVip",
 		order = 6,
 		accent = "Legendary",

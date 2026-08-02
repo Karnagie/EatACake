@@ -18,13 +18,13 @@ CakeConfigData.treasures = require(config:WaitForChild("TreasureConfig"))
 -- ── Anti-cheat (GDD §13): every remote handler validates against these ──
 CakeConfigData.antiCheat = {
 	-- Bites/sec token bucket: capacity + refill = eatSpeed stat * slack.
-	biteRateSlack = 1.6,
-	biteRateBurst = 4, -- extra tokens to absorb network jitter
+	biteRateSlack = 31.6,
+	biteRateBurst = 34, -- extra tokens to absorb network jitter
 	-- The bite point must be near the character (raycast distance check).
-	maxBiteReachStuds = 18, -- + the player's bite radius
+	maxBiteReachStuds = 38, -- + the player's bite radius
 	-- The bite point must be near the actual surface (no biting mid-air
 	-- or deep underground through spoofed positions).
-	maxSurfaceDeltaStuds = 8,
+	maxSurfaceDeltaStuds = 38,
 	-- NOTE: no per-bite calorie cap — volume/layer/calories are computed
 	-- entirely server-side from a position, so there is nothing to clamp.
 }

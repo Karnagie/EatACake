@@ -80,7 +80,7 @@ local function Toggle(props)
 		Selectable = enabled,
 		ZIndex = zIndex,
 		[React.Event.MouseButton1Click] = function()
-			Interaction.Cue("press") -- the knob slide is this component's own motion
+			Interaction.Cue("press", `Toggle/{tostring(props.id or props.name or "unknown")}`) -- the knob slide is this component's own motion
 			if enabled and props.onChanged then
 				props.onChanged(not value)
 			end

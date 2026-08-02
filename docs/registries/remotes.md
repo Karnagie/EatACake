@@ -22,6 +22,8 @@
 | `SetSetting` | `SettingsSubs` | `features/settings.md` |
 | `RequestTeleport` | `TeleportSubs` | ADR-0009 / `features/persistence.md` |
 | `LobbyQueueRequest` | `LobbyQueueSubs` | `features/lobby-matchmaking.md` |
+| `TutorialComplete` | `TutorialSubs` (game) | `features/tutorial.md` |
+| `AnalyticsBeat` | `AnalyticsSubs` (common — both places) | `features/analytics.md` — batched telemetry; the client may only assert what the server cannot see |
 
 ## remoteUpdates/ (server → client)
 
@@ -43,6 +45,7 @@
 | `CodeResultUpdate` | `CodesSubs` | `features/promo-codes.md` |
 | `SettingsUpdate` | `SettingsSubs` | `features/settings.md` |
 | `LobbyQueueUpdate` | `LobbyQueueSubs` | `features/lobby-matchmaking.md` |
+| `TutorialUpdate` | `TutorialSubs` (game) | `features/tutorial.md` |
 
 ## Player attributes (server-written, client-read)
 

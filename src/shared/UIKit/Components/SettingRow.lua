@@ -14,8 +14,13 @@ local function SettingRow(props)
 			enabled = not disabled,
 			size = UDim2.fromScale(1, 1),
 			zIndex = 2,
+			-- The label surface carries NO onActivated: only the knob toggles.
+			-- Counting it separately is the point — a pile of these means
+			-- players expect the whole row to be the switch.
+			analyticsId = `Setting/{tostring(props.id or "unknown")}/Label`,
 		}),
 		Toggle = React.createElement(Toggle, {
+			id = props.id,
 			value = props.value,
 			enabled = not disabled,
 			onChanged = props.onChanged,

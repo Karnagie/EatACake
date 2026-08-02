@@ -166,6 +166,9 @@ local function ShopCard(props)
 			zIndex = zIndex + 4,
 		}),
 		Price = React.createElement(PriceButton, {
+			-- The buy tap is counted per ITEM; without this every shelf in the
+			-- shop reports as one bucket named "PriceButton".
+			analyticsId = `Buy/{tostring(props.id or "unknown")}`,
 			style = Theme.ShopPriceCard,
 			position = pricePosition,
 			size = priceSize,

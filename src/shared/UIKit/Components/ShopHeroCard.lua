@@ -99,6 +99,17 @@ local function ShopHeroCard(props)
 	local state = props.state or "buy"
 	local enabled = state == "buy"
 	local accent = Theme.ShopAccent(props.accent or style.Accent)
+	-- style.ArtPlate == false drops the plate frames entirely (the default —
+	-- a single-item hero has no mixed-aspect art to normalise, so a backing
+	-- field is a pure attention magnet; the art sits on the body). Styles
+	-- that keep a plate may value-temper it via style.ArtFaceGradient, which
+	-- only applies for the style's OWN default accent — a hero wearing a
+	-- different accent keeps that accent's face, or a green ring would frame
+	-- a gold plate.
+	local plateGradient = accent.FaceGradient
+	if style.ArtFaceGradient and (props.accent or style.Accent) == style.Accent then
+		plateGradient = style.ArtFaceGradient
+	end
 	-- The featured offer is the ONE cell allowed to wear the gold premium frame:
 	-- if everything can be highlighted, nothing is.
 	local outerGradient = if style.Premium then body.PremiumOuterGradient else body.OuterGradient
@@ -155,7 +166,7 @@ local function ShopHeroCard(props)
 			UDim2.fromScale(style.ArtFaceSize.X, style.ArtFaceSize.Y),
 			style.ArtFaceCorner,
 			zIndex + 3,
-			accent.FaceGradient
+			plateGradient
 		),
 		Icon = React.createElement("ImageLabel", {
 			Name = "Icon",
@@ -177,7 +188,12 @@ local function ShopHeroCard(props)
 			zIndex = zIndex + 4,
 		}),
 		Price = React.createElement(PriceButton, {
-			style = Theme.ShopPriceCard,
+			-- The buy tap is counted per ITEM; without this every shelf in the
+			-- shop reports as one bucket named "PriceButton".
+			analyticsId = `Buy/{tostring(props.id or "unknown")}`,
+			-- full-width shelf fractions (576x64) — ShopPriceCard's 246x52
+			-- fractions drift the glyph/amount pair apart at this width
+			style = Theme.ShopPriceHero,
 			position = UDim2.fromScale(style.PricePosition.X, style.PricePosition.Y),
 			size = UDim2.fromScale(style.PriceSize.X, style.PriceSize.Y),
 			text = props.priceText or "",
@@ -187,6 +203,11 @@ local function ShopHeroCard(props)
 			onActivated = activate,
 		}),
 	}
+
+	if style.ArtPlate == false then
+		layers.ArtRing = nil
+		layers.ArtFace = nil
+	end
 
 	if props.subText and props.subText ~= "" then
 		layers.Desc = React.createElement(OutlinedText, {

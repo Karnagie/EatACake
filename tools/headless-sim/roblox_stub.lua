@@ -130,6 +130,15 @@ M.Enum = {
 	}),
 	HighlightDepthMode = enumSet({ "AlwaysOnTop", "Occluded" }),
 	NormalId = enumSet({ "Top", "Bottom", "Front", "Back", "Left", "Right" }),
+	-- Analytics (features/analytics.md). The custom-field keys matter: the
+	-- real API wants the enum item's NAME as the dictionary key, so a stub
+	-- without `.Name` would let a broken field build pass here and fail live.
+	AnalyticsEconomyFlowType = enumSet({ "Source", "Sink" }),
+	AnalyticsEconomyTransactionType = enumSet({
+		"IAP", "Shop", "Gameplay", "ContextualPurchase", "TimedReward", "Onboarding",
+	}),
+	AnalyticsCustomFieldKeys = enumSet({ "CustomField01", "CustomField02", "CustomField03" }),
+	MessageType = enumSet({ "MessageOutput", "MessageInfo", "MessageWarning", "MessageError" }),
 }
 
 -- ── Instances ───────────────────────────────────────────────────────────

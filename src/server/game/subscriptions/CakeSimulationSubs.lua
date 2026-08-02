@@ -219,8 +219,22 @@ function CakeSimulationSubs.Start(data, services, subscriptions)
 						position = entry.position,
 					})
 					if AnalyticsSubs then
-						AnalyticsSubs.Onboard(entry.player, "firstFind")
-						AnalyticsSubs.Count(entry.player, "find_collected", 1)
+						-- pcall'd: this runs inside the Heartbeat sim step,
+						-- between the client broadcast and the milestone Save
+						-- below. A throw here would abort the frame's
+						-- simulation AND skip the save of a granted reward.
+						local ok, err = pcall(function()
+							AnalyticsSubs.Flow(entry.player, "first-find")
+							AnalyticsSubs.Funnel(entry.player, "find", "collected")
+							AnalyticsSubs.Event(entry.player, "find-collected", 1, {
+								entry.find.def.id,
+								tostring(entry.find.def.rarity or "unknown"),
+								if firstEver then "first-ever" else "repeat",
+							}, { tier = "normal" })
+						end)
+						if not ok then
+							Log.Once(SCOPE, "find-analytics", `find analytics beat FAILED (telemetry only, reward unaffected): {err}`)
+						end
 					end
 					services.PersistenceService.Save(entry.player.UserId)
 				else
@@ -245,11 +259,18 @@ function CakeSimulationSubs.Start(data, services, subscriptions)
 					-- fresh cake (index jumps back up) never fakes a celebration.
 					local cleared = previousBand > 0 and state.activeBandIndex < previousBand
 					if cleared and AnalyticsSubs then
-						for _, player in ipairs(Players:GetPlayers()) do
-							if authorizedPlayer(player) then
-								AnalyticsSubs.Onboard(player, "firstLayer")
-								AnalyticsSubs.Count(player, "layer_cleared", 1)
+						-- Same Heartbeat-step guard as the find beat above.
+						local okBeat, beatErr = pcall(function()
+							for _, player in ipairs(Players:GetPlayers()) do
+								if authorizedPlayer(player) then
+									AnalyticsSubs.Flow(player, "first-layer")
+									AnalyticsSubs.Funnel(player, "match", "layer")
+									AnalyticsSubs.Event(player, "layer-cleared", 1, nil, { tier = "normal" })
+								end
 							end
+						end)
+						if not okBeat then
+							Log.Once(SCOPE, "layer-analytics", `layer analytics beat FAILED (telemetry only): {beatErr}`)
 						end
 					end
 					CakeCycleSubs.BroadcastCycle(if cleared then "layer-cleared" else nil)

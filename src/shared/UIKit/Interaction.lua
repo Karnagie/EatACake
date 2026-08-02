@@ -57,6 +57,28 @@
 	DayCard, the reveal overlay's dismiss catcher — each owns its own motion)
 	call `Interaction.Cue("press")` from their activation handler instead. Never
 	both: a `usePressable` button that also calls `Cue` clicks twice.
+
+	ANALYTICS — every kit press is counted, from the same one place:
+
+	  Interaction.SetTrackHandler(function(kind, id) ... end)  -- "press" | "dead"
+
+	Injected once by a subscription (AnalyticsSubsClient), exactly like the
+	sound handler, and a no-op until then — the kit stays client-free and
+	works untracked. `id` identifies the control: `config.analyticsId` when
+	the caller names it, otherwise DERIVED from the pressed Instance's own
+	Name (components already name their buttons `StartButton`,
+	`Difficulty_easy`, `Players_2`…), with the parent prefixed when the name
+	is a generic one. That is what makes "track every tap" cost no per-button
+	wiring: a control gets counted because it exists, not because someone
+	remembered to instrument it.
+
+	`"dead"` is a press on a button that is currently DISABLED — the player
+	tried and the game did not answer. It rides `InputBegan`, which fires for
+	inputs over a GuiObject regardless of `Active` (unlike `Activated` /
+	`MouseButton1Click`, which a disabled button suppresses — which is the
+	whole point: the press is real, the response is not). No `Active` value
+	is changed to get it, so a disabled button still sinks exactly what it
+	sank before.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -84,14 +106,68 @@ local function cue(name: string)
 	end
 end
 
+-- Injected by the client (AnalyticsSubsClient). nil = the kit is untracked.
+local trackHandler: ((string, string) -> ())? = nil
+
+--API
+-- Route kit press events ("press" = a live control, "dead" = a disabled one)
+-- to the analytics layer. Pass nil to stop counting. Errors in the handler
+-- must never break a button, so the call is pcall'd.
+function Interaction.SetTrackHandler(handler: ((string, string) -> ())?)
+	trackHandler = handler
+end
+
+-- Names too generic to identify anything on their own get their parent
+-- prefixed, so `ShopTabs/Button` is distinguishable from `Footer/Button`.
+local GENERIC_NAMES = {
+	Button = true,
+	TextButton = true,
+	Content = true,
+	Frame = true,
+	Root = true,
+	Hit = true,
+	Catcher = true,
+}
+
+local function deriveId(rbx: any): string?
+	if typeof(rbx) ~= "Instance" then
+		return nil
+	end
+	local name = rbx.Name
+	local parent = rbx.Parent
+	if GENERIC_NAMES[name] and parent ~= nil then
+		return `{parent.Name}/{name}`
+	end
+	return name
+end
+
+local function track(kind: string, id: string?)
+	local handler = trackHandler
+	if handler ~= nil and id ~= nil and id ~= "" then
+		pcall(handler, kind, id)
+	end
+end
+
+--API
+-- Count a press by hand, for clickable components outside `usePressable`.
+function Interaction.Track(kind: string, id: string)
+	track(kind, id)
+end
+
 --API
 -- Emit an interaction cue by hand. For clickable components that deliberately
 -- do NOT take `usePressable`'s visual bounce (a Toggle owns its knob slide, a
 -- card its selected pose) but must still CLICK — call it from the activation
 -- handler. Components that use `usePressable` get this for free; calling it
 -- there too would double the click.
-function Interaction.Cue(name: string)
+-- `id` is optional and, when given, also COUNTS the press (those components
+-- are invisible to `usePressable`'s automatic capture, so this is the only
+-- place their taps can be seen).
+function Interaction.Cue(name: string, id: string?)
 	cue(name)
+	if id ~= nil and name == "press" then
+		track("press", id)
+	end
 end
 
 --API
@@ -175,7 +251,10 @@ Interaction.ZeroFill = ZERO_FILL
 -- Returns (scaleRef, handlers). Spread `handlers` onto the TextButton props and
 -- render `Interaction.pressLayer(scaleRef, ...)` as a child.
 -- config: { enabled=true, onActivated=fn?, onPressStart=fn(input)?,
---           onPressEnd=fn(input)?, hoverScale?, pressScale?, feel? }
+--           onPressEnd=fn(input)?, hoverScale?, pressScale?, feel?,
+--           analyticsId=string? }
+-- `analyticsId` overrides the Instance-name-derived control id used for tap
+-- counting. Only worth setting when the rendered Name is ambiguous.
 -- onActivated fires on a click/tap (release); onPressStart/onPressEnd fire on
 -- press-down / release for HOLD buttons (a tap fires both). `input` is the
 -- Touch InputObject (nil for mouse) — lets a caller correlate the finger.
@@ -214,10 +293,29 @@ function Interaction.usePressable(config)
 	pressStartRef.current = config.onPressStart
 	local pressEndRef = React.useRef(nil)
 	pressEndRef.current = config.onPressEnd
+	-- Read through a ref, never through the memo deps: callers build ids from
+	-- props (`Difficulty_{id}`) and a new string every render would rebuild
+	-- every handler on each of the HUD's ~14 re-renders per second.
+	local analyticsRef = React.useRef(nil)
+	analyticsRef.current = config.analyticsId
 
 	local handlers = React.useMemo(function()
 		if not enabled then
-			return {}
+			-- A DISABLED button still reports that it was pressed. `InputBegan`
+			-- fires for inputs over a GuiObject whatever its `Active` value, so
+			-- this needs no property change and sinks nothing extra — while
+			-- `Activated`/`MouseButton1Click` stay correctly suppressed, which
+			-- is exactly the event being recorded: a press with no answer.
+			return {
+				[React.Event.InputBegan] = function(rbx, input)
+					if
+						input.UserInputType == Enum.UserInputType.Touch
+						or input.UserInputType == Enum.UserInputType.MouseButton1
+					then
+						track("dead", analyticsRef.current or deriveId(rbx))
+					end
+				end,
+			}
 		end
 
 		local function isPressed(): boolean
@@ -259,7 +357,7 @@ function Interaction.usePressable(config)
 		-- on the AGGREGATE press edge (first-down / last-up), the optional HOLD
 		-- callbacks — so multi-touch and drag-off release resolve correctly.
 		-- `input` is the Touch InputObject (nil for mouse) that caused the edge.
-		local function updatePress(wasPressed: boolean, input)
+		local function updatePress(wasPressed: boolean, input, rbx)
 			retarget()
 			local nowPressed = isPressed()
 			if nowPressed == wasPressed then
@@ -267,6 +365,9 @@ function Interaction.usePressable(config)
 			end
 			if nowPressed then
 				cue("press") -- exactly one click per press, however many fingers
+				-- Counted on the same AGGREGATE edge as the click, so a
+				-- multi-touch press or a drag-off is one tap, not three.
+				track("press", analyticsRef.current or deriveId(rbx))
 			end
 			local cb = if nowPressed then pressStartRef.current else pressEndRef.current
 			if cb then
@@ -280,34 +381,34 @@ function Interaction.usePressable(config)
 				cue("hover")
 				retarget()
 			end,
-			[React.Event.MouseLeave] = function()
+			[React.Event.MouseLeave] = function(rbx)
 				local was = isPressed()
 				flags.current.hover = false
 				flags.current.mouseDown = false -- pointer left: drop a mouse hold
-				updatePress(was, nil)
+				updatePress(was, nil, rbx)
 			end,
-			[React.Event.MouseButton1Down] = function()
+			[React.Event.MouseButton1Down] = function(rbx)
 				local was = isPressed()
 				flags.current.mouseDown = true
-				updatePress(was, nil)
+				updatePress(was, nil, rbx)
 			end,
-			[React.Event.MouseButton1Up] = function()
+			[React.Event.MouseButton1Up] = function(rbx)
 				local was = isPressed()
 				flags.current.mouseDown = false
-				updatePress(was, nil)
+				updatePress(was, nil, rbx)
 			end,
-			[React.Event.InputBegan] = function(_, input)
+			[React.Event.InputBegan] = function(rbx, input)
 				if input.UserInputType == Enum.UserInputType.Touch then
 					local was = isPressed()
 					flags.current.touches[input] = true
-					updatePress(was, input)
+					updatePress(was, input, rbx)
 				end
 			end,
-			[React.Event.InputEnded] = function(_, input)
+			[React.Event.InputEnded] = function(rbx, input)
 				if input.UserInputType == Enum.UserInputType.Touch then
 					local was = isPressed()
 					flags.current.touches[input] = nil
-					updatePress(was, input)
+					updatePress(was, input, rbx)
 				end
 			end,
 			[React.Event.MouseButton1Click] = function()

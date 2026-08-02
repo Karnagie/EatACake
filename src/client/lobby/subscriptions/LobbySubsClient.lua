@@ -54,9 +54,16 @@ function LobbySubsClient.Start(data, modules, subscriptions)
 	local lobbyData = data.LobbyUiData
 	local AppRoot = modules.AppRoot
 	local SoundPool = modules.SoundPool
+	-- Optional (features/analytics.md): the three lobby choices never reach
+	-- the server unless START is pressed and accepted, so they can only be
+	-- recorded here.
+	local Analytics = modules.LocalAnalyticsService
 	if lobbyData == nil or AppRoot == nil then
 		Log.Warn(SCOPE, "LobbyUiData/AppRoot missing -- lobby UI wiring skipped")
 		return
+	end
+	if Analytics == nil then
+		Log.Warn(SCOPE, "LocalAnalyticsService missing -- difficulty/party/start selections will not be logged")
 	end
 
 	local config = lobbyData["match-config"]
@@ -73,7 +80,26 @@ function LobbySubsClient.Start(data, modules, subscriptions)
 	end
 
 	AppRoot.SetCallbacks({
+		onMatchDifficultyPick = function(difficulty)
+			if Analytics then
+				Analytics.Flow("difficulty-pick")
+				Analytics.Funnel("queue", "difficulty")
+			end
+		end,
+		onMatchPartyPick = function(maxPlayers)
+			if Analytics then
+				Analytics.Flow("party-pick")
+				Analytics.Funnel("queue", "party")
+			end
+		end,
 		onConfigureMatch = function(difficulty, maxPlayers)
+			-- Recorded BEFORE validation: a press the client itself rejects is
+			-- still a press, and the gap between `start-press` and the server's
+			-- `countdown` is exactly the set of players whose START did nothing.
+			if Analytics then
+				Analytics.Flow("start-press")
+				Analytics.Funnel("queue", "start")
+			end
 			if type(difficulty) ~= "string" or config.difficulties[difficulty] == nil then
 				Log.Warn(SCOPE, `selector produced invalid difficulty '{tostring(difficulty)}' -- request dropped`)
 				return

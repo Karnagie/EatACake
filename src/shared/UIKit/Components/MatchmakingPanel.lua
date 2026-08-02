@@ -4,6 +4,12 @@
 	Players choose one difficulty and one party size, then start the match.
 	Selections are local presentation state and reset whenever `sessionKey`
 	changes. Server-owned busy/error/status state arrives through props.
+
+	`onSelectDifficulty(id)` / `onSelectPlayers(count)` fire on each choice —
+	they change nothing here (the state above already did), they exist so the
+	choice itself is observable. Neither selection reaches the server unless
+	START is pressed, which makes "chose a difficulty, then left" a real and
+	otherwise unmeasurable outcome (docs/features/analytics.md).
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -52,6 +58,13 @@ local function MatchmakingPanel(props)
 			zIndex = zIndex,
 			onActivated = function()
 				setSelectedDifficulty(id)
+				-- Reported OUT, not just kept in local state: a player who
+				-- picks a difficulty and then walks away never sends anything
+				-- to the server, so without this the most interesting drop-off
+				-- in the lobby is invisible.
+				if props.onSelectDifficulty then
+					props.onSelectDifficulty(id)
+				end
 			end,
 		})
 	end
@@ -73,6 +86,9 @@ local function MatchmakingPanel(props)
 			zIndex = zIndex,
 			onActivated = function()
 				setSelectedMaxPlayers(value)
+				if props.onSelectPlayers then
+					props.onSelectPlayers(value)
+				end
 			end,
 		})
 	end

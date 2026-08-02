@@ -300,7 +300,7 @@ local function HexTreeOverlay(props)
 		-- Nodes are hit-tested through the pan surface rather than rendered as
 		-- buttons, so `usePressable` never sees this press — cue it by hand, only
 		-- once the tap has actually landed ON a node (empty space returned above).
-		Interaction.Cue("press")
+		Interaction.Cue("press", `UpgradeTree/{best.kind}`)
 		if best.kind == "category" or best.kind == "back" then
 			setFocusedKey(nil)
 			setFocus(nil)

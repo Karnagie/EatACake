@@ -24,7 +24,7 @@
 		state           -- "buy" | "owned" | "unavailable" | "unaffordable"
 		                   (default "buy"; only "buy" is enabled)
 		iconName        -- Theme.Icons key, default UiRobux; nil in text-only states
-		size, position, zIndex, style (Theme.ShopPrice | Theme.ShopPriceWide)
+		size, position, zIndex, style (Theme.ShopPrice | Theme.ShopPriceCard | Theme.ShopPriceHero (ShopPriceWide: no live callers))
 		onActivated()
 ]]
 
@@ -61,6 +61,10 @@ local function PriceButton(props)
 		enabled = enabled,
 		onActivated = props.onActivated,
 		squash = true,
+		-- Without this every buy affordance in the shop reports under the
+		-- rendered Name ("PriceButton") — one undifferentiated bucket for the
+		-- most important tap in the game. Callers pass the item id.
+		analyticsId = props.analyticsId,
 	})
 
 	local hasIcon = props.iconName ~= nil
@@ -105,6 +109,32 @@ local function PriceButton(props)
 	}
 
 	if hasIcon then
+		-- Faint light disc under the glyph (squint-test 2026-08-01): the
+		-- dark Robux mark nearly vanished on the green shelf. BOTH tokens
+		-- come from the style: the pad is per-style geometry sized so the
+		-- disc never crosses the Face's dark bottom lip (iron rules 2/3).
+		if style.IconPlateTransparency ~= nil and style.IconPlatePad ~= nil then
+			local pad = style.IconPlatePad
+			layers.IconPlate = React.createElement("Frame", {
+				Name = "IconPlate",
+				Position = UDim2.fromScale(
+					style.IconPosition.X - style.IconSize.X * pad,
+					style.IconPosition.Y - style.IconSize.Y * pad
+				),
+				Size = UDim2.fromScale(
+					style.IconSize.X * (1 + 2 * pad),
+					style.IconSize.Y * (1 + 2 * pad)
+				),
+				BackgroundColor3 = Color3.new(1, 1, 1),
+				BackgroundTransparency = style.IconPlateTransparency,
+				BorderSizePixel = 0,
+				ZIndex = zIndex + 3,
+			}, {
+				Corner = React.createElement("UICorner", {
+					CornerRadius = UDim.new(1, 0),
+				}),
+			})
+		end
 		layers.Icon = React.createElement("ImageLabel", {
 			Name = "Icon",
 			Position = UDim2.fromScale(style.IconPosition.X, style.IconPosition.Y),
@@ -113,7 +143,7 @@ local function PriceButton(props)
 			BorderSizePixel = 0,
 			Image = Theme.Icon(props.iconName),
 			ScaleType = Enum.ScaleType.Fit,
-			ZIndex = zIndex + 3,
+			ZIndex = zIndex + 4,
 		})
 	end
 

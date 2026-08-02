@@ -209,8 +209,16 @@ function UpgradesSubsClient.Start(data, modules)
 		end
 	end)
 
+	local Analytics = modules.LocalAnalyticsService
+
 	AppRoot.SetCallbacks({
 		onBuyUpgrade = function(id: string)
+			-- The tap on a node's BUY. The server logs the attempt and the
+			-- result; this exists so a buy the client itself never sends (a
+			-- dropped remote, a stale panel) still shows up as a click.
+			if Analytics then
+				Analytics.Funnel("upgrades", "select")
+			end
 			rBuy:FireServer(id)
 		end,
 		-- Routed from the overlay Close button so blur + E-binding stay in sync.

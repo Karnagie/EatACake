@@ -13,7 +13,7 @@ Common props on nearly everything: `name`, `anchorPoint`, `position`, `size`
 | Component | Purpose | Key props |
 |---|---|---|
 | `OutlinedText` | ALL text. Scaled UIStroke outline (0.08) + one stroked shadow copy offset (-0.003, +0.1) + gradient fill | `text`, `textColor`, `textGradient`, `outlineColor` (default `Theme.Colors.TextOutline`), `textXAlignment`, `transparency`, `disabled` (legacy `outline*Multiplier`/`outlineCenter` props are accepted and ignored) |
-| `Button` | Rect button, Outer/Rim/Face + label | `text`, `style` (default `Theme.Button`; centered text `Theme.ActionButton`; accents `Theme.EquipGreen` / `Theme.UnequipRed`), `textXAlignment`, `onActivated` |
+| `Button` | Rect button, Outer/Rim/Face + label | `text`, `style` (default `Theme.Button`; centered text `Theme.ActionButton`; accents `Theme.EquipGreen` / `Theme.UnequipRed`), `textXAlignment`, `onActivated`, `pulse` (looping attention breathe; rides a SECOND UIScale on the ROOT — Roblox applies one UIScale per GuiObject, so it cannot share `Content` with the press one) |
 | `IconButton` | Square 1:1 button | `iconImage` (rbxassetid) OR `icon` = `"sort" \| "gear" \| "paw"` (vector glyphs), `style` (default `Theme.IconButton`), `onActivated`, `children` (custom glyph slot) |
 | `Toggle` | Pill switch, green on / red off | `value` (bool), `onChanged(newValue)`, `enabled`; default position/size from `Theme.Layout` (inside a SettingRow) |
 | `CloseButton` | Red X button (4 layers + rotated-pill X) | `onActivated`, `enabled` |
@@ -65,6 +65,10 @@ its own animation.
 | `PetsPanel` | Landscape panel: action row (Chip counter + ActionButton + sort IconButton) + 6-col grid in ScrollPane; `pets`, `equipped`, `equippedCount`, `maxEquipped`, callbacks |
 | `PetsInspectPanel` | Same + 4-col grid + inspector sidebar (plate, name, stat rows, green/red equip button); extra props `selectedId`, `selectedPet`, `onEquipToggle`, `onPetActivated` |
 | `Hud` | Screen overlay: 3 stat rows (icon+colored text) + 2 labeled menu buttons; props `speedText/goldText/energyText`, `onSettings`, `onPets`; `BARE_STATS`/`BARE_BUTTONS` switches at top of file |
+| `TutorialSlides` | FULL-BLEED story board: own dim + a centred aspect-locked block of 4 fixed cells (no UIGridLayout / no ScrollingFrame, so none of the grid pitfalls apply) + one bottom-centre CTA. Modal ON PURPOSE — its dim is an `Active` TextButton. Props `visible`, `slides` (icon NAMES), `titleText`, `skipText`, `boardSize`, `onSkip` |
+| `TutorialHint` | Small landscape instruction card: glyph plate \| headline+body \| CTA. **The kit's one NON-modal overlay** — no scrim, no catcher, only its CTA is a button (style-rules §9). Props `visible`, `glyphMode`, `glyphLabel`, `titleText`, `bodyText`, `buttonText`, `size`, `onDismiss` |
+| `InputGlyph` | Vector glyph for an INPUT: `mode = "mouse"` (both buttons drawn, left one lit — the pair is what makes it read as a mouse) or `"tap"` (a miniature of the real on-screen button, `label` = that button's own word). Caller picks the mode from the device; shared code must not read UserInputService |
+| `HintArrow` | World-tracking objective marker: bobs above an on-screen target, ray-box pins to the padded viewport edge and rotates toward an off-screen one. Owns its own RenderStepped (ADR-0016); target arrives as `getTarget()` read through a ref. Props `visible`, `getTarget`, `labelText` |
 
 ## Theme section inventory (Theme.lua)
 
@@ -72,7 +76,9 @@ Style tables: `Colors`, `Gradients`, `Font`, `Toggle`, `Header`, `HeaderWide`,
 `Panel`, `PanelWide`, `Button`, `ActionButton`, `EquipGreen`, `UnequipRed`,
 `Exit` (close), `IconButton`, `Scrollbar`, `Rarity.{Order,Common,Rare,Epic,
 Legendary}`, `PetCard` (+ `SelectOuterGradient`/`SelectRingGradient`),
-`Inspector`, `StatRow`, `Chip`, `Hud` (+ `Icons`, per-stat text colors).
+`Inspector`, `StatRow`, `Chip`, `Hud` (+ `Icons`, per-stat text colors),
+`TutorialSlides`/`TutorialPanel`/`TutorialHint`/`TutorialGlyph`/`TutorialArrow`
+(+ `Feel.Pulse`, the `Button` `pulse` prop's timings).
 Layout tables (per-screen geometry): `Layout` (settings portrait),
 `PetsLayout`, `PetsInspectLayout`, `Hud`.
 Everything is `table.freeze`d — add new sections in Theme.lua before the

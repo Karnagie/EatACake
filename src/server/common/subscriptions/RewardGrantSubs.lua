@@ -24,6 +24,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Net = require(Shared:WaitForChild("Net"))
 local Log = require(Shared:WaitForChild("Log"))
+local AnalyticsConfig = require(Shared:WaitForChild("config"):WaitForChild("AnalyticsConfig"))
 
 -- Resolved from the subscriptions registry in Start. COMMON, so present in both
 -- places — still nil-tolerant, per the registry pattern (ADR-0014).
@@ -69,6 +70,10 @@ end
 
 function RewardGrantSubs.Start(data, services, subscriptions)
 	BoostSubs = subscriptions.BoostSubs
+	local AnalyticsSubs = subscriptions.AnalyticsSubs
+	if AnalyticsSubs == nil then
+		Log.Warn(SCOPE, "AnalyticsSubs missing — currency SOURCES will be absent from the economy dashboard")
+	end
 	local uCurrency = Net.Update("CurrencyUpdate")
 
 	local function sendCurrency(player: Player)
@@ -76,6 +81,32 @@ function RewardGrantSubs.Start(data, services, subscriptions)
 		local gems = services.EconomyService.GetGems(player.UserId)
 		if calories ~= nil and gems ~= nil then
 			uCurrency:FireClient(player, { calories = calories, gems = gems })
+		end
+	end
+
+	-- Every currency GRANT in the game passes through this module (ADR-0002),
+	-- which makes it the one honest place to log economy sources: the amount
+	-- recorded is what the handler actually added, after the gems/calorie
+	-- multipliers, not the descriptor's advertised number. `source` is already
+	-- the grant's provenance string ("shop-gems:key", "find", "daily") — it
+	-- becomes the SKU, so the economy chart breaks down by where money is
+	-- minted without a single extra event name.
+	local function beatSource(player: Player, currency: string, amount: number, balance: number?, source: string?)
+		if AnalyticsSubs == nil or amount <= 0 then
+			return
+		end
+		local ok, err = pcall(
+			AnalyticsSubs.Economy,
+			player,
+			"source",
+			currency,
+			amount,
+			balance or 0,
+			AnalyticsConfig.economy.transactions.gameplay,
+			source
+		)
+		if not ok then
+			Log.Once(SCOPE, "grant-analytics", `economy analytics beat FAILED (telemetry only, grant unaffected): {err}`)
 		end
 	end
 
@@ -88,6 +119,13 @@ function RewardGrantSubs.Start(data, services, subscriptions)
 			return nil -- profile not loaded
 		end
 		sendCurrency(player)
+		beatSource(
+			player,
+			AnalyticsConfig.economy.currencies.calories,
+			amount,
+			services.EconomyService.GetCalories(player.UserId),
+			source
+		)
 		return { kind = "calories", amount = amount }
 	end)
 
@@ -105,6 +143,13 @@ function RewardGrantSubs.Start(data, services, subscriptions)
 			return nil
 		end
 		sendCurrency(player)
+		beatSource(
+			player,
+			AnalyticsConfig.economy.currencies.gems,
+			amount,
+			services.EconomyService.GetGems(player.UserId),
+			source
+		)
 		return { kind = "gems", amount = amount }
 	end)
 

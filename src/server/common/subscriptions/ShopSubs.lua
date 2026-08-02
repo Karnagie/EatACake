@@ -58,14 +58,56 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Net = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Net"))
 local Log = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Log"))
 local PlaceConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("config"):WaitForChild("PlaceConfig"))
+local AnalyticsConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("config"):WaitForChild("AnalyticsConfig"))
 -- Resolved from the subscriptions registry in Start, never by script.Parent —
 -- partition moves must not break the wiring (see the lobby/game split).
 local RewardGrantSubs
 local PassOwnershipSubs
+local AnalyticsSubs -- optional; features/analytics.md
 
 local SCOPE = "ShopSubs"
 
 local ShopSubs = {}
+
+-- Telemetry on the MONEY path, and therefore doubly forbidden from being able
+-- to affect it: every call is pcall'd and a failure is a console line, never a
+-- refused purchase (R8).
+local function beatShop(player: Player, funnelStep: string?, eventKey: string?, sku: string?, result: string?, value: number?)
+	if AnalyticsSubs == nil then
+		return
+	end
+	local ok, err = pcall(function()
+		if funnelStep then
+			AnalyticsSubs.Funnel(player, "shop", funnelStep)
+		end
+		if eventKey then
+			AnalyticsSubs.Event(player, eventKey, value or 1, { sku, result, PlaceConfig.current() }, {
+				tier = "critical",
+			})
+		end
+	end)
+	if not ok then
+		Log.Once(SCOPE, "shop-analytics", `shop analytics beat FAILED (telemetry only, purchase unaffected): {err}`)
+	end
+end
+
+local function beatEconomy(
+	player: Player,
+	flow: string,
+	currency: string,
+	amount: number,
+	balance: number,
+	transaction: string,
+	sku: string?
+)
+	if AnalyticsSubs == nil then
+		return
+	end
+	local ok, err = pcall(AnalyticsSubs.Economy, player, flow, currency, amount, balance, transaction, sku)
+	if not ok then
+		Log.Once(SCOPE, "shop-economy-analytics", `economy analytics beat FAILED (telemetry only): {err}`)
+	end
+end
 
 local ShopService, PersistenceService, EconomyService
 local EconomySubs
@@ -336,6 +378,19 @@ local function processReceipt(receiptInfo)
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 	ShopSubs.SendShop(player)
+	-- Logged only HERE, after the save confirmed. Anywhere earlier and a
+	-- re-delivered receipt would count the same sale twice, which on the one
+	-- chart the game is monetised against is worse than not counting it.
+	beatShop(player, "bought", "purchase-result", key, "robux", 1)
+	beatEconomy(
+		player,
+		"sink",
+		AnalyticsConfig.economy.currencies.robux,
+		receiptInfo.CurrencySpent,
+		0,
+		AnalyticsConfig.economy.transactions.iap,
+		key
+	)
 	Log.Info(SCOPE, `product '{key}' granted to {player.Name} ({receiptInfo.CurrencySpent} R$)`)
 	return Enum.ProductPurchaseDecision.PurchaseGranted
 end
@@ -353,6 +408,10 @@ function ShopSubs.Start(data, services, subscriptions)
 	RewardGrantSubs = subscriptions.RewardGrantSubs
 	PassOwnershipSubs = subscriptions.PassOwnershipSubs
 	EconomySubs = subscriptions.EconomySubs
+	AnalyticsSubs = subscriptions.AnalyticsSubs
+	if AnalyticsSubs == nil then
+		Log.Warn(SCOPE, "AnalyticsSubs missing — purchase prompts, results and economy events will not be logged")
+	end
 	ShopService = services.ShopService
 	PersistenceService = services.PersistenceService
 	EconomyService = services.EconomyService
@@ -425,6 +484,11 @@ function ShopSubs.Start(data, services, subscriptions)
 			Log.Warn(SCOPE, `product '{key}' has no devProductId in ShopData — purchase refused`)
 			return
 		end
+		-- The Roblox prompt is about to appear. Everything that does NOT reach
+		-- `purchase_result` after this is a player who saw the price and said
+		-- no — the most valuable number in the shop, and one Roblox's own
+		-- reporting does not give you.
+		beatShop(player, "prompt", "purchase-prompt", key, "robux", 1)
 		MarketplaceService:PromptProductPurchase(player, def.devProductId)
 	end)
 
@@ -516,12 +580,14 @@ function ShopSubs.Start(data, services, subscriptions)
 		end
 		-- ATOMIC check + deduct inside EconomyService. A read-then-subtract here
 		-- would leave a window for a second click to pass the same balance check.
+		beatShop(player, "prompt", "purchase-prompt", key, "gems", 1)
 		local spent, balance = EconomyService.TrySpendGems(userId, price)
 		if not spent then
 			-- The "not enough gems" path. The card is already greyed client-side,
 			-- so arriving here means a stale client or a race — either way it is a
 			-- refusal the console has to show (R8), not a silent no-op.
 			Log.Info(SCOPE, `{player.Name} cannot afford '{key}': {price} gems, balance {tostring(balance)} — refused`)
+			beatShop(player, nil, "purchase-result", key, "unaffordable", 1)
 			ShopSubs.SendShop(player)
 			return
 		end
@@ -548,6 +614,7 @@ function ShopSubs.Start(data, services, subscriptions)
 			if EconomySubs then
 				EconomySubs.SendCurrency(player)
 			end
+			beatShop(player, nil, "purchase-result", key, "refunded", 1)
 			Log.Warn(SCOPE, `gem product '{key}': {declined} grant(s) declined AFTER the spend — refunded {price} gems to {player.Name}`)
 			return
 		end
@@ -570,6 +637,16 @@ function ShopSubs.Start(data, services, subscriptions)
 				"EconomySubs missing — a gem purchase cannot re-push the balance, so the HUD stays stale until the next earn"
 			)
 		end
+		beatShop(player, "bought", "purchase-result", key, "gems", 1)
+		beatEconomy(
+			player,
+			"sink",
+			AnalyticsConfig.economy.currencies.gems,
+			price,
+			EconomyService.GetGems(userId) or 0,
+			AnalyticsConfig.economy.transactions.shop,
+			key
+		)
 		Log.Info(SCOPE, `gem product '{key}' bought by {player.Name} for {price} gems (balance {tostring(balance)})`)
 	end)
 

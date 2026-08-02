@@ -7,15 +7,22 @@
 	screens and let two of the four categories render with no scroll at all.
 
 	Selected/idle is a GRADIENT SWAP on the same geometry (the PetCard rule):
-	selected wears the kit's gold selection accent — the same "this one is
-	active" language as the pets grid and the hex tree — and idle is a muted
-	slate chip, deliberately low-contrast so exactly one tab is bright.
+	selected wears a DEEPER gold than Rarity.Legendary (a VALUE anchor — the
+	bright gold sat in the white panel's own L* band and vanished in
+	grayscale) and idle is a light WASH of the panel surface. The first idle
+	cut was a "muted" slate — desaturated but DARK, dL* −58 vs the panel, so
+	the three idle tabs tonally out-shouted the selected one 3.6x (tonal
+	audit 2026-08-01; quiet means close in VALUE, not just low chroma —
+	style-rules §4).
 
-	props: id, label, selected, position, size, zIndex, name, onActivated(id)
+	props: id, label, iconName?, selected, position, size, zIndex, name,
+	onActivated(id) — iconName leads the label with the section's glyph
+	(icon-first: squint-test skill)
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local React = require(ReplicatedStorage.Packages.React)
+local Log = require(script.Parent.Parent.Parent.Log)
 local Theme = require(script.Parent.Parent.Theme)
 local Interaction = require(script.Parent.Parent.Interaction)
 local OutlinedText = require(script.Parent.OutlinedText)
@@ -56,6 +63,27 @@ local function ShopTab(props)
 		squash = true,
 	})
 
+	-- Icon-first (squint-test skill): with an iconName the tab leads with its
+	-- section's glyph and the label shifts right — a non-reader navigates the
+	-- row by shapes. Without one, the label spans the face as before.
+	-- The guard checks EVERY key the icon path reads, and a dropped icon is
+	-- never silent (R8) — a custom style missing the keys must say so.
+	local styleHasIconKeys = style.IconPosition ~= nil
+		and style.IconSize ~= nil
+		and style.LabelWithIconPosition ~= nil
+		and style.LabelWithIconSize ~= nil
+	if props.iconName ~= nil and not styleHasIconKeys then
+		Log.Once(
+			"UIKit",
+			"shoptab-style-no-icon-keys",
+			`ShopTab got iconName '{tostring(props.iconName)}' but the style lacks the Icon*/LabelWithIcon* `
+				.. "keys — the icon is NOT rendered. Add the four keys to the custom style (see Theme.ShopTab)."
+		)
+	end
+	local hasIcon = props.iconName ~= nil and styleHasIconKeys
+	local labelPosition = if hasIcon then style.LabelWithIconPosition else style.LabelPosition
+	local labelSize = if hasIcon then style.LabelWithIconSize else style.LabelSize
+
 	local layers = {
 		Outer = roundedFrame(
 			"Outer",
@@ -81,10 +109,20 @@ local function ShopTab(props)
 			zIndex + 2,
 			accent.FaceGradient
 		),
+		Icon = hasIcon and React.createElement("ImageLabel", {
+			Name = "Icon",
+			Position = UDim2.fromScale(style.IconPosition.X, style.IconPosition.Y),
+			Size = UDim2.fromScale(style.IconSize.X, style.IconSize.Y),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Image = Theme.Icon(props.iconName),
+			ScaleType = Enum.ScaleType.Fit,
+			ZIndex = zIndex + 3,
+		}) or nil,
 		Label = React.createElement(OutlinedText, {
 			text = props.label or "",
-			position = UDim2.fromScale(style.LabelPosition.X, style.LabelPosition.Y),
-			size = UDim2.fromScale(style.LabelSize.X, style.LabelSize.Y),
+			position = UDim2.fromScale(labelPosition.X, labelPosition.Y),
+			size = UDim2.fromScale(labelSize.X, labelSize.Y),
 			textColor = Color3.new(1, 1, 1),
 			textGradient = accent.TextGradient,
 			outlineColor = accent.OutlineColor,

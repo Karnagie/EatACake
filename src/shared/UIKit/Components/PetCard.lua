@@ -179,7 +179,7 @@ local function PetCard(props)
 			AutoButtonColor = false,
 			ZIndex = zIndex,
 			[React.Event.MouseButton1Click] = function()
-				Interaction.Cue("press")
+				Interaction.Cue("press", "Squishies/Card")
 				if props.onActivated then
 					props.onActivated(props.id)
 				end

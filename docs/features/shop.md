@@ -150,13 +150,15 @@ reading `currency` off the same snapshot the cells were built from.
 
 ## UI — landscape TABBED shop of product CARDS
 Kit `ShopPanel` on `PanelWide`/`HeaderWide` (1000×600, maxViewportFraction
-0.92). Balance chips (gems + calories) sit in the HEADER band left of the title;
+0.92). The GEMS balance chip sits in the HEADER band left of the title (gems
+only — nothing in the shop is calorie-priced, and the chip doubles as the
+Get-Gems shortcut);
 under it a tab row, then one scroll showing only the active tab.
 
 | Tab | Sections (in order) | `kind` | Cell | Grid | Canvas |
 |---|---|---|---|---|---|
-| Offers | Free Stuff, Featured | `banner`, `hero` | `ShopBanner` 870×176, `ShopHeroCard` 870×260 | 1 × full width | 1.6 screens |
-| Passes | Game Passes | `card` | `ShopCard` 282×338 | 3 cols | 1.9 screens |
+| Offers | Free Stuff, Featured | `banner`, `hero` | `ShopBanner` 870×176, `ShopHeroCard` 870×300 | 1 × full width | ~1.6 screens |
+| Passes | Game Passes | `smallcard` | `ShopCard` 208×264 | 4 cols | row 2 PEEKS (~72px) — the scroll cue; at 3-across `card` row 2 ended exactly at the window bottom and passes 4-6 were invisible |
 | Boosts | Boosts (GEM-priced) | `smallcard` | `ShopCard` 208×264 | 4 cols | fits |
 | Gems | Gems | `smallcard` | `ShopCard` 208×264 | 4 cols | fits |
 
@@ -196,7 +198,11 @@ gem cluster and a square pack drew at wildly different visual sizes when placed
 straight on the face. Icon area 13.5% → **22.0% measured**, identical on both
 card sizes. Anything richer than this window still belongs in the ICON ART.
 
-**Two card sizes on purpose**: passes (6) at 3 across, boosts (4) and gems (4) at
+**One grid size** (2026-08-01): passes, boosts and gems all render the
+208x264 smallcard at 4 across — the hero is the only bigger cell. Passes
+were briefly 282x338 at 3 across ("permanent perks earn the bigger cell"),
+but that row height ended row 2 exactly at the window bottom (passes 4-6
+invisible) and switched grid rhythm between adjacent tabs. Superseded: at
 4 across. It is the only split where every row is FULL (6 over 4 columns = 4+2,
 4 over 3 = 3+1), and the permanent perks earning the bigger cell is the right
 hierarchy anyway.
@@ -238,11 +244,15 @@ Sums: `3*282 + 2*12 = 870` ✓, `4*208 + 3*12 = 868` (2px slack on purpose),
 content column `56 tabs + 10 + 370 pane = 436` ✓.
 
 Cell states colour the SHELF: `buy` (green + the currency glyph — Robux or gem —
-+ the bare amount) / `owned` (blue "Owned" + a green check badge on the art
-window's top-right corner — the cell is NOT dimmed) / `unavailable` (grey
-"SOON", the id is still 0) / `unaffordable` (the same grey and disabled, but it
-KEEPS the glyph and the amount — a gem product the player cannot pay for yet, and
-the price is exactly the information they need, so it is not replaced by a word).
++ the comma-formatted amount) / `owned` (a FLAT muted STAMP — not a raised
+button; three review lenses flagged the old glossy blue shelf as a false
+affordance — plus the green check badge on the art window's top-right corner) /
+`unavailable` (grey "SOON", the id is still 0) / `unaffordable` (grey and
+disabled, KEEPS the glyph and the amount, and the price is RED — grey-with-
+price read as "sold out/disabled"; red reads "too expensive". The player's
+path out is the header gem pill's green "+", which jumps to the Gems tab —
+`balances[].jumpTabId`). A modal SCRIM (`Theme.PanelScrim`, AppRoot) dims the
+world + HUD behind every open panel and closes it on tap-outside.
 View-model: `LocalShopService.BuildTabs(shop, group, gems)` — the third argument
 is the player's BALANCE, without which a gem card cannot choose between `buy` and
 `unaffordable`.
@@ -251,6 +261,20 @@ is the player's BALANCE, without which a gem card cannot choose between `buy` an
 compatibility (kit iron rule 8).
 
 ## Gotchas
+- **Tonal hierarchy is measured, not eyeballed — and tonal fixes must keep
+  AFFORDANCE language** (audit + user round 2, 2026-08-01, flow
+  `2026-08-01_tonal-hierarchy-toolkit.md`): idle tabs are LIGHT SKY-BLUE
+  BUTTONS (`Theme.ShopTabStates.idle` — the original "muted" DARK slate
+  out-shouted the selected tab 3.6x in L*; the first fix, a desaturated
+  wash, read as LOCKED — quiet an interactive element inside its own hue
+  family, keep rim + lip); the selected face is a deeper gold than
+  `Rarity.Legendary.Face` (VALUE anchor vs the white panel); the hero has
+  **NO art plate** (`ShopHero.ArtPlate = false` — a single-item hero has no
+  mixed-aspect art to normalise, so any backing field is a pure attention
+  magnet; the grid cards KEEP their windows, which do that job); hero
+  bundle chips are FLAT TAGS (`ShopHeroItem`, style-rules §2c — the chip
+  recipe read as buttons). Re-run the `tonal-hierarchy` skill gate after
+  any shop restyle.
 - **`desc` LENGTH IS A LAYOUT CONSTRAINT.** `TextScaled` fits BOTH axes, so on a
   narrow cell the WIDTH binds and long copy SHRINKS instead of truncating —
   "One squishy, better odds" rendered at ~8px. Limits: **~22 chars** on the big
@@ -258,15 +282,20 @@ compatibility (kit iron rule 8).
   same rule binds `label` on the small card's 176×28 title zone: past ~11
   characters the TITLE renders smaller than the 16px perk line under it, which
   inverts the card's hierarchy — that is why the boosts ship as "Extra Bite" /
-  "2x Stomach" and not the requested "Extra Bite Size" / "2x Stomach Capacity"
+  "x2 Stomach" and not the requested "Extra Bite Size" / "x2 Stomach Capacity"
   (15 chars → 15.6px). One name per perk everywhere: the daily card and the hero
   chip are NARROWER than this zone, so a long form there only moves the problem.
   The arithmetic is in the `ShopData` header where the copy is written.
 - **The price label must NOT carry a currency word.** The shelf draws the glyph,
   so `price-robux` ("R$ {n}") beside it rendered "⬡ R$ 199" on every card. Buy
-  state uses `price-robux-short` / `price-gems-short` (both "{n}"); OWNED / SOON
-  keep full words (no glyph). Two keys, not one, so a translation can format the
-  numeral differently per currency.
+  state uses `price-robux-short` / `price-gems-short` (both "{n}", comma-
+  formatted). SOON keeps the full word with NO glyph; **OWNED leads with a
+  `UiCheck` glyph** beside the word (icon-first, squint-test skill — state must
+  read without the text; yes, that is a second check beside the art-corner
+  badge, and the repetition is deliberate for non-readers). Price glyphs sit on
+  a faint light disc (`IconPlateTransparency`/`IconPlatePad`, sized per style
+  so the disc never crosses the Face's dark bottom lip). Two locale keys, not
+  one, so a translation can format the numeral differently per currency.
 - **The ribbon overhangs the card's TOP edge** into the row gap (y −12/−9), so it
   no longer competes with the perk line and no longer covers the art — both
   earlier placements were measured and rejected. Top-only: the first and last
@@ -308,7 +337,11 @@ compatibility (kit iron rule 8).
 - `ShopHeroCard` draws at most `Theme.ShopHero.BundleColumns` chips and
   `Log.Once`s when a bundle lists more (an offer that under-sells itself is worse
   than a truncated one). It is **4** since the Starter Pack went to four grants,
-  and the row was RE-CUT rather than squeezed: chips `4*140 + 3*12 = 596` ✓,
+  and the row was RE-CUT rather than squeezed (current cut, 2026-08-01: chips
+  `4*136 + 3*10 = 574` at stride 146, column x 270..846, art 220, FULL-WIDTH
+  576x64 shelf via `Theme.ShopPriceHero`, chip text zone 86px, copy cap ~8 chars;
+  chip icons 34px — the glyphs ARE the bundle for a non-reader). Historical cut:
+  chips `4*140 + 3*12 = 596`,
   closing on the card edge (`250 + 3*152 = 706, +140 = 846 = 250 + 596`), shelf
   `266` centred in that column at `415..681`, horizontal
   `22 + art 206 + 22 + column 596 + 24 = 870` ✓. Height is unchanged — the fourth

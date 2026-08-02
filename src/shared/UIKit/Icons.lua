@@ -200,4 +200,14 @@ Icons.BadgeStorage =   "rbxassetid://78078863082780"
 Icons.BadgeTrophy =    "rbxassetid://85335418886874"
 Icons.TextInfinity =   "rbxassetid://104419767277337"
 
+-- Onboarding comic (features/tutorial.md). FOUR PANELS OF ONE STORY, read
+-- TL -> TR -> BL -> BR: the character finds the poster, reads the challenge,
+-- gets excited, runs at the cake. Order is load-bearing — renumbering these
+-- breaks the narrative, unlike every other entry in this file.
+-- All four are 4:3 (716x535); Theme.TutorialPanel's art window is cut to match.
+Icons.TutorialSlide1 = "rbxassetid://139890329511008"
+Icons.TutorialSlide2 = "rbxassetid://88501692577908"
+Icons.TutorialSlide3 = "rbxassetid://135307023473908"
+Icons.TutorialSlide4 = "rbxassetid://99839198517910"
+
 return Icons

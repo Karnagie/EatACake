@@ -110,6 +110,10 @@ function LobbyQueueSubs.Start(data, services, subscriptions)
 	lobbyQueueData = data.LobbyQueueData
 	lobbyQueueService = services.LobbyQueueService
 	local teleportSubs = subscriptions and subscriptions.TeleportSubs
+	local analyticsSubs = subscriptions and subscriptions.AnalyticsSubs
+	if analyticsSubs == nil then
+		Log.Warn("LobbyQueueSubs", "AnalyticsSubs missing -- pad/selector/queue funnel beats will not be logged")
+	end
 	if lobbyQueueData == nil then
 		Log.Warn("LobbyQueueSubs", "Start skipped: LobbyQueueData missing")
 		return
@@ -141,8 +145,8 @@ function LobbyQueueSubs.Start(data, services, subscriptions)
 	lobbyQueueData["request-remote"] = Net.Remote("LobbyQueueRequest")
 	lobbyQueueData["update-remote"] = Net.Update("LobbyQueueUpdate")
 	lobbyQueueData["last-scan-at"] = os.clock()
-	Protocol.Init(lobbyQueueData, lobbyQueueService)
-	Launch.Init(lobbyQueueData, lobbyQueueService, teleportSubs, Protocol)
+	Protocol.Init(lobbyQueueData, lobbyQueueService, analyticsSubs)
+	Launch.Init(lobbyQueueData, lobbyQueueService, teleportSubs, Protocol, analyticsSubs)
 	Occupancy.Init(lobbyQueueData, lobbyQueueService, Protocol, Launch)
 
 	table.insert(lobbyQueueData.connections, lobbyQueueData["request-remote"].OnServerEvent:Connect(Protocol.OnQueueRequest))

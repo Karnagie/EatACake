@@ -20,6 +20,10 @@ local ShopSubsClient = {}
 function ShopSubsClient.Start(data, modules)
 	local AppRoot = modules.AppRoot
 	local SoundPool = modules.SoundPool
+	-- Optional (features/analytics.md). Which CARD a player taps only exists
+	-- on the client until the server is asked for a purchase, and the taps
+	-- that never become a request are the interesting ones.
+	local Analytics = modules.LocalAnalyticsService
 	local rPurchase = Net.Remote("RequestPurchase")
 	local rGemPurchase = Net.Remote("RequestGemPurchase")
 	local rGamepass = Net.Remote("RequestGamepass")
@@ -31,9 +35,17 @@ function ShopSubsClient.Start(data, modules)
 	local currencyByKey: { [string]: string? } = {}
 
 	AppRoot.SetCallbacks({
+		onShopTabChanged = function(tabId)
+			if Analytics and type(tabId) == "string" then
+				Analytics.Track("shop", "tab", tabId, { urgent = true })
+			end
+		end,
 		onShopActivated = function(rowId)
 			if type(rowId) ~= "string" then
 				return
+			end
+			if Analytics then
+				Analytics.Track("shop", "card", rowId, { urgent = true })
 			end
 			local productKey = string.match(rowId, "^product:(.+)$")
 			if productKey then

@@ -18,6 +18,7 @@
 | `social` | `ProfileSchema/SocialSection.lua` | `features/group-reward.md` |
 | `shop` | `ProfileSchema/ShopSection.lua` | `features/shop.md` |
 | `codes` | `ProfileSchema/CodesSection.lua` | `features/promo-codes.md` |
+| `tutorial` | `ProfileSchema/TutorialSection.lua` | `features/tutorial.md` — one-time `done` flag; deliberately NOT run-scoped (ADR-0013) |
 
 Reserved: `__schema` (managed by PersistenceService).
 Retired 2026-07-31, do NOT reuse the key: `quests`, `timeRewards` (still present
@@ -62,21 +63,35 @@ Flat `name -> rbxassetid`, resolved via `Theme.Icon(name)` (warns once + visible
 fallback on a miss). Prefixes: `Ui*` UI glyphs · `Badge*` heavier line glyphs ·
 `Pass*` gamepass badges · `RarityDisc*` / `RarityStar*` per tier · `Ribbon*`
 (square rosette art — NOT usable as a 4:1 sash) · `GemPack{S,M,L,XL}`,
-`CoinPack{S,M,L,XL}`, `Egg1..8` · `Sq*` the squishy roster. Add new rows there,
-not here.
+`CoinPack{S,M,L,XL}`, `Egg1..8` · `Sq*` the squishy roster · `TutorialSlide1..4` (the onboarding comic — ORDER IS
+LOAD-BEARING, they are one story). Add new rows there, not here.
 
 ## Shared config modules (ADR-0004)
 
 `CakeConfig`, `UpgradeConfig`, `UpgradeTreeConfig` (honeycomb layout),
 `BodyConfig`, `PetConfig`, `TreasureConfig`, `JuiceConfig`, `PlaceConfig`,
-`MatchConfig` — `src/shared/config/`.
+`MatchConfig`, `TutorialConfig`, `AnalyticsConfig` — `src/shared/config/`.
 Shared util: `HexUtil` (axial hex math, sibling to `GridUtil`).
+
+## Analytics names (`src/shared/config/AnalyticsConfig.lua` = source of truth)
+
+⚠ QUOTA'd experience-wide and spent FOREVER on first send: **100** custom event
+names, **10** funnel names. Never write a literal — add a catalog key and pass
+the key (`features/analytics.md`, ADR-0017). Occupancy is logged at boot by
+`Validate()`.
+
+Funnels: `PlayerFlow`, `Matchmaking`, `Tutorial`, `Match`, `Shop`, `Upgrades`,
+`GymBurn`, `Finds` (**2 slots deliberately free** — an 11th funnel is dropped
+silently). Flow-step keys are `AnalyticsConfig.flowSteps` (31, ordered).
+Event names, currencies (`Calories`, `Gems`, `Robux`) and transaction types are
+`AnalyticsConfig.events` / `.economy`.
 
 ## ProximityPrompt names (unique — clients filter PromptTriggered by name)
 
 `GymPrompt` (gym start, server `BodySubs`), `UpgradeStation` (open the upgrades
-hex-tree, client `UpgradesSubsClient`) — both defined in
-`MapConfigData.checkpoint` (`promptName` / `upgradePromptName`).
+hex-tree, client `UpgradesSubsClient`; ALSO the tutorial's completion trigger,
+`features/tutorial.md`) — both defined in `MapConfigData.checkpoint`
+(`promptName` / `upgradePromptName`).
 
 ## Locale keys
 
@@ -108,6 +123,11 @@ down — `features/cake-cycle.md`); `cake-finds` ("FINDS n/N", the per-cake goal
 the HUD bar carries while eating — `features/treasures.md`).
 Boss: `boss-prize-caption` (the caption on the boss PRIZE card — the squishy at
 stake during the fight; `features/cake-cycle.md`, `UIKit/BossPrizeCard`).
+Onboarding (`features/tutorial.md`): `tutorial-title`, `tutorial-skip`,
+`tutorial-eat-title`, `tutorial-eat-body-pc` / `-touch` (one per input device,
+picked by `IS_TOUCH`), `tutorial-eat-ok`, `tutorial-arrow-upgrades`. The touch
+glyph re-uses `eat-button` so the hint and the real HUD button can never
+disagree.
 
 ## Authored instance names (place-authored, resolved by exact name)
 
@@ -115,6 +135,9 @@ stake during the fight; `features/cake-cycle.md`, `UIKit/BossPrizeCard`).
 buried-find MODEL LIBRARY, one Model/BasePart per child; a child's NAME is what
 `TreasureConfig.finds[].model` pins (`features/treasures.md`, ADR-0012).
 `ReplicatedStorage.Assets.Environment` / `.Checkpoint` — MapService (ADR-0007).
+`ReplicatedStorage.Assets.GuidanceTemplates.HintBeam` — the Beam the tutorial
+CLONES for its guidance line (`features/tutorial.md`); `CheckpointPlate` is its
+target and `UpgradeStationBody` the arrow's.
 
 ## Cross-place protocol ids
 

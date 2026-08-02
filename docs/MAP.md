@@ -28,11 +28,12 @@
 | promo-codes | `features/promo-codes.md` | CodesService, CodesSubs / CodesSubsClient |
 | settings | `features/settings.md` | SettingsSubs / SettingsSubsClient, LocalSettingsService, SettingsData |
 | leaderstats | file header `subscriptions/LeaderboardSubs.lua` | LeaderboardSubs / — |
-| analytics (retention funnel + session length) | `features/analytics.md` | AnalyticsSubs (COMMON; beats pushed from CakeSubs, CakeSimulationSubs, BodySubs, UpgradeSubs) / — |
+| analytics (31-step player-flow funnel, every tap, economy; QUOTA'd) | `features/analytics.md` + ADR-0017 | AnalyticsSubs + Analytics/{Sink,Session,Ingest} (COMMON; beats pushed from every domain sub) / LocalAnalyticsService, AnalyticsSubsClient, UIKit `SetTrackHandler`; catalog `Shared.config.AnalyticsConfig` |
 | app-root (HUD + panels) | `features/app-root.md` | — / AppRoot, AppSubsClient |
 | ui-kit | `features/ui-kit.md` + skill `.claude/skills/roblox-ui-kit/` | — / Shared.UIKit, UiRoot, Shared.UIKit.Icons (`Theme.Icons` / `Theme.Icon`) |
 | lobby matchmaking (pads, modes, parties) | `features/lobby-matchmaking.md` + ADR-0010 | LobbyQueueData, LobbyQueueService, LobbyQueueSubs, LobbyMapService, TeleportSubs / LobbyUiData, LobbySubsClient, AppRoot, UIKit/MatchmakingPanel |
 | game round (roster, difficulty, result return) | `features/game-round.md` + ADR-0010 | RoundStateData, GameRoundService, GameRoundSubs, CakeCycleSubs, TeleportSubs / CakeSubsClient, AppRoot |
+| tutorial / onboarding (comic slides always; guided steps once per account) | `features/tutorial.md` + ADR-0016 | TutorialSubs (game), TutorialSection / TutorialSubsClient, AppRoot, UIKit TutorialSlides/TutorialHint/InputGlyph/HintArrow, TutorialConfig |
 
 ## Infrastructure (no feature doc — the file header IS the doc)
 
@@ -55,9 +56,11 @@
 | lobby↔game teleport (verified-release handoff) | `TeleportSubs` + `TeleportRetrySubs` (server), `TeleportControlSubsClient` + `PlayerControlService` (client), `PlaceConfig` + `MatchConfig` (shared), queue/result orchestrators (ADR-0009, ADR-0010) |
 | gamepass ownership (perks in BOTH places) | `PassOwnershipSubs` (common) |
 | lobby hub scene builder | `LobbyMapService` + `LobbySubs` (lobby); authored contract in `features/lobby-matchmaking.md` |
-| headless verification (run real modules without Studio) + the Luau syntax gate; `pacing_scenario` measures clear-time/income vs any config change | `tools/headless-sim/README.md` |
+| headless verification (run real modules without Studio) + the Luau syntax gate; `pacing_scenario` measures clear-time/income vs any config change; `analytics_scenario` asserts the analytics budget/trust boundary | `tools/headless-sim/README.md` |
 | pacing + PROGRESSION model (Python/numpy: a run where tiers are BOUGHT mid-run — the clear-time and "tree maxed at X% of the cake" numbers; self-checks against the Lua configs) | `tools/balance-model/README.md` |
 | Studio automation: run scripts in the command bar, get structured reports back (no OCR); Rojo/require staleness traps | `tools/studio-bridge/README.md` |
+| UI tonal-hierarchy analyzer (L* value bands, saliency, per-region attention ranks, findings, compare gate) — MANDATORY for UI review, wired into the ui-kit ship checklist | `tools/tonal-hierarchy/README.md` + skill `.claude/skills/tonal-hierarchy/` |
+| UI squint test (heavy blur gray+color, per-region blur survival, icon-first rules for a non-reading audience) — same tool, `blur` subcommand | skill `.claude/skills/squint-test/` |
 | dev hook: force the nearest buried find to the surface in a playtest (`DebugUncoverFind`) | `docs/features/treasures.md` |
 | publish readiness: the 11 LIVE monetization ids + what must exist in BOTH places before going live | `docs/recipes/publish-readiness.md` |
 | create/audit the 5 dev products + 6 gamepasses on the universe (cookie auth, idempotent, dry-run by default, writes the ids into ShopData); ⚠ a dev product is CREATE-ONCE — no delete, no update | `tools/monetization/README.md` + `tools/monetization/id_map.json` (the id ledger) |

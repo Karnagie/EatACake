@@ -145,7 +145,21 @@ function CakeSubs.Start(data, services, subscriptions)
 		if AnalyticsSubs then
 			-- The bite is ACCEPTED here (auth + rate limit passed), which is the
 			-- honest "the player is playing" moment for the funnel.
-			AnalyticsSubs.Onboard(player, "firstBite")
+			-- pcall'd: this is the hottest remote handler in the game and a
+			-- throw would abort the bite itself (R8 — telemetry never takes a
+			-- gameplay path down).
+			local ok, err = pcall(function()
+				AnalyticsSubs.Flow(player, "first-bite")
+				AnalyticsSubs.Funnel(player, "match", "bite")
+				AnalyticsSubs.Funnel(player, "tutorial", "bite")
+				-- Coalesced and BULK: bites are the densest event in the game by
+				-- orders of magnitude, so they buy their count cheaply and yield
+				-- the rate-limit budget to anything that happens once.
+				AnalyticsSubs.Event(player, "bite", 1, nil, { tier = "bulk", coalesce = true })
+			end)
+			if not ok then
+				Log.Once(SCOPE, "bite-analytics", `bite analytics beat FAILED (telemetry only, eating unaffected): {err}`)
+			end
 		end
 
 		local biteRadius = services.StatsService.BiteRadius(userId)

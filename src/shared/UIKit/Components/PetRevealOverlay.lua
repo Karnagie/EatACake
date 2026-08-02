@@ -144,7 +144,9 @@ local function PetRevealOverlay(props)
 			Selectable = landed,
 			ZIndex = zIndex + 9,
 			[React.Event.MouseButton1Click] = function()
-				Interaction.Cue("press")
+				-- Counted whether or not it dismisses: a tap DURING the spin is
+				-- the player trying to skip an animation they are done with.
+				Interaction.Cue("press", if landed then "SquishyReveal/Dismiss" else "SquishyReveal/Spinning")
 				if landed and props.onDismiss then
 					props.onDismiss()
 				end

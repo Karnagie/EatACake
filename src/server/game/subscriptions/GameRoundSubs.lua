@@ -21,13 +21,49 @@ local roundService -- GameRoundService
 local persistenceService -- PersistenceService
 local CakeCycleSubs
 local TeleportSubs
+local AnalyticsSubs -- optional retention instrumentation (features/analytics.md)
 local returnFinishedRound
+local matchStartedAt: number? = nil
+
+-- Telemetry is optional and never on the round's critical path (R8).
+local function beat(player: Player, fn: (any) -> ())
+	if AnalyticsSubs == nil then
+		return
+	end
+	local ok, err = pcall(fn, AnalyticsSubs)
+	if not ok then
+		Log.Once(SCOPE, "round-analytics", `round analytics beat FAILED (telemetry only, match unaffected): {err}`)
+	end
+end
 
 local function rejectArrival(player: Player, reason: string, playerMessage: string?)
 	Log.Warn(SCOPE, `{player.Name} rejected from this server's match: {reason}`)
+	-- Counted BEFORE the kick: a rejected arrival is the most expensive
+	-- failure in the game (the player paid a full teleport for it) and it is
+	-- invisible to every other metric — they simply vanish between "teleport
+	-- started" and "arrived".
+	beat(player, function(analytics)
+		analytics.Event(player, "match-reject", 1, { reason, "game", "arrival" }, { tier = "critical" })
+	end)
 	if player.Parent == Players then
 		player:Kick(playerMessage or "This match reservation does not include you. Please return to the lobby.")
 	end
+end
+
+-- The player is IN. Recorded in ONE place whichever of the three admission
+-- paths got them here, and always BEFORE `match-start`, so the funnel reads
+-- arrive -> start rather than the other way round.
+local function beatArrival(player: Player, candidate)
+	beat(player, function(analytics)
+		analytics.SetMatch(player, candidate.roundId, candidate.difficulty)
+		analytics.Flow(player, "arrive")
+		analytics.Funnel(player, "match", "arrive")
+		analytics.Event(player, "match-arrive", 1, {
+			candidate.difficulty,
+			tostring(candidate.expectedCount),
+			if candidate.directJoin then "direct" else "queued",
+		}, { tier = "critical" })
+	end)
 end
 local function failStart(reason: string)
 	Log.Warn(SCOPE, reason)
@@ -83,6 +119,20 @@ local function beginMatchIfReady(trigger: string)
 	local began = ok and beganOrError == true
 	roundService.CompleteStart(began)
 	if began then
+		matchStartedAt = os.time()
+		-- "Finished loading into the game" in the player's terms: the cake
+		-- exists and input is live. Everything before this is loading.
+		for _, participant in ipairs(participants) do
+			beat(participant, function(analytics)
+				analytics.Flow(participant, "match-start")
+				analytics.Funnel(participant, "match", "start")
+				analytics.Event(participant, "match-start", 1, {
+					roundState["difficulty"] or "unknown",
+					tostring(roundState["expected-count"]),
+					if roundState["direct-join"] then "direct" else "queued",
+				}, { tier = "critical" })
+			end)
+		end
 		Log.Sum(
 			SCOPE,
 			`starting round '{roundState["round-id"]}' ({#participants}/{roundState["expected-count"]} present, trigger={trigger}{if claimTimedOut then ", arrival-window-expired" else ""})`
@@ -93,6 +143,7 @@ local function beginMatchIfReady(trigger: string)
 end
 local function establishMatch(player: Player, candidate)
 	roundService.Establish(player, candidate)
+	beatArrival(player, candidate)
 	Log.Sum(
 		SCOPE,
 		`established round '{candidate.roundId}' -- difficulty={candidate.difficulty}, expected={candidate.expectedCount}{if candidate.directJoin then " (direct easy-solo fallback)" else ""}`
@@ -135,6 +186,7 @@ local function handleArrival(player: Player)
 		return
 	end
 	roundService.AddParticipant(player)
+	beatArrival(player, candidate)
 	Log.Info(
 		SCOPE,
 		`{player.Name} joined round '{roundState["round-id"]}' ({#roundService.Participants()}/{roundState["expected-count"]})`
@@ -183,7 +235,7 @@ function GameRoundSubs.HasCakeSnapshot(): boolean
 	return roundState ~= nil and roundState["match-started"] == true
 end
 returnFinishedRound = function(result: string)
-	Return.Run(result, roundState, roundService, persistenceService, TeleportSubs)
+	Return.Run(result, roundState, roundService, persistenceService, TeleportSubs, AnalyticsSubs)
 end
 --API
 function GameRoundSubs.Finish(result: string): boolean
@@ -198,6 +250,24 @@ function GameRoundSubs.Finish(result: string): boolean
 	if not roundService.MarkFinished(result) then
 		return false
 	end
+	-- Recorded for everyone still present, BEFORE the return sequence starts
+	-- moving them. `match_end`'s value is the match's length in minutes, so
+	-- "how long does a win take" and "how long before a loss" come out of the
+	-- same event without a second name.
+	local minutes = if matchStartedAt then (os.time() - matchStartedAt) / 60 else 0
+	for _, participant in ipairs(roundService.Participants()) do
+		beat(participant, function(analytics)
+			analytics.Event(participant, "match-end", math.floor(minutes * 10) / 10, {
+				result,
+				roundState["difficulty"] or "unknown",
+				tostring(roundState["expected-count"]),
+			}, { tier = "critical" })
+			if result == "win" then
+				analytics.Funnel(participant, "match", "win")
+				analytics.Flow(participant, "match-win")
+			end
+		end)
+	end
 	local delaySeconds = math.max(0, roundState["match-config"].round.resultDelaySeconds)
 	Log.Sum(SCOPE, `round '{roundState["round-id"]}' finished: {result}; returning to lobby in {delaySeconds}s`)
 	task.spawn(returnFinishedRound, result)
@@ -210,6 +280,10 @@ function GameRoundSubs.Start(data, services, subscriptions)
 	persistenceService = services.PersistenceService
 	CakeCycleSubs = subscriptions and subscriptions.CakeCycleSubs
 	TeleportSubs = subscriptions and subscriptions.TeleportSubs
+	AnalyticsSubs = subscriptions and subscriptions.AnalyticsSubs
+	if AnalyticsSubs == nil then
+		Log.Warn(SCOPE, "AnalyticsSubs missing -- arrival/start/result beats will not be logged")
+	end
 	if roundState == nil then
 		Log.Warn(SCOPE, "RoundStateData missing -- round/fallback mode cannot be resolved")
 		return

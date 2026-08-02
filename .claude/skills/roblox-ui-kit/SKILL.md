@@ -107,6 +107,14 @@ clicks via `user_mouse_input` work well: `LocalPlayer.PlayerGui.UiRoot...`).
 - [ ] Aspect held at 3 window sizes (resize viewport); nothing distorts
 - [ ] Scroll: wheel + thumb drag + track jump all work; grid doesn't overflow
 - [ ] Open panels render above HUD; close buttons work; no console errors
+- [ ] **Tonal hierarchy measured** (skill `tonal-hierarchy` +
+      `tools/tonal-hierarchy/`): analyze the new/changed screen — no
+      CRITICAL findings; fixes gated by `compare` per that skill's iron
+      rule 7 (never REGRESSED; CRITICALs must clear)
+- [ ] **Squint test passed** (skill `squint-test`): heavy-blur the capture
+      — the CTA / active state / key icons survive as masses; every
+      interactive element carries a GLYPH (icon-first: this audience may
+      not read); no `blur-invisible` CRITICAL
 
 ## References (read what the step needs)
 

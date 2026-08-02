@@ -9,18 +9,46 @@ import io, os, sys
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")) + "/"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# proxy path -> source file, in dependency order
-MODULES = [
-    ("Shared.GridUtil", "src/shared/GridUtil.lua"),
-    ("Shared.config.CakeConfig", "src/shared/config/CakeConfig.lua"),
-    ("Shared.config.TreasureConfig", "src/shared/config/TreasureConfig.lua"),
-    ("Shared.CakeOps", "src/shared/CakeOps.lua"),
-    ("__TreasureService", "src/server/game/services/TreasureService.lua"),
-]
-
-
-
 SCENARIO_FILE = os.environ.get("SCENARIO_FILE", "treasure_scenario.lua")
+
+# Per-scenario module list, in dependency order.
+#   (proxy path, source file[, script proxy path])
+# The optional third element sets the global `script` for that module's body,
+# which is how a module that reaches SIBLINGS (`script.Parent:WaitForChild(...)`)
+# resolves them — the Analytics helpers all do.
+MODULE_SETS = {
+    "treasure_scenario.lua": [
+        ("Shared.GridUtil", "src/shared/GridUtil.lua"),
+        ("Shared.config.CakeConfig", "src/shared/config/CakeConfig.lua"),
+        ("Shared.config.TreasureConfig", "src/shared/config/TreasureConfig.lua"),
+        ("Shared.CakeOps", "src/shared/CakeOps.lua"),
+        ("__TreasureService", "src/server/game/services/TreasureService.lua"),
+    ],
+    "analytics_scenario.lua": [
+        ("Shared.config.AnalyticsConfig", "src/shared/config/AnalyticsConfig.lua"),
+        ("Shared.config.PlaceConfig", "src/shared/config/PlaceConfig.lua"),
+        (
+            "Server.subscriptions.Analytics.Sink",
+            "src/server/common/subscriptions/Analytics/Sink.lua",
+            "Server.subscriptions.Analytics.Sink",
+        ),
+        (
+            "Server.subscriptions.Analytics.Session",
+            "src/server/common/subscriptions/Analytics/Session.lua",
+            "Server.subscriptions.Analytics.Session",
+        ),
+        (
+            "Server.subscriptions.Analytics.Ingest",
+            "src/server/common/subscriptions/Analytics/Ingest.lua",
+            "Server.subscriptions.Analytics.Ingest",
+        ),
+    ],
+}
+# pacing_scenario has always run on the cake module set (it measures clear time
+# and income against the same configs), so it is named rather than left to the
+# fallback — a scenario silently getting the wrong module list looks like a pass.
+MODULE_SETS["pacing_scenario.lua"] = MODULE_SETS["treasure_scenario.lua"]
+MODULES = MODULE_SETS.get(SCENARIO_FILE, MODULE_SETS["treasure_scenario.lua"])
 
 
 def read(path):
@@ -39,9 +67,14 @@ out.append("local stub = (function()\n" + read_local("roblox_stub.lua") + "\nend
 out.append(read_local("harness_head.lua"))
 
 out.append("\n-- ── inlined game modules ───────────────────────────────────\n")
-for proxy_path, src_path in MODULES:
+for entry in MODULES:
+    proxy_path, src_path = entry[0], entry[1]
+    script_path = entry[2] if len(entry) > 2 else None
     body = read(src_path)
     out.append(f"\n-- ===== {src_path} =====\n")
+    if script_path:
+        # Modules capture `script` at load time, so it is re-pointed per body.
+        out.append(f'script = makeProxy("{script_path}")\n')
     out.append(f'__REGISTRY["{proxy_path}"] = (function()\n{body}\nend)()\n')
 
 body = read_local(SCENARIO_FILE)

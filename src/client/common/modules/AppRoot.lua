@@ -11,8 +11,9 @@
 	       AnnounceBanner, BossPrizeCard (boss phase)
 	  Panels (zIndex 50): Pets (inspect), Shop, DailyRewards, Codes,
 	       Settings, Matchmaking
-	  Overlays: GymOverlay (40), Upgrades hex-tree (60, lobby UpgradeStation
-	       opener pending — no HUD button), PetRevealOverlay (90)
+	  Overlays: HintArrow (45), GymOverlay (40), Upgrades hex-tree (60, lobby
+	       UpgradeStation opener pending — no HUD button), TutorialHint (70),
+	       PetRevealOverlay (90), TutorialSlides (95)
 
 	Data flows IN through AppRoot.Set(patch) (called by subscriptions when
 	remoteUpdates arrive); user actions flow OUT through callbacks registered
@@ -21,12 +22,13 @@
 
 	State fields: openPanel, calories, gems, settings, daily, shop,
 	group, codesStatus, cake, stomach, gym, upgrades, pets, petReveal,
-	petRevealCount, combo, announceKey, matchmaking.
+	petRevealCount, combo, announceKey, matchmaking, checkpointFar, tutorial.
 	Callbacks: onClaimDaily(day), onToggleSetting(id, v),
 	onShopActivated(rowId), onRedeem(code), onBuyUpgrade(id),
 	onEquipPet(petId, equip), onToggleUpgrades(), onGymTap(),
 	onDismissReveal(), onEatDown(input), onEatUp(input), onReturnCheckpoint(),
 	onConfigureMatch(difficulty, maxPlayers), onCancelMatch(),
+	onTutorialSkip(), onTutorialHintDismiss(), onTutorialArrowTarget() -> Vector3?,
 	onPanelChanged(panel|nil) — fired whenever `openPanel` changes (never on
 	mount); AudioSubsClient turns it into the open/close whoosh.
 ]]
@@ -45,6 +47,7 @@ local React = require(ReplicatedStorage.Packages.React)
 local UIKit = require(ReplicatedStorage.Shared.UIKit)
 local CakeConfig = require(ReplicatedStorage.Shared.config.CakeConfig)
 local MatchConfig = require(ReplicatedStorage.Shared.config.MatchConfig)
+local TutorialConfig = require(ReplicatedStorage.Shared.config.TutorialConfig)
 local LocalRewardsService = require(script.Parent.LocalRewardsService)
 local LocalSettingsService = require(script.Parent.LocalSettingsService)
 local LocalShopService = require(script.Parent.LocalShopService)
@@ -89,6 +92,17 @@ local current = {
 	-- Whether the player is far enough from the checkpoint platform to show the
 	-- TO CHECKPOINT button (BodySubsClient proximity check). Shown by default.
 	checkpointFar = true,
+	-- Onboarding surfaces, all driven by TutorialSubsClient (features/tutorial.md).
+	-- ONE table so a step change is one patch:
+	--   slides          : boolean — the 4-panel comic board is up
+	--   hint            : "eat" | nil — which instruction popup, nil = none
+	--   arrow           : "upgrades" | nil — what the world pointer is aiming at
+	--   pulseCheckpoint : boolean — breathe the TO CHECKPOINT button
+	-- ⚠ NOT routed through `openPanel`: that would fire the panel whoosh, arm
+	-- the tap-outside scrim's shop-closing branch, and — fatally for step 2 —
+	-- hide the touch EAT button (see `eatButtonVisible` below), which is the
+	-- very control the hint is pointing at.
+	tutorial = nil,
 }
 local callbacks = {}
 local applyState = nil -- setState captured while mounted
@@ -136,6 +150,16 @@ function AppRoot.Open(panel: string?)
 	if applyState then
 		applyState(table.clone(current))
 	end
+end
+
+--API
+-- Read one state field back out. Subscriptions push state IN through Set; this
+-- is for the rarer case of a sub that needs a value ANOTHER sub owns, without
+-- duplicating its derivation (TutorialSubsClient reads `checkpointFar`, which
+-- BodySubsClient computes from the plate footprint — one source of that fact).
+-- Client subs Start alphabetically, so the owner has always armed first.
+function AppRoot.Get(key: string): any
+	return current[key]
 end
 
 --API
@@ -290,6 +314,15 @@ local function App()
 	local shopScale, setShopScale = React.useState(function()
 		return calculateScale(Theme.ShopLayout.PanelAspect, Theme.ShopLayout.PanelMaxViewportFraction)
 	end)
+	-- Onboarding surfaces are aspect-locked blocks, so they fit like a panel
+	-- does. ⚠ Two coupled sites per scale: the initializer here AND the `refit`
+	-- body below — miss the second and the block stops resizing with the window.
+	local slidesScale, setSlidesScale = React.useState(function()
+		return calculateScale(Theme.TutorialSlides.BoardAspect, Theme.TutorialSlides.BoardMaxViewportFraction)
+	end)
+	local hintScale, setHintScale = React.useState(function()
+		return calculateScale(Theme.TutorialHint.Aspect, Theme.TutorialHint.MaxViewportFraction)
+	end)
 	-- Topbar inset in px. The root gui is full-bleed (UiRoot), so the HUD layer
 	-- applies this itself. Not a constant: it is 0 in some contexts, and it
 	-- changes when the topbar shows/hides.
@@ -367,6 +400,14 @@ local function App()
 			setShopScale(calculateScale(
 				Theme.ShopLayout.PanelAspect,
 				Theme.ShopLayout.PanelMaxViewportFraction
+			))
+			setSlidesScale(calculateScale(
+				Theme.TutorialSlides.BoardAspect,
+				Theme.TutorialSlides.BoardMaxViewportFraction
+			))
+			setHintScale(calculateScale(
+				Theme.TutorialHint.Aspect,
+				Theme.TutorialHint.MaxViewportFraction
 			))
 		end
 		local function bindCamera()
@@ -469,8 +510,32 @@ local function App()
 			callbacks.onShopActivated(rowId)
 		end
 	end, {})
+	-- Observation only (which tab the player browses never reaches the server
+	-- unless they buy). Memoised for the same reason as onShopActivated:
+	-- ShopPanel's memo depends on every one of its props being stable.
+	local onShopTabChanged = React.useCallback(function(tabId)
+		if callbacks.onShopTabChanged then
+			callbacks.onShopTabChanged(tabId)
+		end
+	end, {})
 	local closeShop = React.useCallback(function()
 		AppRoot.Open(nil)
+	end, {})
+	-- Panels with close-time OBLIGATIONS get named closers so every close
+	-- path (X button, scrim tap-outside, future gestures) runs the same
+	-- contract — a blanket Open(nil) on the scrim skipped Matchmaking's
+	-- server-side cancel and Codes' status clear (adversarial review
+	-- 2026-08-01). `callbacks` is a module-level table read at call time,
+	-- so empty deps are safe (closeShop's precedent).
+	local closeMatchmaking = React.useCallback(function()
+		if callbacks.onCancelMatch then
+			callbacks.onCancelMatch()
+		end
+		AppRoot.Open(nil)
+	end, {})
+	local closeCodes = React.useCallback(function()
+		AppRoot.Open(nil)
+		AppRoot.Clear("codesStatus")
 	end, {})
 	-- CALORIES CHANGE EVERY BITE, and ShopPanel is React.memo'd over a ~700-element
 	-- tree that stays MOUNTED (visible = false) while closed. A balances table
@@ -486,11 +551,16 @@ local function App()
 		-- Same names as the HUD pills (Theme.AppHud.PillIcons): the shop can open
 		-- over the HUD, so a currency showing two different glyphs at once reads as
 		-- two different currencies.
+		-- GEMS ONLY (UX audit 2026-08-01): nothing in the shop is priced in
+		-- calories (products are Robux or gems), and calories are RUN-scoped —
+		-- the pill sat there showing "0" most of the time. A balance the shop
+		-- cannot spend is header noise, not an anchor.
 		return {
-			{ iconName = Theme.AppHud.PillIcons.Gems, value = formatNumber(state.gems) },
-			{ iconName = Theme.AppHud.PillIcons.Calories, value = formatNumber(state.calories) },
+			-- jumpTabId: the chip carries a green "+" and taps through to the
+			-- gem packs (ShopPanel renders the badge + hit target).
+			{ iconName = Theme.AppHud.PillIcons.Gems, value = formatNumber(state.gems), jumpTabId = "gems" },
 		}
-	end, { shopOpen, shopOpen and state.gems or 0, shopOpen and state.calories or 0 })
+	end, { shopOpen, shopOpen and state.gems or 0 })
 	local oddsText = React.useMemo(LocalPetsService.OddsText, {})
 
 	local matchmaking = if type(state.matchmaking) == "table" then state.matchmaking else nil
@@ -556,10 +626,19 @@ local function App()
 	-- Touch hold-to-eat button: shown only while there's cake to eat (eating /
 	-- boss phases), never while the gym overlay or a panel is up (you're not
 	-- eating then, and it would sit under/beside them). Touch devices only.
+	-- ⚠ `tutorialSlidesUp` is checked separately from `openPanel`: the comic
+	-- board deliberately is NOT a panel (it must not fire the whoosh or arm the
+	-- scrim), so the openPanel test below does not cover it — and a pink EAT
+	-- button glowing through the intro's scrim is exactly the kind of leak that
+	-- test exists to prevent.
+	local tutorialSlidesUp = showGame
+		and type(state.tutorial) == "table"
+		and state.tutorial.slides == true
 	local eatButtonVisible = showGame
 		and IS_TOUCH
 		and (cakePhase == "eating" or cakePhase == "boss")
 		and not gymActive
+		and not tutorialSlidesUp
 		and state.openPanel == nil
 	local stomach = state.stomach
 	local capacity = stomach and math.max(1, stomach.capacity or 1) or 1
@@ -571,6 +650,17 @@ local function App()
 		else locale.T("belly-label", { fill = math.floor(stomach.fill or 0), cap = math.floor(capacity) })
 
 	local reveal = if type(state.petReveal) == "table" then LocalPetsService.BuildReveal(state.petReveal) else nil
+
+	-- ── onboarding view-model (features/tutorial.md) ─────────────────────
+	-- Every surface is game-place only, exactly like Gym/PetReveal: the panels
+	-- themselves are not place-gated and would otherwise render in the lobby.
+	local tutorial = if showGame and type(state.tutorial) == "table" then state.tutorial else nil
+	local tutorialSlides = tutorial ~= nil and tutorial.slides == true
+	-- The eat hint's copy AND its glyph branch on the device, from the same
+	-- IS_TOUCH the touch EAT button uses — a phone is told to press the button
+	-- it can see, a desktop is told to click. (Hybrid laptops read as PC.)
+	local tutorialHint = tutorial ~= nil and tutorial.hint == "eat"
+	local tutorialArrow = tutorial ~= nil and tutorial.arrow == "upgrades"
 
 	-- The squishy on offer for beating the boss. Server-decided and attached to
 	-- this player's cycle update while the fight is live (features/cake-cycle.md);
@@ -759,6 +849,10 @@ local function App()
 				text = locale.T("hud-burn-fat"),
 				textXAlignment = Enum.TextXAlignment.Center,
 				zIndex = 1,
+				-- Tutorial step 3: breathe once the belly hits 90% so the button
+				-- that ends the eating phase is impossible to miss. The pulse
+				-- rides the Button's own UIScale (ADR-0006) — see its header.
+				pulse = tutorial ~= nil and tutorial.pulseCheckpoint == true,
 				onActivated = function()
 					if callbacks.onReturnCheckpoint then
 						callbacks.onReturnCheckpoint()
@@ -843,8 +937,49 @@ local function App()
 			Size = UDim2.new(1, 0, 1, -topInset),
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
+			-- The tutorial comic is a full-screen modal that swallows input, so
+			-- the HUD under it is neither usable nor informative — and its own
+			-- scrim is translucent enough that anything left on would glow
+			-- through it. Hiding the LAYER (rather than each element) is what
+			-- keeps a future HUD addition from leaking into the intro. The
+			-- touch EAT button is ALSO gated on its own `visible` above: that
+			-- one has to flip `enabled` so a hold in progress gets released
+			-- (Interaction drops its handlers with `enabled`, not with an
+			-- ancestor's Visible).
+			Visible = not tutorialSlidesUp,
 			ZIndex = 1,
 		}, hudChildren),
+
+		-- ── modal scrim (zIndex 40, under every panel) ───────────────────
+		-- Dims the world + HUD behind any open panel (UX audit 2026-08-01:
+		-- panels floated over the full-brightness scene and the colorful HUD
+		-- out-shouted panel content in every measurement). Also the
+		-- tap-outside-to-close surface. The Upgrades overlay is excluded —
+		-- HexTreeOverlay brings its own full-screen scrim and two dims stack.
+		Scrim = React.createElement("TextButton", {
+			Name = "Scrim",
+			Size = UDim2.fromScale(1, 1),
+			BackgroundColor3 = Theme.PanelScrim.Color,
+			BackgroundTransparency = Theme.PanelScrim.Transparency,
+			BorderSizePixel = 0,
+			Text = "",
+			AutoButtonColor = false,
+			Visible = state.openPanel ~= nil and state.openPanel ~= "Upgrades",
+			ZIndex = 40,
+			-- Per-panel dispatch, NOT a blanket Open(nil): closing is a
+			-- CONTRACT (Matchmaking must cancel the server session, Codes
+			-- must clear its status) and the scrim is the easiest close
+			-- gesture, so it must run the same closer the panel's X does.
+			[React.Event.MouseButton1Click] = function()
+				if state.openPanel == "Matchmaking" then
+					closeMatchmaking()
+				elseif state.openPanel == "Codes" then
+					closeCodes()
+				else
+					closeShop()
+				end
+			end,
+		}),
 
 		-- ── panels (zIndex 50) ───────────────────────────────────────────
 		Pets = React.createElement(Components.PetsInspectPanel, {
@@ -964,6 +1099,12 @@ local function App()
 			-- anchor next to them are just numbers.
 			balances = shopBalances,
 			onActivated = onShopActivated,
+			-- MUST stay memoised. ShopPanel is React.memo'd on the assumption
+			-- that every prop AppRoot hands it is stable; an inline closure
+			-- here fails the shallow compare on every one of the HUD's ~14
+			-- re-renders per second and reconciles the shop's ~700-element
+			-- tree behind a hidden panel. See ShopPanel's footer note.
+			onTabChanged = onShopTabChanged,
 			onClose = closeShop,
 		}),
 		Matchmaking = React.createElement(Components.MatchmakingPanel, {
@@ -995,12 +1136,20 @@ local function App()
 					callbacks.onConfigureMatch(difficulty, maxPlayers)
 				end
 			end,
-			onClose = function()
-				if callbacks.onCancelMatch then
-					callbacks.onCancelMatch()
+			-- Observation only — the panel already owns the selection state.
+			-- Neither choice reaches the server before START, so this is the
+			-- one place they can be recorded (docs/features/analytics.md).
+			onSelectDifficulty = function(difficulty)
+				if callbacks.onMatchDifficultyPick then
+					callbacks.onMatchDifficultyPick(difficulty)
 				end
-				AppRoot.Open(nil)
 			end,
+			onSelectPlayers = function(maxPlayers)
+				if callbacks.onMatchPartyPick then
+					callbacks.onMatchPartyPick(maxPlayers)
+				end
+			end,
+			onClose = closeMatchmaking,
 		}),
 		Codes = React.createElement(Components.CodesPanel, {
 			name = "CodesPanel",
@@ -1020,10 +1169,7 @@ local function App()
 			end,
 			statusText = state.codesStatus and state.codesStatus.text or nil,
 			statusKind = state.codesStatus and state.codesStatus.kind or nil,
-			onClose = function()
-				AppRoot.Open(nil)
-				AppRoot.Clear("codesStatus")
-			end,
+			onClose = closeCodes,
 		}),
 		Settings = React.createElement(Components.SettingsPanel, {
 			name = "SettingsPanel",
@@ -1067,6 +1213,57 @@ local function App()
 			onDismiss = function()
 				if callbacks.onDismissReveal then
 					callbacks.onDismissReveal()
+				end
+			end,
+		}),
+
+		-- ── onboarding (features/tutorial.md) ────────────────────────────
+		-- Objective pointer sits just ABOVE the HUD (1) and below every panel
+		-- (50): it marks a thing in the WORLD, so a panel opened over it must
+		-- cover it, but the HUD must not.
+		TutorialArrow = React.createElement(Components.HintArrow, {
+			name = "TutorialArrow",
+			visible = tutorialArrow,
+			labelText = locale.T("tutorial-arrow-upgrades"),
+			getTarget = callbacks.onTutorialArrowTarget,
+			zIndex = 45,
+		}),
+		-- The instruction popup deliberately brings no scrim/catcher (see the
+		-- component header): a full-screen Active surface would swallow the
+		-- left-click it is teaching. 70 = over panels, under the reveal.
+		TutorialHint = React.createElement(Components.TutorialHint, {
+			name = "TutorialHint",
+			visible = tutorialHint,
+			size = UDim2.fromScale(hintScale.X, hintScale.Y),
+			glyphMode = if IS_TOUCH then "tap" else "mouse",
+			-- The touch glyph wears the SAME word as the real EAT button, from
+			-- the same locale key — the hint and the control can never disagree.
+			glyphLabel = locale.T("eat-button"),
+			titleText = locale.T("tutorial-eat-title"),
+			bodyText = if IS_TOUCH
+				then locale.T("tutorial-eat-body-touch")
+				else locale.T("tutorial-eat-body-pc"),
+			buttonText = locale.T("tutorial-eat-ok"),
+			zIndex = 70,
+			onDismiss = function()
+				if callbacks.onTutorialHintDismiss then
+					callbacks.onTutorialHintDismiss()
+				end
+			end,
+		}),
+		-- Top of the ladder: the comic is the first thing a session shows and
+		-- nothing may cover it — including a reveal that landed mid-teleport.
+		TutorialSlides = React.createElement(Components.TutorialSlides, {
+			name = "TutorialSlides",
+			visible = tutorialSlides,
+			boardSize = UDim2.fromScale(slidesScale.X, slidesScale.Y),
+			titleText = locale.T("tutorial-title"),
+			slides = TutorialConfig.slideIcons,
+			skipText = locale.T("tutorial-skip"),
+			zIndex = 95,
+			onSkip = function()
+				if callbacks.onTutorialSkip then
+					callbacks.onTutorialSkip()
 				end
 			end,
 		}),

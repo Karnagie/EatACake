@@ -23,6 +23,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Net = require(Shared:WaitForChild("Net"))
 local Log = require(Shared:WaitForChild("Log"))
+local AnalyticsConfig = require(Shared:WaitForChild("config"):WaitForChild("AnalyticsConfig"))
+local TutorialConfig = require(Shared:WaitForChild("config"):WaitForChild("TutorialConfig"))
 
 -- Resolved from the subscriptions registry in Start — both live in the COMMON
 -- partition (static script.Parent requires break once this sub is in game/).
@@ -86,6 +88,17 @@ function BodySubs.SendStomach(player: Player)
 	stomachState.capacity = services_.StatsService.Capacity(userId)
 	stomachState.gained = 0
 	uStomach:FireClient(player, stomachState)
+	-- The belly filling up is the moment the game STOPS letting the player eat
+	-- and starts requiring the walk to the checkpoint — the single biggest
+	-- "what do I do now?" cliff in the first session. Read from the same
+	-- threshold the tutorial's guidance beam uses, so the funnel step and the
+	-- on-screen help can never disagree about when it happened.
+	if AnalyticsSubs ~= nil and stomachState.capacity > 0 then
+		if stomachState.fill / stomachState.capacity >= TutorialConfig.bellyThreshold01 then
+			AnalyticsSubs.Flow(player, "belly-full")
+			AnalyticsSubs.Funnel(player, "tutorial", "belly")
+		end
+	end
 	BodySubs.RefreshBody(player)
 end
 
@@ -206,6 +219,66 @@ function BodySubs.Start(data, services, subscriptions)
 	-- Applies a GymService step/instant result: subtracts the drain's OWN delta
 	-- from the current belly (so a mid-session bite survives — see GymService),
 	-- banks the calorie delta, and resyncs the HUD belly bar + WalkSpeed/morph.
+	-- ⚠ A GYM BURN IS NOT ONE EVENT PER TICK. The drain loop runs at
+	-- `gym.stepHz` (8 Hz) and banks calories on most ticks, so logging there
+	-- directly meant 16 events/second FOR ONE PLAYER against a whole-server
+	-- allowance of ~2.5/s (ADR-0017). A ten-second burn would have emptied the
+	-- budget and every funnel step, purchase result and match beat on the
+	-- server would have been refused for the rest of the minute — the exact
+	-- silent undercount the sink exists to prevent, caused by the
+	-- instrumentation itself.
+	--
+	-- So the ticks ACCUMULATE and one event is emitted per SESSION. That is
+	-- also the more truthful shape: `gym_banked`'s value becomes "what this
+	-- trip to the machine was worth", not a slice of one. Flooring the total
+	-- once at the end fixes a second bug for free — a sub-1 per-tick delta was
+	-- passing the >0 check and then logging `amount = 0`.
+	--
+	-- Wiring state (not game data): userId -> calories banked this session.
+	local bankAccrued: { [number]: number } = {}
+
+	local function beatBank(player: Player, userId: number, banked: number)
+		if AnalyticsSubs == nil or banked <= 0 then
+			return
+		end
+		-- Cheap and idempotent: these dedupe inside Session after the first
+		-- call, so they cost nothing at tick rate.
+		AnalyticsSubs.Flow(player, "first-gym")
+		AnalyticsSubs.Funnel(player, "gym", "banked")
+		AnalyticsSubs.Funnel(player, "match", "gym")
+		bankAccrued[userId] = (bankAccrued[userId] or 0) + banked
+	end
+
+	--API
+	-- Emits the accumulated burn. Called wherever a gym session ENDS (walked
+	-- away, completed, instant burn, left the server) — never from the loop.
+	local function flushBank(player: Player, userId: number, source: string)
+		local total = math.floor(bankAccrued[userId] or 0)
+		bankAccrued[userId] = nil
+		if AnalyticsSubs == nil or total <= 0 then
+			return
+		end
+		local ok, err = pcall(function()
+			-- Value = the calories this whole burn was worth, so the dashboard
+			-- shows the SIZE of a session, not only that one happened.
+			AnalyticsSubs.Event(player, "gym-banked", total, nil, { tier = "normal" })
+			-- Calories enter the wallet here: the economy chart's biggest
+			-- source, and the one the upgrade tree is priced against.
+			AnalyticsSubs.Economy(
+				player,
+				"source",
+				AnalyticsConfig.economy.currencies.calories,
+				total,
+				services.EconomyService.GetCalories(userId) or 0,
+				AnalyticsConfig.economy.transactions.gameplay,
+				source
+			)
+		end)
+		if not ok then
+			Log.Once(SCOPE, "gym-analytics", `gym analytics beat FAILED (telemetry only, burn unaffected): {err}`)
+		end
+	end
+
 	local function creditResult(player: Player, result)
 		local userId = player.UserId
 		local state = services.StomachService.GetState(userId)
@@ -216,6 +289,7 @@ function BodySubs.Start(data, services, subscriptions)
 			services.EconomyService.AddCalories(userId, result.bankDelta)
 			services.ProgressService.AddStat(userId, "lifetimeCalories", result.bankDelta)
 			EconomySubs.SendCurrency(player)
+			beatBank(player, userId, result.bankDelta)
 		end
 		-- fill/stored changed → HUD belly bar + RefreshBody (speed/morph attr).
 		BodySubs.SendStomach(player)
@@ -240,10 +314,9 @@ function BodySubs.Start(data, services, subscriptions)
 			services.EconomyService.AddCalories(userId, banked)
 			services.ProgressService.AddStat(userId, "lifetimeCalories", banked)
 			EconomySubs.SendCurrency(player)
-			if AnalyticsSubs then
-				AnalyticsSubs.Onboard(player, "firstGym")
-				AnalyticsSubs.Count(player, "gym_banked", banked)
-			end
+			-- Instant burn: it IS the whole session, so it flushes at once.
+			beatBank(player, userId, banked)
+			flushBank(player, userId, `gym-{event}`)
 		end
 		uGym:FireClient(player, { event = event, banked = banked })
 		-- Full stomach resync (fill/stored now 0) — includes RefreshBody.
@@ -276,6 +349,18 @@ function BodySubs.Start(data, services, subscriptions)
 			return -- nothing to burn (empty belly) — legit no-op, no session opened
 		end
 		local gymEff = services.StatsService.GymEfficiency(userId)
+		if AnalyticsSubs then
+			-- Pressing the machine's prompt proves they are ON the checkpoint
+			-- platform, which is a stronger signal than the client's plate test
+			-- and arrives first for anyone who walks straight to the gym. Flow
+			-- steps are idempotent and ordered, so whichever lands first wins.
+			AnalyticsSubs.Flow(player, "checkpoint")
+			AnalyticsSubs.Flow(player, "gym-start")
+			-- `near` is the gym funnel's first step, so this opens a fresh
+			-- burn ATTEMPT (every trip to the machine is its own funnel).
+			AnalyticsSubs.Funnel(player, "gym", "near")
+			AnalyticsSubs.Funnel(player, "gym", "start")
+		end
 		local start =
 			services.GymService.StartSession(userId, state.fill, state.stored, services.StatsService.InstantBurn(userId), gymEff)
 		creditResult(player, start) -- applies the instant-burn slice (if any)
@@ -300,6 +385,13 @@ function BodySubs.Start(data, services, subscriptions)
 
 	Net.Remote("GymTap").OnServerEvent:Connect(function(player)
 		services.GymService.RegisterTap(player.UserId)
+		if AnalyticsSubs then
+			-- Funnel step only (idempotent per visit). The per-tap COUNT is not
+			-- logged: at ~10 taps a burn across four players it is the second
+			-- densest event in the game after bites, and the gym's story is
+			-- told by `gym_banked`'s value, not by the tap total.
+			AnalyticsSubs.Funnel(player, "gym", "tap")
+		end
 	end)
 
 	-- Reward kind "burn": instant fat burn (dev product) — a full burn anywhere,
@@ -418,6 +510,7 @@ function BodySubs.Start(data, services, subscriptions)
 					end
 					if not mount and (not root or not services.MapService.NearGym(root.Position)) then
 						services.GymService.EndSession(userId)
+						flushBank(player, userId, "gym-walked-away")
 						uGym:FireClient(player, { event = "stopped" })
 					else
 						local result = services.GymService.Advance(
@@ -430,6 +523,7 @@ function BodySubs.Start(data, services, subscriptions)
 							creditResult(player, result)
 							if result.complete then
 								services.GymService.EndSession(userId)
+								flushBank(player, userId, "gym-drain")
 								unmountTreadmill(player, true) -- step off beside the treadmill (no-op if standing)
 								uGym:FireClient(player, { event = "result", banked = result.bankedTotal })
 								-- Milestone save: a completed gym drain banks the belly's
@@ -522,6 +616,10 @@ function BodySubs.Start(data, services, subscriptions)
 	Players.PlayerRemoving:Connect(function(player)
 		caramelMult[player] = nil
 		gymMount[player] = nil -- drop any treadmill-run wiring state (the character is gone)
+		-- Leaving mid-burn still banked real calories. Emit them while the
+		-- Player is still valid to log with, then drop the accumulator so it
+		-- cannot leak (the sink's own buffer is flushed by AnalyticsSubs).
+		flushBank(player, player.UserId, "gym-left")
 	end)
 end
 
