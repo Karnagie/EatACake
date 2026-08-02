@@ -363,14 +363,46 @@ file's game section, feature-doc gotcha, or recipe — per D2); the queue row
 is only the copy for the template. A lesson that lives only in the queue
 helps future games but not tomorrow's session here.
 
+### U1b: Notice — the queue has a DEPTH, and somebody must look at it
+Capture is automatic; harvest is not. Without a trigger the queue grows
+forever and the template stops improving — the failure this rule exists to
+prevent (this project captured 200 rows and harvested 0 in three weeks).
+
+Every task, as a Post-Task item, COUNT the pending rows — one cheap command,
+no reading:
+
+```bash
+grep -c '^| EAC-[0-9]' docs/upstream/QUEUE.md
+```
+
+OFFER a bounded harvest ("top 10, P1 first?") when ANY threshold trips:
+
+| Trigger | Threshold |
+|---|---|
+| depth | ≥ 25 pending rows |
+| age | oldest pending row > 14 days |
+| severity | ANY `P1` row pending |
+| staleness | newest `TEMPLATE_CHANGELOG.md` entry > 30 days old |
+
+You OFFER; you never act on it yourself — U2 still holds. One line is
+enough: "Queue is at N (M×P1, oldest D days). Harvest the top 10 now?".
+If the user says no, that is a complete answer — do not re-ask next task
+unless a NEW threshold trips.
+
 ### U2: A game session NEVER silently edits the template
 From a game project, `D:\Projects\Roblox\RobloxTemplate` is written only via
 the harvest protocol (U3) and only with the user aware it's happening. The
 queue is the interface between games and the template. No exceptions.
 
 ### U3: Harvest — anti-degradation gates
-Applying queue items to the template follows
-`docs/recipes/harvest-to-template.md`. Every candidate passes ALL gates:
+Applying queue items to the template follows the template's `harvest` skill
+(`RobloxTemplate/.claude/skills/harvest/`). Harvest runs in BATCHES OF ≤ 10
+candidates — never "the whole queue", which is what made harvest too
+expensive to ever start. Triage is a GREP over ids/priorities/claims, never a
+read of the whole file; only the picked rows get read in full. An unharvested
+`P1` is a bug shipped to every future game — those go first.
+
+Every candidate passes ALL gates:
 1. **Proven** — ran in a real project (or, for research items, evidence from
    primary sources), not speculative
 2. **General** — game-specific ids/tuning extracted into config; no theme
@@ -381,8 +413,13 @@ Applying queue items to the template follows
 5. **Documented** — D2 (docs) + one line in `TEMPLATE_CHANGELOG.md`
 
 Style rewrites of working code are NOT improvements — reject them. When in
-doubt, REJECT with a reason in the queue row: a rejected candidate costs one
-line; a regression costs every future game.
+doubt, REJECT with a reason: a rejected candidate costs one line; a
+regression costs every future game.
+
+A settled row LEAVES the queue: move it to `docs/upstream/ARCHIVE.md` with
+its outcome (`harvested <date> <sha>` / `rejected: <reason>`), matched BY ID.
+Rejections live there forever so a later harvest cannot re-litigate them —
+and the depth in U1b only falls if this actually happens.
 
 ### U4: Research — new practices enter through the queue only
 The `research-scout` agent gathers evidence (primary sources, dates,
@@ -423,8 +460,11 @@ Before reporting task complete:
 - [ ] Registered new keys in `docs/registries/`
 - [ ] Created ADR if a non-obvious decision was made
 - [ ] Verified no duplicate functionality with existing services
-- [ ] **Upstream check (U1)**: anything generalizable in this task → one row
-      in `docs/upstream/QUEUE.md`
+- [ ] **Upstream capture (U1)**: anything generalizable in this task → one row
+      in `docs/upstream/QUEUE.md` (next free `EAC-NNNN` id, a `P` priority,
+      and the claim in **bold** — the bold claim is what triage greps)
+- [ ] **Upstream depth (U1b)**: count pending rows; if a threshold tripped,
+      OFFER a bounded harvest — never perform one unasked (U2)
 
 ---
 
