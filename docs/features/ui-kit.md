@@ -15,7 +15,8 @@ doc covers integration only; do not duplicate the skill here.
 | React root owner (client) | `src/client/common/modules/UiRoot.lua` — `Init()` by bootstrap, `Render(element)`, `Unmount()` |
 | React packages | `ReactLua-Packages.rbxmx` — vendored model (React + ReactRoblox + node_modules), rojo-mapped to `ReplicatedStorage.Packages` |
 | Demo selector | `UIKit.Demos.Selector` (`SHOW` constant: Hud / PetsInspect / Pets / Settings) |
-| Match selector | `Components.MatchChoice` + `Components.MatchmakingPanel`; integration in `features/lobby-matchmaking.md` |
+| Match selector | `Components.MatchChoice` + `Components.MatchmakingPanel`; integration in `features/lobby-matchmaking.md`. START takes `Button.pulse` inside a headroom-inflated CanvasGroup (`MatchmakingLayout.StartPulseHeadroom`) — a CanvasGroup CLIPS, so a pulse in a group sized to the button loses its peak |
+| Social offer window | `Components.SocialPanel` (`Theme.SocialLayout`) — art / headline / body / status / one CTA, portrait Panel family. Shared by Invite Friends and the community reward (`features/referrals.md`, `features/group-reward.md`) |
 | Onboarding surfaces | `Components.TutorialSlides` / `TutorialHint` / `InputGlyph` / `HintArrow`; integration in `features/tutorial.md`. ⚠ `TutorialHint` is the kit's one deliberately NON-modal overlay (style-rules §9); `HintArrow` owns a RenderStepped (ADR-0016) |
 | Effect template | `Templates.UpgradeTreeBlur`; cloned by the lobby upgrade modal (R5) |
 
@@ -76,9 +77,20 @@ To update React: replace the `.rbxmx` (re-export the jsdotlua packages under a
   the next re-render, and the HUD re-renders ~14×/s). Pass no prop (UIScale) or a
   constant (`Interaction.ZeroFill`, `KNOB_INITIAL`). New kit buttons should reuse
   `usePressable`/`pressLayer` rather than hand-rolling animation.
+  - **Attention PULSE** — a looping reversing tween on a SECOND UIScale, so the
+    press bounce keeps working (Roblox applies at most one UIScale per
+    GuiObject). `Components.Button` `pulse` (`Theme.Feel.Pulse`, 1.10) and
+    `Components.HexNode` `pulse` (`Theme.HexTree.Pulse`, 1.06 — the honeycomb is
+    packed edge-to-edge). Both mount the UIScale unconditionally so turning the
+    pulse off can EASE back to 1 instead of freezing mid-breath, and both cancel
+    + land on 1 on unmount.
+  - ⚠ **A `CanvasGroup` clips to its own bounds**, so any pulse inside one needs
+    the group inflated and the child deflated by the same factor (the
+    matchmaking START button's recipe) — otherwise the breath is sliced off on
+    all four sides.
 
 ## Icons
-`Icons.lua` holds 145 `name -> rbxassetid` entries (`Ui*` glyphs, `Pass*`
+`Icons.lua` holds 168 `name -> rbxassetid` entries (`Ui*` glyphs, `Pass*`
 badges, `Rarity{Disc,Star}*`, `Ribbon*`, `GemPack*`/`CoinPack*`/`Egg1..8`,
 `Sq*` squishies). **Components take an icon NAME in props and resolve through
 `Theme.Icon(name)`; a raw `rbxassetid://` literal in a component is forbidden.**

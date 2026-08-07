@@ -25,7 +25,9 @@ band is forced OPAQUE so a translucent one can't reveal the hollow). The window
 slides DOWN each time the layer gate advances (`rewindow`, driven by
 `LocalCakeField.ActiveBandIndex()` polled in `editableStep`; no mesh creation,
 reuses the pooled slabs). The cake below the NEXT band is hidden by a client
-module **`CakeWrapper`** — a plain textured **Part (Block)**, sized to the loaf,
+module **`CakeWrapper`** — a plain textured **Part** (Block then; **Cylinder**
+since 2026-08-03, when the cake became round — a Block around a disc pokes ~19
+studs at the corners and the cake reads square from the side), sized to the cake,
 standing from the base up to the next band's bottom and shrinking as layers
 finish, top-capped so a crater cleared to the floor shows cake not a void. It
 wears a random cake photo per cake as tiling `Texture` instances.

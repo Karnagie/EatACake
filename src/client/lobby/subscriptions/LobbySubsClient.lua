@@ -80,13 +80,20 @@ function LobbySubsClient.Start(data, modules, subscriptions)
 	end
 
 	AppRoot.SetCallbacks({
-		onMatchDifficultyPick = function(difficulty)
+		-- `isDefault` = the selector applied MatchConfig.defaults when the session
+		-- opened rather than the player tapping a choice. The flow/funnel beat
+		-- fires either way: these two steps sit between `selector-open` and
+		-- `start-press`, so skipping them would show every one-tap start as a
+		-- drop-off. The "did they actually choose" signal is not lost — the kit
+		-- counts the `Difficulty_*` / `Players_*` presses themselves, and those
+		-- exist only when a finger lands on one (features/analytics.md).
+		onMatchDifficultyPick = function(difficulty, isDefault)
 			if Analytics then
 				Analytics.Flow("difficulty-pick")
 				Analytics.Funnel("queue", "difficulty")
 			end
 		end,
-		onMatchPartyPick = function(maxPlayers)
+		onMatchPartyPick = function(maxPlayers, isDefault)
 			if Analytics then
 				Analytics.Flow("party-pick")
 				Analytics.Funnel("queue", "party")

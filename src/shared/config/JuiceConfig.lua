@@ -59,6 +59,16 @@ JuiceConfig.walkCrunch = {
 	volumeMult = 0.35,
 	pitchMult = 1.15,
 	particles = 2,
+	-- ⚠ Seconds after a bite during which the walk crunch is MUTED. It plays the
+	-- SAME `layer.sfx` sample as the bite itself, and a bite drops the collision
+	-- column under you — the settle drift alone clears `minSpeed`, so a single
+	-- click fired the bite plus 2 crunches and read as a stuttering burst of bite
+	-- sounds (measured in Studio: 1 click -> 4 sound plays, user-reported).
+	-- Because a HELD bite refreshes the timestamp at the eat-rate, this also keeps
+	-- the crunch quiet for the whole time you are eating — deliberate: while
+	-- eating you should hear bites, not footsteps of the same sample. Walking
+	-- crunch returns as soon as you stop eating and actually walk.
+	biteSuppressSeconds = 0.8,
 }
 
 JuiceConfig.floatingNumbers = {

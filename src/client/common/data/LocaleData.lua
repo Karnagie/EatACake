@@ -53,6 +53,11 @@ LocaleData.strings = {
 	["menu-settings"] = "Settings",
 	["menu-pets"] = "Squishies",
 	["menu-upgrades"] = "Upgrades",
+	-- Menu labels sit in a 22px-tall zone under the icon and TextScaled binds on
+	-- WIDTH, so they are kept to ONE short word — "Invite Friends" renders at
+	-- roughly half the size of "Shop" beside it.
+	["menu-invite"] = "Invite",
+	["menu-group"] = "Reward",
 	-- window titles
 	["title-settings"] = "Settings",
 	["title-daily-rewards"] = "Daily Rewards",
@@ -148,6 +153,9 @@ LocaleData.strings = {
 	["hex-tip-max"] = "Maxed out!",
 	["hex-tip-locked"] = "Buy the previous tier first.",
 	["hex-close"] = "Close [E]",
+	-- World sign over the checkpoint's upgrade computer (UpgradeStationSubsClient).
+	-- Its board is hidden entirely at 0, so this string never has to read as "none".
+	["station-available"] = "{n} Available",
 	-- eat input (touch hold-to-eat HUD button, features/cake-sim.md)
 	["eat-button"] = "EAT",
 	-- gym (fat-burn overlay)
@@ -260,8 +268,32 @@ LocaleData.strings = {
 	["ribbon-best-value"] = "BEST VALUE",
 	["ribbon-one-time"] = "ONE TIME",
 	["label-group-reward"] = "Group Reward",
-	["sub-group-reward"] = "Join our group!",
+	-- The shop's Free row is an ENTRY POINT into the community-reward panel now,
+	-- not a claim — so its copy advertises the boost the panel explains.
+	["sub-group-reward"] = "Like + join for a free boost!",
 	["sub-group-join-first"] = "Join the group, then claim again!",
+	-- Invite Friends (features/referrals.md)
+	["title-invite"] = "Invite Friends",
+	["invite-headline"] = "{n} Gems Per Friend!",
+	["invite-body"] = "Invite a friend. When they join the game, you get {n} Gems — no limit.",
+	["invite-button"] = "INVITE FRIENDS",
+	["invite-count"] = "{n} friends joined so far",
+	["invite-count-none"] = "No friends have joined yet",
+	["invite-sent"] = "Invites sent! Gems land when they join.",
+	["invite-unavailable"] = "Invites aren't available right now.",
+	-- Community + like reward (features/group-reward.md)
+	["title-group-reward"] = "Free Boost",
+	["group-headline"] = "Like + Join = Free Boost",
+	["group-body"] = "Like the game and join our community to get a 15 minute x2 Calories boost!",
+	["group-button"] = "GET REWARD",
+	-- The one message the reward is built around. Shown in RED on every claim —
+	-- for a member and a non-member alike — because Roblox exposes no way to
+	-- verify a like, so the wait IS the verification (features/group-reward.md).
+	["group-wait"] = "Like the game and wait {n} seconds.",
+	["group-not-in-group"] = "Join the community first, then try again.",
+	["group-granted"] = "Boost activated! Enjoy your x2 Calories.",
+	["group-claimed"] = "Already claimed — thanks for the support!",
+	["group-unconfigured"] = "This reward isn't available right now.",
 	["btn-free"] = "FREE",
 	["btn-owned"] = "Owned",
 	["price-robux"] = "R$ {n}",

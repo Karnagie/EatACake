@@ -40,7 +40,8 @@
 | `PetRollUpdate` | `PetSubs` | `features/pets.md` |
 | `TreasureUpdate` | `CakeSimulationSubs` | `features/treasures.md` |
 | `DailyRewardUpdate` | `RewardsSubs` | `features/daily-rewards.md` |
-| `GroupRewardUpdate` | `GroupRewardSubs` | `features/group-reward.md` |
+| `GroupRewardUpdate` | `GroupRewardSubs` (lobby) | `features/group-reward.md` — ⚠ consumed ONLY by `SocialSubsClient`; `ShopSubsClient` stopped listening when the reward gained a client-side community join prompt |
+| `ReferralUpdate` | `ReferralSubs` (lobby) | `features/referrals.md` — `{ rewarded, rewardGems }`; there is no client → server remote, nothing is claimed |
 | `ShopUpdate` | `ShopSubs` | `features/shop.md` |
 | `CodeResultUpdate` | `CodesSubs` | `features/promo-codes.md` |
 | `SettingsUpdate` | `SettingsSubs` | `features/settings.md` |

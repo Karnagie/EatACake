@@ -1,7 +1,8 @@
 --[[
 	CakeSubs -- player-facing cake input orchestration (R4): EatAt anti-cheat,
-	checkpoint return, and initial cake snapshots. CakeCycleSubs owns lifecycle
-	transitions; CakeSimulationSubs owns the single Heartbeat fabric.
+	checkpoint return, the PAID layer clear (`eatlayer` grant kind, sold by the
+	checkpoint's LayerEater prompt), and initial cake snapshots. CakeCycleSubs owns
+	lifecycle transitions; CakeSimulationSubs owns the single Heartbeat fabric.
 
 	The client sends only a position. Volume, layer, calories, boss damage, rate,
 	and reach remain server-authoritative.
@@ -26,6 +27,7 @@ local state -- CakeStateData
 local cakeCfg
 local antiCheat
 local biomes
+local mapCfg -- MapConfigData (checkpoint.layerEater* tuning)
 local runtime -- PlayerRuntimeData
 local services_
 local CakeCycleSubs
@@ -73,7 +75,8 @@ function CakeSubs.Start(data, services, subscriptions)
 	state = data.CakeStateData
 	cakeCfg = data.CakeConfigData and data.CakeConfigData.cake
 	antiCheat = data.CakeConfigData and data.CakeConfigData.antiCheat
-	biomes = data.MapConfigData and data.MapConfigData.biomes
+	mapCfg = data.MapConfigData
+	biomes = mapCfg and mapCfg.biomes
 	runtime = data.PlayerRuntimeData
 	if state == nil or cakeCfg == nil or antiCheat == nil or biomes == nil or runtime == nil then
 		Log.Warn(SCOPE, "cake/player runtime data missing -- input subscriptions skipped")
@@ -238,6 +241,81 @@ function CakeSubs.Start(data, services, subscriptions)
 			BodySubs.RefreshBody(player)
 		end
 	end)
+
+	-- Reward kind "eatlayer": the paid LayerEater at the checkpoint
+	-- (features/checkpoint.md). GAME-partition only, like `burn` — a receipt that
+	-- surfaces in the lobby is deferred by ShopSubs and delivered in a game server.
+	--
+	-- It pays the buyer for what it actually removed, priced through EXACTLY the
+	-- bite formula above (food = volume x band.density, then the layer's calories,
+	-- the cake multiplier and the biome multiplier) so a bought layer and an eaten
+	-- one are worth the same. The BELLY is deliberately not filled: a paid
+	-- convenience that ends with the player over capacity and walking to the gym
+	-- is a punishment for buying.
+	local RewardGrantSubs = subscriptions and subscriptions.RewardGrantSubs
+	if RewardGrantSubs == nil then
+		Log.Warn(SCOPE, "RewardGrantSubs missing -- the paid layer clear cannot be delivered in this place")
+	else
+		-- Readiness runs BEFORE the receipt is committed (RewardGrantSubs header):
+		-- everything that makes this undeliverable right now has to be said here,
+		-- or the player pays and the handler's nil arrives too late to refuse.
+		RewardGrantSubs.RegisterReady("eatlayer", function(player: Player)
+			if not authorizedPlayer(player) then
+				return false, "buyer is not a participant in the established round"
+			end
+			if services.CakeCycleService.Phase() ~= "eating" then
+				return false, `the cake is in the '{services.CakeCycleService.Phase()}' phase, not eating`
+			end
+			-- Band 1 is the inedible core, so there is no layer left to eat.
+			-- Read the TOP band from the field, not `state.activeBandIndex`: that
+			-- index only refreshes at 1 Hz, and this predicate is the last gate
+			-- before the Roblox dialog opens.
+			local fill, index = services.CakeFieldService.TopBandFill()
+			if index <= 1 then
+				return false, "no edible layer left on this cake"
+			end
+			-- Don't sell scraps. Fixed price, permanent (a dev product cannot be
+			-- repriced), and the player cannot see how much of the layer is left
+			-- before paying — so the SERVER refuses rather than letting them find
+			-- out afterwards. Refusing here means the dialog never opens.
+			local minFill = mapCfg.checkpoint.layerEaterMinRemainingFraction or 0
+			if fill < minFill then
+				return false,
+					`only {math.floor(fill * 100)}% of this layer is left (needs {math.floor(minFill * 100)}%) — not worth the price`
+			end
+			return true
+		end)
+
+		RewardGrantSubs.Register("eatlayer", function(player: Player, reward, source: string?)
+			local removed, band, layer = services.CakeFieldService.ClearActiveBand()
+			if removed <= 0 or band == nil or layer == nil then
+				-- Readiness said yes, so this is a race (someone else's bite or the
+				-- auto-sweep finished the band in between), not a config bug.
+				Log.Warn(SCOPE, `{player.Name}: paid layer clear found nothing left to remove -- no calories paid`)
+				return nil
+			end
+			local food = removed * (band.density or 1)
+			local biomeMultiplier = (biomes[state.biome] and biomes[state.biome].caloriesMult) or 1
+			local baseCalories = food
+				* (layer.calories or 0)
+				* services.CakeCycleService.CakeCaloriesMult()
+				* biomeMultiplier
+			local calories = math.floor(baseCalories * services.StatsService.CaloriesMult(player.UserId))
+			-- Through the registry, not EconomyService directly: the `calories`
+			-- handler is what pushes CurrencyUpdate and books the economy SOURCE, so
+			-- a bought layer shows up on the same chart as every other calorie.
+			local granted = RewardGrantSubs.Grant(
+				player,
+				{ kind = "calories", amount = calories },
+				source or "layer-eater"
+			)
+			Log.Sum(
+				SCOPE,
+				`{player.Name} bought a layer clear: band '{band.id}', {math.floor(removed)} studs³ -> {calories} calories`
+			)
+			return { kind = "eatlayer", layerId = band.id, calories = (granted and granted.amount) or 0 }
+		end)
+	end
 
 	Net.Remote("ReturnToCheckpoint").OnServerEvent:Connect(function(player)
 		local userId = player.UserId

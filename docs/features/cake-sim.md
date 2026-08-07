@@ -2,8 +2,9 @@
 
 ## What it does
 ONE shared cake per server: a 64×64 u16 heightfield (fixed-point 0.01
-studs, `GridUtil` layout), FIXED rounded-rect "loaf" footprint
-(`composition.footprint`, 90×78 studs), ALWAYS `composition.maxTotalHeight`
+studs, `GridUtil` layout), FIXED **ROUND** footprint (`composition.footprint`,
+a 93.3-stud disc — round since 2026-08-03, was a 90×78 rounded-rect loaf),
+ALWAYS `composition.maxTotalHeight`
 (**170** studs since 2026-07-26 — at 330 the loaf was 3.7× taller than wide and
 read as a striped tower; height is a PURE VISUAL knob, measured free by
 `tools/headless-sim/pacing_scenario.lua`, ⚠ don't go below ~130 or the deepest
@@ -95,6 +96,17 @@ stationary auto-eater keeps earning rather than stalling.
 | treasures | 2 Hz | `TreasureService.Tick` |
 | progress scan | 1 Hz | `ScanStats` (progress %, auto-sweep + sliver sweep + thin-remnant sweep §7.6, bottom check) |
 
+`CakeFieldService.ClearActiveBand()` is the one-shot version of the auto-sweep:
+it collapses every in-cake cell above the TOP band's bottom onto it and
+returns the removed volume + the band + its layer def, so the caller can price it
+as FOOD exactly like a bite. Sold by the checkpoint's LayerEater
+(`features/checkpoint.md`). ⚠ It resolves that band from the FIELD (the same
+maxH rule `ScanStats` uses), not from `activeBandIndex` — that index only
+refreshes at 1 Hz, so two purchases inside one tick would both target it and the
+second would clear an already-flat band. ⚠ It deliberately does NOT advance the layer gate —
+the 1 Hz `ScanStats` does, and that single path is also what moves the checkpoint
+plate, announces the cleared layer and fires the retention beat.
+
 ## Remotes / updates
 - `EatAt` (client→server, Vector3): bite intent — the surface point directly
   IN FRONT of the eater (see input below). The server applies TWO bites per
@@ -111,8 +123,9 @@ stationary auto-eater keeps earning rather than stalling.
   active floor (see Layer gate above), so it can't cut past the top layer.
 - `CakeSnapshotUpdate`: full buffer + meta `{cakeIndex, footprint,
   composition, rareKind, biome, phase, progress, activeBandIndex}` on join
-  (via lifecycle push) and on every new cake. (`footprint` = the rounded-rect
-  loaf `{hx, hz, corner}`; the client reads `meta.footprint`, never a radius.
+  (via lifecycle push) and on every new cake. (`footprint` = `{hx, hz, corner}`
+  in cells — the rounded-rect SDF; all three EQUAL == the round cake that ships.
+  The client reads `meta.footprint`, never a radius.
   `activeBandIndex` seeds the layer gate — see Layer gate above.)
 - `CakeDeltaUpdate` (Unreliable): `(cakeIndex, buffer[u16 idx, u16 h]*n)`.
   Losses self-heal via the rotating repair cursor (full sweep ≈ 9 s).
@@ -202,15 +215,30 @@ stationary auto-eater keeps earning rather than stalling.
   skipped (no per-frame re-write when nothing moves). Setup(mirror) +
   Step(dt, footPos) from CakeSubsClient.
 - `CakeWrapper` — the textured OUTER WALL that hides the cake BELOW the current +
-  next rendered layers (`CakeRenderer` window). A plain anchored Part (Block,
+  next rendered layers (`CakeRenderer` window). A plain anchored Part (CYLINDER,
   NOT a mesh — cheaper + the `Texture` path reliably tiles the image, which the
-  MeshPart `TextureContent`-from-URI approach did NOT display), sized to the loaf,
-  standing from the base up to the NEXT layer's bottom
+  MeshPart `TextureContent`-from-URI approach did NOT display), ⌀ matched to the
+  slab outline, standing from the base up to the NEXT layer's bottom
   (`composition[activeIndex-1].bottom`) and shrinking as each layer clears. Wears a
   RANDOM cake photo (`render.wrapper.textures`, one per cake by `cakeIndex`) as
-  tiling `Texture` instances on its 4 sides + top cap (a crater cleared to the
-  next-layer floor shows the cap, not a void). Square corners poke ~6 studs past the rounded
-  loaf at the 4 corners (the Block-vs-rounded-rect trade). CanCollide/CanQuery=false;
+  tiling `Texture` instances on its curved side + top cap (a crater cleared to the
+  next-layer floor shows the cap, not a void). ⚠ A Roblox cylinder Part's axis is
+  its LOCAL X and its caps are the ±X faces, so it is rotated `CFrame.Angles(0,0,
+  pi/2)` upright and sized `(HEIGHT, ⌀, ⌀)`; after that the top cap is
+  `NormalId.Right` and Front/Back/Top/Bottom each texture one 90° quadrant of the
+  curve. It was a Block until 2026-08-03 (~6-stud corner poke past the loaf); against
+  a disc a Block would poke ~19 studs and the cake would read SQUARE from the side.
+  ⚠ **It is a RING of `render.wrapper.segments` (32) flat Block segments + a meshed
+  top-cap disc — NOT one cylinder**, and the reason is texture tiling: a part
+  carrying a mesh maps its Textures through the MESH's UVs and IGNORES
+  `StudsPerTile` entirely (55 / 20 / 5 rendered pixel-identical when the wall was
+  briefly one `CylinderMesh`), which also re-stretches the photo every time the wall
+  shrinks a layer. Flat block faces tile for real. Each segment sets
+  `OffsetStudsU` to its cumulative width so the tiling phase runs CONTINUOUSLY
+  around the ring instead of restarting at every seam. Size knob:
+  `render.wrapper.tileStuds`, a true square tile in studs. The cap keeps a
+  `CylinderMesh` — it is a flat disc seen face-on through a crater, where one mapped
+  photo is what you want. CanCollide/CanQuery=false;
   reads `LocalCakeField` itself. Setup(mirror) + OnSnapshot() (pick texture) +
   Step(dt) from CakeSubsClient.
 - `CakeFeelSubsClient` — per-layer FEEL under the feet (`CakeConfig.feel`):
@@ -265,10 +293,47 @@ stationary auto-eater keeps earning rather than stalling.
   moment it was nicked: ~25% of every cake vanished uneaten, layer clear-time
   stopped depending on the bite stats at all, and there was no room left to pace
   the cake (ADR-0011). Keep it near the floor.
-- The footprint XZ is FIXED (`composition.footprint` loaf) — it does NOT
-  scale with population (the 64-cell grid caps it); only the cake HEIGHT
-  scales up per player (`composition.perPlayerScale`, cake-cycle.md). Auto-
-  sweep + boss timers keep solo pace sane.
+- **The cake is ROUND, and `hx == hz == corner` is HOW.** `GridUtil.InCake` is
+  a rounded-rect SDF; setting the corner radius equal to BOTH half-extents
+  collapses the straight edges to zero and leaves a pure disc of radius
+  `corner`. Every consumer inherits the circle for free — `CakeRenderer`'s rim
+  projection degenerates to `dir * (R+0.5)*cell`, `CakeWaxShell`'s four corner
+  arcs share one centre and concatenate into one circle, `TreasureService`'s
+  inset subtracts the margin from all three and stays a disc. Keep all THREE
+  equal or the cake silently reverts to a stadium/rect. The values are FLOATS
+  (31.1) — nothing loops over them integer-wise; don't "tidy" them to ints.
+- **Radius is chosen by CELL COUNT, not by pretty numbers.** Edible volume =
+  cells × cell² × height and height is always `maxTotalHeight`, so the cell
+  count IS the balance. The old loaf covered 3036 cells; R = 31.1 covers 3032
+  (−0.13% — the closest a 64-cell lattice reaches; the count steps 4-8 cells at
+  a time). Re-measure with `tools/headless-sim/pacing_scenario.lua` before
+  changing it: the round rim also costs a little more sweep waste (see below).
+- ⚠ **An ANALYTIC rim over a STAIRCASE mask needs an in-cake fallback.** The wax
+  outline (and any other smoothed edge) is a continuous curve, but `InCake` is a
+  cell staircase — so short stretches of the curve overhang a cell that is OUT of
+  the cake, and out-of-cake cells hold height **0**. Sampling one for a rim vertex
+  writes it at the cake BASE while its piece rides the surface: a ~170-stud wax
+  streamer down the side (and for a triangle-centre sample, a piece that hides
+  forever = a bald patch). `CakeWaxShell.cellAt` therefore takes a `fallback` (the
+  piece's own centre cell) for every rim sample. This was latent on the loaf — only
+  its 4 corner arcs could do it — and the ROUND cake makes the whole rim an arc,
+  which is what made it reachable. Apply the same rule to any new rim sampler.
+- The footprint XZ is FIXED (`composition.footprint`) — it does NOT
+  scale with population (the grid caps the radius just UNDER 31.5 cells: `InCake`
+  uses `half = (size-1)*0.5 = 31.5` with `<=`, so AT 31.5 the outer columns become
+  in-cake, the renderer can no longer place a ring cell outside them and the skirt
+  seal opens at the field boundary with no warning — 31.1 leaves 0.4 of margin); only
+  the cake's WORK scales with population (`composition.coopWork`, cake-cycle.md —
+  `perPlayerScale` was removed by ADR-0011). Auto-sweep + boss timers keep solo pace sane.
+- **A disc is staircased EVERYWHERE**, where the loaf had two long clean straight
+  edges — so the remnant sweep finds slightly more isolated rim cells. Measured
+  cost of the loaf→disc change at equal area (`pacing_scenario.lua`, deterministic,
+  measured 2026-08-03): fresh session 91.6→92.0 min, food −0.3%, waste 14.1%→14.2%;
+  fully upgraded 27.8→27.4 min, food −1.4%, waste 2.6%→3.8%. All well inside
+  ADR-0011 tolerance. ⚠ The ABSOLUTE minutes are no longer reproducible: that run
+  used the scenario's hardcoded eater (biteRadius 3.4 / capacity 84000), which
+  2026-08-05 replaced with a live `UpgradeConfig` read. The A/B DELTAS — which is
+  all this bullet claims — are unaffected, since both sides used the same eater.
 - Glass jelly hides TRANSPARENT things (particles/FX) seen through it on
   high graphics — opaque layers below render fine; not a ParticlePool bug.
 - Server collision (16×16 slabs) is a SAFETY net only — precise walking
@@ -280,6 +345,18 @@ stationary auto-eater keeps earning rather than stalling.
   yet (join). See `CakeCollisionService` header.
 - New cakes materialize around players standing in the footprint —
   CakeCycleSubs lifts them onto the fresh frosting at spawn.
+- ⚠ **The cake is not collidable until THIS client's columns are built**, but
+  `CakeSpawn` drops the character on the crust the instant they join. On a slow
+  load they fall clean through and the columns rise around them: measured HRP at
+  Y=141 with the surface at 175 — 34 studs inside, permanently stuck (a mid-session
+  respawn is fine, which is what identifies it as a LOAD RACE, not spawn geometry).
+  `CakeSubsClient.rescueBuriedLocal` runs immediately after every
+  `CakeRenderer.OnSnapshot` (which ends in `columnsRebuild`, the first moment a
+  fall-through is recoverable) and lifts a local character found more than
+  `render.collision.buriedRescueStuds` under the surface. It fires ONLY at a
+  snapshot boundary, so it can never undo the deliberate "refilling cake buries you,
+  jump out" feel (`riseRate`), which happens per-frame. Server-side lifting cannot
+  fix this: only the client knows when its own columns went up.
 
 ## Files
 Server: `CakeStateData`, `CakeConfigData`, `services/CakeFieldService`,

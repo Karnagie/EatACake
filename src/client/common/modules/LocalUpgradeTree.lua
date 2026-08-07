@@ -5,11 +5,29 @@
 	purchase from UpgradeConfig (never trusts this).
 
 	Node states: locked / available (next buy) / owned / category / back / logo.
+	Every stat and category node also carries an `icon` (a Theme.Icons registry
+	NAME from UpgradeTreeConfig.icons) — the glyph is what identifies the node for
+	a player who does not read the label; HexNode switches to its icon-first
+	layout whenever one is present.
 	Sub-tree tiers are PACKED into a tight spiral blob (HexUtil.Spiral) — hexes
 	touch, no connectors. Each node also carries `detail` (name / description /
 	status / cost) for the tap-to-open panel, and category nodes carry a `badge`
 	when an affordable upgrade sits inside. Positions are Scale (0..1) of the
 	square canvas; the overlay scales it once to the viewport.
+
+	It also owns the AFFORDABILITY predicates (`AffordableCount` / `AnyAffordable`
+	/ `CanAffordNext`) — one definition, shared by the category "!" BADGE, the Buy
+	button's `detail.affordable`, the world "N AVAILABLE" sign over the upgrade
+	station (UpgradeStationSubsClient) and the onboarding gate (TutorialSubsClient).
+	They also drive `node.pulse` — the breathing hex (HexNode) that says "you can
+	buy this RIGHT NOW": an affordable tier, and any category holding one (the
+	same fact as its "!" badge, in a second channel).
+	⚠ They do NOT drive the gold `available` STATE. A hex is gold when it is the
+	next UNLOCKED tier (`owned == tier - 1`), priced but not necessarily payable —
+	that is deliberate, since a tier has to show its price before you can afford
+	it — so GOLD HEXES >= the sign's N, always. What the shared predicate buys is
+	the one-way guarantee that matters: the sign can never promise a purchase the
+	Buy button then refuses.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -20,6 +38,16 @@ local UpgradeTreeConfig = require(ReplicatedStorage.Shared.config.UpgradeTreeCon
 
 local SCOPE = "LocalUpgradeTree"
 
+-- Registry NAMES per node (UpgradeTreeConfig.icons — the reasoning for each
+-- choice lives there). Read-ONLY locals, never `ICONS.stats = ICONS.stats or {}`:
+-- that writes into the shared config table, which would throw outright the day
+-- someone `table.freeze`s it the way Theme freezes its sections. Tolerant of a
+-- config with no icons block, so an older UpgradeTreeConfig still builds a tree —
+-- just without glyphs, and HexNode falls back to its text-only cut.
+local ICONS = UpgradeTreeConfig.icons or {}
+local ICON_STATS = ICONS.stats or {}
+local ICON_CATEGORIES = ICONS.categories or {}
+
 local LocalUpgradeTree = {}
 
 local locale
@@ -29,21 +57,54 @@ function LocalUpgradeTree.Init(data)
 end
 
 --API
--- Is ANY stat's next tier already affordable? Cheap (9 stats), pure.
--- ⚠ NO CALLER since 2026-07-30 (kept, not wired — like UpgradeRow/UpgradesPanel).
--- It drove a HUD Upgrades badge; the tree is opened only from the checkpoint's
--- `UpgradeStation` prompt now, so there is no button to badge. Re-wire this if an
--- "you can afford an upgrade" cue is ever wanted on the prompt or the HUD.
-function LocalUpgradeTree.AnyAffordable(levels: { [string]: number }?, calories: number?): boolean
+-- How many upgrades could the player buy RIGHT NOW? Cheap (9 stats), pure.
+--
+-- Counts STATS whose next tier is affordable — the subset of the tree's gold
+-- `available` hexes the player can actually pay for right now (gold means UNLOCKED,
+-- not affordable — see the module header). It deliberately does NOT count a greedy
+-- spending SEQUENCE (buy the cheapest, then see what the freed-up tier unlocks):
+-- that answers a different question, and a world label promising "7 available" over
+-- a tree the player can only buy 3 things from is a lie they can see.
+function LocalUpgradeTree.AffordableCount(levels: { [string]: number }?, calories: number?): number
 	local owned = levels or {}
 	local balance = calories or 0
+	local count = 0
 	for id, def in pairs(UpgradeConfig.upgrades) do
 		local nextTier = def.tiers[(owned[id] or 0) + 1]
 		if nextTier ~= nil and nextTier.cost <= balance then
-			return true
+			count += 1
 		end
 	end
-	return false
+	return count
+end
+
+--API
+-- Is ANY stat's next tier already affordable?
+function LocalUpgradeTree.AnyAffordable(levels: { [string]: number }?, calories: number?): boolean
+	return LocalUpgradeTree.AffordableCount(levels, calories) > 0
+end
+
+--API
+-- Could the player afford ONE named stat's next tier at this balance?
+-- A MAXED stat returns true: there is nothing left to save up for, so a caller
+-- gating on "can they buy this yet?" must not wait forever.
+-- An UNKNOWN id returns nil (and warns once) rather than a boolean — config drift
+-- must not silently read as "yes, go ahead"; the caller picks the safe branch.
+function LocalUpgradeTree.CanAffordNext(
+	levels: { [string]: number }?,
+	calories: number?,
+	statId: string
+): boolean?
+	local def = UpgradeConfig.upgrades[statId]
+	if def == nil then
+		Log.Once(SCOPE, "badaffordstat-" .. tostring(statId), `CanAffordNext('{tostring(statId)}') — no such upgrade in UpgradeConfig`)
+		return nil
+	end
+	local nextTier = def.tiers[((levels or {})[statId] or 0) + 1]
+	if nextTier == nil then
+		return true
+	end
+	return nextTier.cost <= (calories or 0)
 end
 
 local ROMAN = { "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X" }
@@ -175,10 +236,16 @@ function LocalUpgradeTree.BuildTree(treeId: string, levels, calories: number)
 				key = `cat:{cat.id}`,
 				kind = "category",
 				state = "category",
+				icon = ICON_CATEGORIES[cat.id],
 				title = locale.T(def.nameKey),
 				status = locale.T("hex-open"),
 				clickable = true,
 				badge = canBuy,
+				-- "This branch holds something you can buy right now" — the same
+				-- fact the "!" badge carries, said in MOTION so it survives a squint
+				-- and reaches a player who never reads the labels (HexNode `pulse`).
+				-- ONE predicate feeding both channels: they cannot disagree.
+				pulse = canBuy,
 				action = { type = "open", id = cat.id },
 				detail = {
 					title = locale.T(def.nameKey),
@@ -198,6 +265,7 @@ function LocalUpgradeTree.BuildTree(treeId: string, levels, calories: number)
 			key = "back",
 			kind = "back",
 			state = "back",
+			icon = ICONS.back,
 			title = locale.T("hex-back"),
 			status = "",
 			clickable = true,
@@ -225,6 +293,11 @@ function LocalUpgradeTree.BuildTree(treeId: string, levels, calories: number)
 				local cell = packed[si][tier]
 				local tierDef = def.tiers[tier]
 				local state, status, statusLine
+				-- AFFORDABLE, not merely unlocked — see the module header: gold means
+				-- "the next tier, priced", and a tier has to show its price before the
+				-- player can afford it. Only this narrower set breathes, and it is the
+				-- same set the green Buy button accepts.
+				local affordable = owned == tier - 1 and calories >= tierDef.cost
 				if owned >= tier then
 					state = "owned"
 					status = ""
@@ -242,9 +315,14 @@ function LocalUpgradeTree.BuildTree(treeId: string, levels, calories: number)
 					key = `{statId}:{tier}`,
 					kind = "tier",
 					state = state,
+					-- Every tier of a stat wears the SAME glyph; the roman numeral in
+					-- the title is what separates them. A per-tier glyph would make one
+					-- stat's wedge read as five unrelated upgrades.
+					icon = ICON_STATS[statId],
 					title = `{locale.T(`hex-name-{statId}`)} {roman(tier)}`,
 					status = status,
 					clickable = true,
+					pulse = affordable,
 					statId = statId,
 					detail = {
 						title = `{locale.T(def.nameKey)} {roman(tier)}`,
@@ -253,7 +331,7 @@ function LocalUpgradeTree.BuildTree(treeId: string, levels, calories: number)
 						buyText = if state == "available"
 							then locale.T("price-calories", { n = fmt(tierDef.cost) })
 							else nil,
-						affordable = state == "available" and calories >= tierDef.cost,
+						affordable = affordable,
 						state = state,
 					},
 				})

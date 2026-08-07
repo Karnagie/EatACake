@@ -11,12 +11,33 @@ mute it (`features/settings.md`).
 |---|---|---|
 | `ReplicatedStorage.SFX` (any nesting) | Sound instances — the samples, their base `Volume`/`PlaybackSpeed`, any SoundEffect children | Studio (authored, saved with the place) |
 | `SoundService.BackgroundMusic` | music tracks (Sounds), base `Volume` = mix level | Studio (authored) |
-| `shared/config/AudioConfig.lua` | semantic key → `{ asset = "<Sound name>", volume, pitch, cut, throttle }` | code (Rojo) |
+| `shared/config/AudioConfig.lua` | semantic key → `{ asset = "<Sound name>", volume, pitch, cut, throttle, enabled }` | code (Rojo) |
 
 `volume`/`pitch` are MULTIPLIERS on the authored values, so retuning a sample
 in Studio still works. `cut` stops playback after N seconds (turns a 2 s
 library splat into a 0.3 s bite). `throttle` drops repeats of a key inside N
-seconds (for cues driven by high-frequency events).
+seconds (for cues driven by high-frequency events). **`enabled = false` switches
+a key off** without touching call sites — `SoundPool.Play` early-returns, and
+`Init` reports the disabled set ONCE at boot (R8: a deliberately silent cue must
+not be indistinguishable from a broken sample).
+
+## ⚠ ONE TAP = ONE BITE SOUND (2026-08-03)
+The bite plays the active layer's `sfx` key. Two other things used to stack the
+SAME sample on top of it, so a single click fired **4 sound plays** (measured by
+hooking `Sound.Played` in a playtest — the only way to settle this):
+- `chew` — a deliberate layered mouth sound. Now `enabled = false`; flip it back
+  in `AudioConfig.sounds.chew` if the extra layer is ever wanted.
+- the WALK CRUNCH (`JuiceConfig.walkCrunch`) — it reuses the layer's bite sample
+  at footstep cadence, and a bite DROPS the collision column under you, so the
+  settle drift alone clears `minSpeed` while standing still. Muted for
+  `walkCrunch.biteSuppressSeconds` (0.8) after any bite; because a held bite
+  refreshes that timestamp at the eat-rate, the crunch stays quiet for the whole
+  time you are eating (deliberate — while eating you hear bites, not footsteps).
+
+Still expected, and NOT a duplicate bite: the `slump` loop (one looping voice,
+volume follows avalanche energy) and the landing `crustCrack`/`land` cue when a
+bite drops you into your own fresh crater. Both are distinct events; the landing
+one fires once per drop, not per bite.
 
 ⚠ **Both folders are place content, not Rojo-synced — the lobby AND game
 places each need them.** A missing folder / missing sample name / duplicate

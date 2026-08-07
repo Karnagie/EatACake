@@ -24,12 +24,18 @@ MatchConfig.protocolVersion = 1
 --
 -- ⚠ 2026-07-30: every workMultiplier went UP by x1.08 (easy 1 -> 1.08). The
 -- upgrade tree is RUN-scoped and its costs were cut ~20x so the whole tree is
--- owned by ~46% of the cake, which means the BACK HALF of every run is now
+-- owned by ~half the cake, which means the BACK HALF of every run is now
 -- played at full power — that alone took the solo-easy clear from 54.6 min to
--- 36.8. The 8% work bump buys it back to **38.9 min**, i.e. the 40-minute
--- target, without shrinking the cake or slowing the fun half.
--- Measured over 5 seeds by `tools/balance-model/pacing.py --candidate`; the
--- ratios between the three modes are untouched, so the ladder is unchanged.
+-- 36.8. The 8% work bump buys it back toward the 40-minute target, without
+-- shrinking the cake or slowing the fun half. The ratios between the three modes
+-- are untouched, so the ladder is unchanged.
+-- ⚠ 2026-08-05 (ADR-0019): the clear time this 1.08 was calibrated against
+-- (38.9 min) is gone — the belly rebalance re-measures at **35.3 min**, because
+-- halving the tier-1 prices puts the eating stats in the player's hands minutes
+-- earlier. `workMultiplier` was deliberately NOT raised to claw those 3.4 minutes
+-- back: it would have re-shifted the freshly solved belly-interval curve and
+-- compressed the easy/medium spacing. Re-measure with
+-- `tools/balance-model/pacing.py` (and `--intervals`) before touching it.
 MatchConfig.difficultyOrder = { "easy", "medium", "hard" }
 MatchConfig.difficulties = {
 	easy = {
@@ -60,8 +66,33 @@ MatchConfig.difficulties = {
 
 MatchConfig.playerCounts = { 1, 2, 3, 4 }
 
+-- What the selector opens ON. The panel used to open with NOTHING selected, so
+-- the fastest possible route into a match was three taps; solo-easy is what the
+-- overwhelming majority of first sessions pick anyway, and it is the mode every
+-- pacing number in `features/upgrades.md` is measured against.
+-- ⚠ A preselection is still a SELECTION: the panel reports both picks the moment
+-- it applies them, or the `difficulty-pick` / `party-pick` steps of the player
+-- flow would go dark for everyone who simply presses START
+-- (`features/analytics.md`). Whether the player CHOSE or merely accepted is
+-- still visible — the kit counts the `Difficulty_*` / `Players_*` taps
+-- themselves, and those only exist when a finger lands on one.
+-- Values that are not in `difficultyOrder` / `playerCounts` are ignored (the
+-- panel falls back to no preselection), so retiring a mode cannot wedge START.
+MatchConfig.defaults = {
+	difficulty = "easy",
+	playerCount = 1,
+}
+
 MatchConfig.queue = {
-	countdownSeconds = 30,
+	-- Launch countdown, picked by PARTY SIZE when START is pressed
+	-- (`Core.CountdownSeconds`). A solo player is only ever waiting on
+	-- themselves, so a long timer is pure dead time before the run; a party needs
+	-- long enough for everyone to be on the pad and settled.
+	-- ⚠ Chosen ONCE, at the moment the countdown starts. Someone joining a solo
+	-- queue at t=4s rides the remaining 1s rather than resetting it to 15 — the
+	-- countdown never jumps backwards on people already waiting.
+	countdownSeconds = 15, -- 2+ players
+	countdownSecondsSolo = 5,
 	scanIntervalSeconds = 0.2,
 	requestCooldownSeconds = 0.2,
 	exitGraceSeconds = 0.75,

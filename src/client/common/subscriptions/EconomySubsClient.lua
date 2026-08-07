@@ -2,9 +2,15 @@
 	EconomySubsClient — currency consumer (R4).
 	CurrencyUpdate ({ calories, gems }) -> AppRoot HUD pills.
 
-	GEMS get a pickup cue, calories do NOT: calories tick on every bite (many
-	a second), so a cue there would be a drone. The first push is the join
-	snapshot, not a gain — it must stay silent.
+	GEMS get a pickup cue, calories do NOT. (The original reason — "calories tick
+	on every bite" — has not been true since the gym rework: eating fills
+	`stomach.stored`, and CurrencyUpdate only moves when that is BANKED at the
+	treadmill or a reward lands. The rule still holds for a different reason: the
+	gym already has its own result cue, and doubling it would be a drone.)
+	The first push is the join snapshot, not a gain — it must stay silent.
+	⚠ That cadence is load-bearing elsewhere: `UpgradeStationSubsClient`'s
+	"N Available" sign changes only when this or `UpgradesUpdate` does, which is
+	why polling it twice a second is cheap.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

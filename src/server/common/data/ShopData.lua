@@ -53,6 +53,11 @@
 		              -- a halo on nothing.
 		oneTime,      -- enforced via profile.shop.oneTimePurchased (we
 		              -- enforce one-time-ness, Roblox does not)
+		hidden,       -- true = NEVER sent in ShopUpdate, so it draws no shop
+		              -- cell. For products sold by a WORLD surface instead of by
+		              -- the grid (the checkpoint LayerEater prompt). It is still a
+		              -- full catalogue entry: RequestPurchase and ProcessReceipt
+		              -- both resolve the key here.
 		grant/grants, -- reward descriptor(s) granted on a paid receipt
 	}
 
@@ -119,6 +124,31 @@ ShopData.products = {
 			{ kind = "boost", boostId = "bite-15m" },
 			{ kind = "boost", boostId = "speed-15m" },
 		},
+	},
+
+	-- ===== LAYER EATER — sold by the WORLD, not by a shop cell =============
+	-- The impulse buy at the checkpoint: the cat contraption beside the gym eats
+	-- the whole layer you are standing on and credits you the calories it was
+	-- worth (features/checkpoint.md). `hidden` keeps it out of `ShopUpdate` and
+	-- therefore out of the shop grid — the ONLY way to buy it is the world
+	-- `LayerEaterPrompt`, which is the only place it makes sense: the shop window
+	-- opens in the LOBBY, where there is no cake and its `eatlayer` grant kind has
+	-- no handler, so a lobby cell would charge and then appear to do nothing until
+	-- the next match started.
+	-- ⚠ ONE grant, and the amount is decided SERVER-side from the volume actually
+	-- removed — a half-eaten layer pays for what was left, so the product cannot
+	-- be farmed by buying it twice on the same band.
+	["layer-eater"] = {
+		devProductId = 3613094133,
+		priceRobux = 9,
+		label = "Layer Eater",
+		desc = "Eats a whole layer",
+		icon = "UiCake",
+		order = 2,
+		accent = "Rare",
+		section = "featured",
+		hidden = true,
+		grant = { kind = "eatlayer" },
 	},
 
 	-- ===== BOOSTS — the GEM row ============================================

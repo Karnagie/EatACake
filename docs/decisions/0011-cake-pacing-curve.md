@@ -35,13 +35,19 @@ Pacing is a property of the **band**, expressed as two rolled numbers per layer
 - **`scoop`** — multiplies the eater's `biteRadius` on that band. Ramps
   geometrically from **2.23** at the icing to **0.558** at the core, so a base
   eater takes a ~7.6-stud spoonful of frosting and a ~1.9-stud chip of the dense
-  bottom. Since a bite clears to the floor, clear time scales with bite AREA —
+  bottom. (⚠ 5.4 / 1.3 studs since `biteRadius` base moved 3.4 → 2.4 in commit
+  `1c21a15`; the RULE is unchanged, only the base it multiplies.) Since a bite clears to the floor, clear time scales with bite AREA —
   this is the pacing curve, and it reads on screen without a tutorial.
 - **`density`** — how rich/filling that band is per stud³ (calories AND belly
   fill). Set to `refBandWeight / (thickness × scoop²)`, i.e. exactly the value
   that keeps the FOOD in one bite constant as the scoop shrinks. That is what
-  holds the belly→gym rhythm at ~90 s and the calorie income flat from the first
-  layer to the last, on every difficulty and party size.
+  keeps the calorie income flat from the first layer to the last, on every
+  difficulty and party size — and what makes `capacity` the SOLE owner of the
+  belly→gym rhythm.
+  ⚠ SUPERSEDED IN PART by ADR-0019 (2026-08-05): that rhythm is deliberately no
+  longer a constant ~90 s. It is a CURVE — ~10 s per belly at capacity tier 0,
+  ~30 s after tier 1, ~90 s after tier 2, up to ~180 s at tier 5 — because how
+  often the belly interrupts eating is the progression the player actually feels.
 
 Layer thickness follows the same ramp (deeper = chunkier) and is renormalised so
 **every** cake is exactly `maxTotalHeight` (330 studs at the time of this ADR;
@@ -64,9 +70,12 @@ Two supporting fixes make the curve possible at all:
 
 ## Consequences
 
-- Sim-measured: **Easy solo 40 min**, medium 41, hard 44; 4-player 23–25 min.
-  First layer ~28 s, last ~150 s. Gym every ~83–110 s everywhere. A player
-  finishes an Easy match owning ~21 of 44 upgrade tiers.
+- Sim-measured AT THE TIME: **Easy solo 40 min**, medium 41, hard 44; 4-player
+  23–25 min. First layer ~28 s, last ~150 s. Gym every ~83–110 s everywhere. A
+  player finishes an Easy match owning ~21 of 44 upgrade tiers.
+  ⚠ All five figures are superseded: ADR-0013 (run-scoped tree, re-priced) and
+  ADR-0019 (belly curve) both moved them. Current numbers live in
+  `features/upgrades.md` and are produced by `tools/balance-model/pacing.py`.
 - `cakeHeightMultiplier` and `composition.perPlayerScale` are **gone**. Anything
   that wants a "bigger" cake changes `workMultiplier` / `coopWork`.
 - The composition bands now carry `scoop` and `density`, and they ride the
@@ -74,7 +83,8 @@ Two supporting fixes make the curve possible at all:
   for bite prediction and for placing the bite point in front of the eater.
   **A change to the scoop rule must be made on BOTH sides or prediction pops.**
 - Calories/belly are computed from `removed × density`, not raw volume. Belly
-  numbers are "food units" now (capacity base 84 000), not studs³.
+  numbers are "food units" now (capacity base 84 000 at the time of this ADR;
+  **4 400 since ADR-0019**), not studs³.
 - The cake is always 333 studs tall, so the room walls were raised to 380.
 - Risk: the curve is calibrated against a model, not a playtest. The model ports
   the real bite math and sweeps, and its predictions held across seeds and

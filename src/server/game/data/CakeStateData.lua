@@ -5,7 +5,9 @@
 
 	Data shape:
 	  field         buffer (u16 heights, GridUtil layout), allocated in Init
-	  footprint     rounded-rect loaf { hx, hz, corner } in cells
+	  footprint     { hx, hz, corner } in cells — the rounded-rect SDF GridUtil
+	                .InCake tests. All THREE equal == a DISC of that radius,
+	                which is what ships (round cake, see CakeConfig)
 	  composition   array bottom-up: { { id, bottom, top } } (studs)
 	  floorUnits    core-top height in u16 units — the absolute cake floor
 	  activeBandIndex  index into composition of the current TOP edible band

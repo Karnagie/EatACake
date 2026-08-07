@@ -14,19 +14,20 @@
 | treasures (buried authored item models) | `features/treasures.md` + ADR-0012 | TreasureService, CakeSimulationSubs / CakeSubsClient; authored `Workspace.Items` → `ReplicatedStorage.Assets.Items` |
 | boosts (timed stat multipliers, gem-bought) | `features/boosts.md` | StatsService, BoostSubs, ShopSubs (gem path), RewardGrantSubs / LocalStatsService, LocalShopService |
 | body-gym (stomach, morph, roll) | `features/body-gym.md` | StomachService, GymService, BodySubs (server morph) / BallRollController, BodySubsClient, UIKit/GymOverlay |
-| checkpoint (gym + upgrade station platform) | `features/checkpoint.md` | MapService, CakeSubs (ReturnToCheckpoint), CakeCycleSubs/CakeSimulationSubs (height) / BodySubsClient (F key + button) |
-| upgrades (hex tier tree, RUN-scoped) | `features/upgrades.md` + ADR-0013 | UpgradeService, StatsService, UpgradeSubs, RunResetSubs (all COMMON) / LocalStatsService, LocalUpgradeTree, UpgradesSubsClient, UpgradesUiData, UIKit HexNode/HexTreeOverlay, HexUtil |
+| checkpoint (gym + upgrade station + paid LAYER EATER platform) | `features/checkpoint.md` | MapService, CakeSubs (ReturnToCheckpoint + `eatlayer` grant), CakeFieldService (ClearActiveBand), CakeCycleSubs/CakeSimulationSubs (height) / BodySubsClient (F key + button), ShopSubsClient (LayerEater prompt) |
+| upgrades (hex tier tree, RUN-scoped; world "N Available" sign) | `features/upgrades.md` + ADR-0013, ADR-0019 | UpgradeService, StatsService, UpgradeSubs, RunResetSubs (all COMMON) / LocalStatsService, LocalUpgradeTree, UpgradesSubsClient, UpgradeStationSubsClient, UpgradesUiData, UIKit HexNode/HexTreeOverlay, HexUtil |
 | run reset (upgrades+calories+belly wiped per run) | `features/upgrades.md` + ADR-0013 | RunResetSubs (COMMON, `OnProfileLoaded` hook) / — |
 | pets (shown as SQUISHIES — display-only rename, ids are DataStore keys) | `features/pets.md` | PetService, PetSubs / PetsSubsClient (owns the follower step, BOTH places), PetFollowers, LocalPetsService; authored `ReplicatedStorage.Assets.Squishes` |
 | juice (ASMR layer) | `features/juice.md` | — / ParticlePool, CameraShake, ComboMeter, FloatingNumbers |
 | audio (SFX + music) | `features/audio.md` | — / SoundPool, MusicService, AudioSubsClient, AudioConfig; authored `ReplicatedStorage.SFX` + `SoundService.BackgroundMusic` |
 | map (factory scene) | file header `services/MapService.lua` + ADR-0007 | MapService (clones `ReplicatedStorage.Assets` Environment+Checkpoint), MapConfigData / — |
-| reward-grants | ADR-0002 (`decisions/`) | RewardGrantSubs (kinds: calories, gems, boost, burn, egg) / — |
+| reward-grants | ADR-0002 + ADR-0018 (`decisions/`) | RewardGrantSubs (kinds: calories, gems, boost, burn, eatlayer, egg; + readiness predicates) / — |
 | daily-rewards | `features/daily-rewards.md` | DailyRewardService, RewardsSubs / RewardsSubsClient, LocalRewardsService |
-| group-reward | `features/group-reward.md` | SocialService, GroupRewardSubs / ShopSubsClient (Free row) |
-| shop (landscape TABBED grid of product CARDS; Robux + GEM currencies) | `features/shop.md` + ADR-0014, ADR-0015 | ShopService, ShopSubs (ProcessReceipt + gem-purchase owner, COMMON — both places) / ShopSubsClient, LocalShopService, UIKit ShopPanel/ShopTab/ShopCard/ShopHeroCard/ShopBanner/ShopSectionHeader/PriceButton/Ribbon |
+| group-reward (like + join → 15-min boost, 10 s wait) | `features/group-reward.md` | SocialData, SocialService, GroupRewardSubs (lobby) / SocialSubsClient (lobby), AppRoot GroupReward panel, LocalShopService Free row |
+| referrals (Invite Friends → 500 gems per friend) | `features/referrals.md` | SocialData, SocialService, ReferralSubs (lobby), PersistenceService message API / SocialSubsClient (lobby), AppRoot InviteFriends panel |
+| shop (landscape TABBED grid of product CARDS; Robux + GEM currencies; HIDDEN world-sold products) | `features/shop.md` + ADR-0014, ADR-0015 | ShopService, ShopSubs (ProcessReceipt + gem-purchase owner, COMMON — both places), RewardGrantSubs (grant readiness) / ShopSubsClient, ShopUiData, LocalShopService, UIKit ShopPanel/ShopTab/ShopCard/ShopHeroCard/ShopBanner/ShopSectionHeader/PriceButton/Ribbon |
 | promo-codes | `features/promo-codes.md` | CodesService, CodesSubs / CodesSubsClient |
-| settings | `features/settings.md` | SettingsSubs / SettingsSubsClient, LocalSettingsService, SettingsData |
+| settings | `features/settings.md` | SettingsSubs / SettingsSubsClient, LocalSettingsService, SettingsData, AppRoot (lobby menu + game HUD button) |
 | leaderstats | file header `subscriptions/LeaderboardSubs.lua` | LeaderboardSubs / — |
 | analytics (31-step player-flow funnel, every tap, economy; QUOTA'd) | `features/analytics.md` + ADR-0017 | AnalyticsSubs + Analytics/{Sink,Session,Ingest} (COMMON; beats pushed from every domain sub) / LocalAnalyticsService, AnalyticsSubsClient, UIKit `SetTrackHandler`; catalog `Shared.config.AnalyticsConfig` |
 | app-root (HUD + panels) | `features/app-root.md` | — / AppRoot, AppSubsClient |
@@ -56,19 +57,19 @@
 | lobby↔game teleport (verified-release handoff) | `TeleportSubs` + `TeleportRetrySubs` (server), `TeleportControlSubsClient` + `PlayerControlService` (client), `PlaceConfig` + `MatchConfig` (shared), queue/result orchestrators (ADR-0009, ADR-0010) |
 | gamepass ownership (perks in BOTH places) | `PassOwnershipSubs` (common) |
 | lobby hub scene builder | `LobbyMapService` + `LobbySubs` (lobby); authored contract in `features/lobby-matchmaking.md` |
-| headless verification (run real modules without Studio) + the Luau syntax gate; `pacing_scenario` measures clear-time/income vs any config change; `analytics_scenario` asserts the analytics budget/trust boundary | `tools/headless-sim/README.md` |
+| headless verification (run real modules without Studio) + the Luau syntax gate; `pacing_scenario` measures clear-time/income vs any config change; `analytics_scenario` asserts the analytics budget/trust boundary; `layereater_scenario` proves the PAID layer clear without a receipt | `tools/headless-sim/README.md` |
 | pacing + PROGRESSION model (Python/numpy: a run where tiers are BOUGHT mid-run — the clear-time and "tree maxed at X% of the cake" numbers; self-checks against the Lua configs) | `tools/balance-model/README.md` |
 | Studio automation: run scripts in the command bar, get structured reports back (no OCR); Rojo/require staleness traps | `tools/studio-bridge/README.md` |
 | UI tonal-hierarchy analyzer (L* value bands, saliency, per-region attention ranks, findings, compare gate) — MANDATORY for UI review, wired into the ui-kit ship checklist | `tools/tonal-hierarchy/README.md` + skill `.claude/skills/tonal-hierarchy/` |
 | UI squint test (heavy blur gray+color, per-region blur survival, icon-first rules for a non-reading audience) — same tool, `blur` subcommand | skill `.claude/skills/squint-test/` |
 | dev hook: force the nearest buried find to the surface in a playtest (`DebugUncoverFind`) | `docs/features/treasures.md` |
-| publish readiness: the 11 LIVE monetization ids + what must exist in BOTH places before going live | `docs/recipes/publish-readiness.md` |
-| create/audit the 5 dev products + 6 gamepasses on the universe (cookie auth, idempotent, dry-run by default, writes the ids into ShopData); ⚠ a dev product is CREATE-ONCE — no delete, no update | `tools/monetization/README.md` + `tools/monetization/id_map.json` (the id ledger) |
+| publish readiness: 11 LIVE monetization ids + 1 PENDING (`layer-eater`) + what must exist in BOTH places before going live | `docs/recipes/publish-readiness.md` |
+| create/audit the 6 dev products + 6 gamepasses on the universe (cookie auth, idempotent, dry-run by default, writes the ids into ShopData); ⚠ a dev product is CREATE-ONCE — no delete, no update | `tools/monetization/README.md` + `tools/monetization/id_map.json` (the id ledger) |
 
 ## Lookup
 
 - Task history: `flow/INDEX.md` — find by feature tag, open at most 1-2 docs
 - Name uniqueness (sections, remotes, kinds, locale keys): `registries/`
-- Architecture decisions: `decisions/` (NNNN-kebab-title.md) — balance/pacing: ADR-0011
+- Architecture decisions: `decisions/` (NNNN-kebab-title.md) — balance/pacing: ADR-0011, ADR-0019
 - How-to patterns: `recipes/` (add-profile-section, harvest-to-template, new-project-from-template)
 - Self-improvement: `upstream/QUEUE.md` (capture, U1) + `TEMPLATE_CHANGELOG.md` (harvested changes)

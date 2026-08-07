@@ -13,6 +13,8 @@
 local GridUtil = __REGISTRY["Shared.GridUtil"]
 local CakeOps = __REGISTRY["Shared.CakeOps"]
 local CakeConfig = __REGISTRY["Shared.config.CakeConfig"]
+local UpgradeConfig = __REGISTRY["Shared.config.UpgradeConfig"]
+local TutorialConfig = __REGISTRY["Shared.config.TutorialConfig"]
 
 math.randomseed(__SEED__)
 
@@ -30,9 +32,35 @@ local sim = CakeConfig.sim
 --   trip      seconds of walk-to-checkpoint + mount + walk-back (observed in a
 --             playtest: the checkpoint plate tracks the active layer and sits
 --             beside the loaf, so it is a short but real interruption)
+-- ⚠ READ from UpgradeConfig, never copied. These five numbers were hardcoded
+-- until 2026-08-05 and had gone stale by two commits (fresh still claimed a
+-- 3.4-stud bite after the game shipped 2.4), so the scenario was measuring an
+-- eater that does not exist. `stat(id, tier)` is StatsService.upgradeValue.
+local TRIP_SECONDS = 14 -- walk-to-checkpoint + mount + walk-back (playtest observation)
+
+local function stat(id: string, tier: number): number
+	local def = UpgradeConfig.upgrades[id]
+	if tier <= 0 then
+		return def.base
+	end
+	return def.tiers[math.min(tier, #def.tiers)].value
+end
+
+local function eater(tier: number, label: string)
+	return {
+		radius = stat("biteRadius", tier),
+		depth = stat("biteDepth", tier),
+		rate = stat("eatSpeed", tier),
+		capacity = stat("capacity", tier),
+		burnSpeed = stat("burnSpeed", tier),
+		trip = TRIP_SECONDS,
+		label = label,
+	}
+end
+
 local STATS = {
-	fresh = { radius = 3.4, depth = 3.6, rate = 4.0, capacity = 84000, burnSpeed = 0.06, trip = 14, label = "fresh (no upgrades)" },
-	maxed = { radius = 4.8, depth = 6.2, rate = 5.6, capacity = 335000, burnSpeed = 0.65, trip = 14, label = "fully upgraded" },
+	fresh = eater(0, "fresh (no upgrades)"),
+	maxed = eater(math.huge, "fully upgraded"),
 }
 
 local function rollComposition(totalHeightOverride)
@@ -233,16 +261,19 @@ print(string.format("  vs the OLD 330 cake:  170 -> bites %+.1f%%, food %+.1f%%,
 
 print("")
 print(("-"):rep(118))
-print("B) HOW LONG IS ONE CAKE? (eating + the forced belly->gym trips; still excludes boss, upgrade stops, walking)")
+print("B) ENDPOINTS: one cake at tier 0 vs one cake fully upgraded (eating + the forced belly->gym trips)")
 print(("-"):rep(118))
 local _, freshSec = runCake("fresh", nil, STATS.fresh)
 local _, maxSec = runCake("maxed", nil, STATS.maxed)
-print(string.format("  ONE CAKE, EAT + GYM = %.0f min fresh -> %.0f min fully upgraded.",
+print(string.format("  ONE CAKE, EAT + GYM = %.0f min at tier 0 -> %.0f min fully upgraded.",
 	freshSec / 60, maxSec / 60))
-print("  This is the honest session floor for ONE cake: eating plus the forced")
-print("  belly->checkpoint->burn trips, still EXCLUDING the boss fight, upgrade stops")
-print("  and the walk between craters. The 30-minute target holds at BOTH ends of the")
-print("  upgrade curve, which pure eating time alone did not show.")
+print("  ⚠ THE 'fresh' NUMBER IS NOT A SESSION. Since the 2026-08-05 belly curve,")
+print("  `capacity` base is sized for the FIRST ~10 SECONDS of a run (UpgradeConfig),")
+print("  not for a whole cake — so this row is a player who eats an entire cake without")
+print("  ever buying a tier, and its gym time is dominated by hundreds of trips nobody")
+print("  makes. Both rows still bound the BITE MATH; for the number a player actually")
+print("  lives through — one run, tiers bought mid-run — use tools/balance-model/pacing.py")
+print("  (and `--intervals` for how often the belly sends them to the treadmill).")
 
 print("")
 print(("-"):rep(118))
@@ -255,3 +286,38 @@ local _, _, fD, wD = runCake("cap 0.15", nil, STATS.fresh, 0.15)
 print(string.format("  waste %.1f%% -> 0.35:%.1f%%  0.25:%.1f%%  0.15:%.1f%%   |   food recovered  0.35:%+.1f%%  0.25:%+.1f%%  0.15:%+.1f%%",
 	wA * 100, wB * 100, wC * 100, wD * 100,
 	(fB / fA - 1) * 100, (fC / fA - 1) * 100, (fD / fA - 1) * 100))
+
+print("")
+print(("-"):rep(118))
+print("D) ONBOARDING GATE — can a first-time player REACH the first upgrade before the belly blocks them?")
+print(("-"):rep(118))
+-- The tutorial's step 3 ("go burn it off") fires when the player can afford
+-- `TutorialConfig.burnPromptStat`'s first tier, paid out of the UNBANKED calories
+-- in their belly (features/tutorial.md). The belly is bounded by `capacity` base,
+-- so if one full belly of the TOP band is worth less than that tier, the step can
+-- never fire from affordability: the player sits full, unable to eat, and only the
+-- belly safety net rescues them. This asserts the margin the tuning is meant to
+-- have, so a future re-price of either number fails HERE and not in a playtest.
+-- Frosting is always the top band (CakeCycleService.RollComposition) and is the
+-- LOWEST-calorie band a first belly can be made of; every other multiplier in the
+-- chain (difficulty, biome, co-op, rare) is >= 1.
+local GATE_STAT = TutorialConfig.burnPromptStat -- READ, never copied: a hardcoded
+-- id would keep asserting biteRadius (and passing) the day the gate is retargeted.
+if type(GATE_STAT) ~= "string" or UpgradeConfig.upgrades[GATE_STAT] == nil then
+	error("TutorialConfig.burnPromptStat = " .. tostring(GATE_STAT) .. " names no UpgradeConfig stat — the onboarding gate can never fire")
+end
+local MIN_MARGIN = 1.2
+local capacityBase = UpgradeConfig.upgrades.capacity.base
+local gateCost = UpgradeConfig.upgrades[GATE_STAT].tiers[1].cost
+local frostingCalories = CakeConfig.layers.frosting.calories
+local fullBellyValue = capacityBase * frostingCalories
+local margin = fullBellyValue / gateCost
+print(string.format("  a FULL base belly (%d food) of frosting (%.3f cal/food) banks %.0f calories at gymEff 1",
+	capacityBase, frostingCalories, fullBellyValue))
+print(string.format("  %s tier 1 costs %d  ->  gate opens at %.0f%% of the first belly, margin x%.2f (need >= x%.2f)",
+	GATE_STAT, gateCost, 100 * gateCost / fullBellyValue, margin, MIN_MARGIN))
+if margin < MIN_MARGIN then
+	print(string.format("  !! FAIL — the onboarding gate is UNREACHABLE at this tuning. Lower %s tier-1 cost or raise capacity base.", GATE_STAT))
+	error("onboarding gate margin " .. string.format("%.2f", margin) .. " < " .. MIN_MARGIN)
+end
+print("  OK")

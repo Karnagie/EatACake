@@ -6,8 +6,28 @@ The lobby clones `ReplicatedStorage.Assets.LobbyEnvironment` into
 `workspace.LobbyMap`. Entering any direct
 `Touchers/<Model>/GroupToucher` admits the player to that pad. The first
 admitted player is the leader and receives the kit `MatchmakingPanel`; they
-choose `easy` / `medium` / `hard` and a maximum party size from 1–4. A valid
-choice starts a server-owned 30-second countdown. Players standing in the same
+choose `easy` / `medium` / `hard` and a maximum party size from 1–4. **The
+selector opens on `MatchConfig.defaults` (Easy / 1 Player)**, so a solo run is
+ONE tap and START is live on the first frame; the defaults are applied per
+SESSION, in the same effect that used to clear the previous party's choices, and
+a default the selector is not offering (a party size above the pad's cap, a
+retired difficulty) is ignored rather than forced. START **breathes**
+(`Components.Button` `pulse`) exactly while it can be pressed — its
+dim-when-disabled CanvasGroup clips, so `MatchmakingLayout.StartPulseHeadroom`
+inflates the group and deflates the button inside it, leaving rest geometry
+unchanged.
+⚠ A preselection is REPORTED like a tap (`onSelectDifficulty(id, isDefault)` /
+`onSelectPlayers(n, isDefault)`): the `difficulty-pick` / `party-pick` flow steps
+sit between `selector-open` and `start-press`, so leaving them unreported would
+show every one-tap start as a drop-off (`features/analytics.md`). Whether the
+player actually CHOSE is still visible — the kit counts the `Difficulty_*` /
+`Players_*` presses themselves, and those only exist when a finger lands on one.
+The effect reports only for a real `sessionKey`; the panel is mounted (hidden)
+for the whole lobby visit and must not beat on mount.
+A valid choice starts a server-owned countdown whose length depends on PARTY SIZE
+(`Core.CountdownSeconds`): **5 s solo, 15 s for 2+** — a solo player is only
+waiting on themselves. Picked once, when START is pressed, so a late joiner
+rides the remaining time rather than resetting it. Players standing in the same
 toucher are reconciled by overlap scan, up to the selected cap; stepping out
 removes them after the configured grace period.
 
@@ -65,10 +85,13 @@ map while `MapService` is present.
 
 ## Tuning and files
 
-`Shared.config.MatchConfig` is the single contract for modes, cap, countdown,
+`Shared.config.MatchConfig` is the single contract for modes, `defaults`
+(the selector's opening pick), cap, countdown,
 arrival/result timings, authored names, and teleport retry limits. Difficulty
-currently scales cake height and boss HP/time; authoritative profile/economy
-state never travels in teleport data.
+scales eating WORK, the calorie payout and boss HP/time — **not cake height**
+(`cakeHeightMultiplier` is gone: a bite clears to the band floor, so height never
+moved clear time). Authoritative profile/economy state never travels in teleport
+data.
 
 Server: `LobbyQueueData`, `LobbyQueueService` + `services/LobbyQueue/*`,
 `LobbyQueueSubs` + `subscriptions/LobbyQueue/*`, `GameRoundService`,

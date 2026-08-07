@@ -4,9 +4,10 @@
 WHY THIS EXISTS
 ---------------
 `tools/headless-sim/` already runs the REAL modules and is the authority on bite
-math. It needs the standalone Luau CLI, which is not installed here, and it
-answers a narrower question: it measures the two ENDPOINTS of the upgrade curve
-(a fresh eater, a maxed eater) and reports each as a separate full cake.
+math. It answers a narrower question: it measures the two ENDPOINTS of the upgrade
+curve (a tier-0 eater, a maxed eater) and reports each as a separate full cake.
+(It also needed the standalone Luau CLI, which was not installed when this file was
+written. It IS installed now, so the two tools can and should be cross-checked.)
 
 The 2026-07-30 rebalance needs the thing BETWEEN those endpoints: one run in
 which the player earns calories, BUYS TIERS MID-RUN, and gets faster as they go.
@@ -15,19 +16,23 @@ That is what decides both numbers the design targets:
     * total clear time (target ~40 min, solo easy)
     * the % of the cake eaten by the time every tier is owned (target <= 50%)
 
-Neither is derivable from the endpoint measurements: 126 min fresh and 33 min
-maxed say nothing about where a ramping player lands (measured here: ~61 min at
-the pre-rebalance tuning — which is exactly what the playtest reported).
+Neither is derivable from the endpoint measurements: a tier-0 eater and a maxed
+eater say nothing about where a RAMPING player lands, and since ADR-0019 the
+tier-0 endpoint is not even a plausible session (capacity base is sized for the
+first ~10 s of a run). Usage below; `--intervals` is the ADR-0019 curve.
 
 FIDELITY
 --------
 This is a PORT, so it can drift. Two guards:
   1. `check_config_sync()` re-reads the real Lua configs and fails loudly if any
      mirrored constant no longer matches. Run it every time (it is automatic).
-  2. `validate()` reproduces the numbers the Luau harness published for the
-     SHIPPED config (docs/features/cake-cycle.md: ~126 min fresh / ~33 min maxed
-     for one cake, ~6.8% forfeited). If those drift, distrust the model, not the
-     game.
+  2. `validate()` prints the two ENDPOINTS so they can be reconciled against
+     tools/headless-sim section B, which runs the real Lua modules. ⚠ Since
+     ADR-0019 the tier-0 endpoint is not a session estimate at all (`capacity`
+     base is sized for the first ~10 s of a run), so treat it as a bound on the
+     BITE MATH only; the number a player lives through is `report()` below.
+     If the two tools diverge, distrust whichever one you have not just changed —
+     the 2026-08-05 pass found the bug in THIS file, not in the game.
 
 What is modelled: RollComposition, CakeOps.ApplyBite, the layer gate, the sliver
 + remnant sweeps (both forfeiting, both capped by sweepBandFraction), per-band
@@ -37,8 +42,9 @@ What is NOT: the settle automaton (it only reshapes the cut edge), walking
 between craters, boss/reveal/spawn time, pets, passes, rare cakes.
 
 Usage:
-    python tools/balance-model/pacing.py            # validate + report the live config
-    python tools/balance-model/pacing.py --solve    # search for a tuning that hits the targets
+    python tools/balance-model/pacing.py             # validate + report the live config
+    python tools/balance-model/pacing.py --intervals # seconds per belly, by capacity tier
+    python tools/balance-model/pacing.py --solve     # search for a tuning that hits the targets
 """
 from __future__ import annotations
 
@@ -62,7 +68,9 @@ UNITS_PER_STUD = 100
 GRID = dict(size=64, cell=1.5, origin_x=0.0, origin_z=0.0)
 
 COMP = dict(
-    footprint_hx=30, footprint_hz=26, footprint_corner=10,
+    # ROUND cake since 2026-08-03: hx == hz == corner IS the circle (the Lua
+    # InCake is a rounded-rect SDF). Keep all three equal when syncing.
+    footprint_hx=31.1, footprint_hz=31.1, footprint_corner=31.1,
     core_thickness=3,
     base_layers=28, max_layers=42,
     max_total_height=170.0,
@@ -73,8 +81,10 @@ COMP = dict(
     coop_work=0.5, layer_exponent=0.55, coop_calories=0.62,
 )
 
-# MatchConfig difficulty work multipliers (the cake's WORK lever, ADR-0011).
+# MatchConfig difficulty work multipliers (the cake's WORK lever, ADR-0011) and
+# the payout premium that rides with them (it scales `calories_mult`).
 MATCH_WORK = dict(easy=1.08, medium=1.27, hard=1.49)
+MATCH_CALORIES = dict(easy=1.0, medium=1.25, hard=1.55)
 
 SIM = dict(
     min_bite_radius=1.1,
@@ -117,24 +127,24 @@ class Upgrade:
 def live_upgrades() -> dict:
     """UpgradeConfig tiers, mirrored (checked by check_config_sync)."""
     return {
-        'capacity':    Upgrade(84000, [110000, 145000, 190000, 255000, 335000],
-                               [750, 2500, 7000, 19000, 45000]),
+        'capacity':    Upgrade(4400, [13000, 58000, 120000, 235000, 645000],
+                               [400, 1350, 4600, 15500, 53000]),
         'runSpeed':    Upgrade(20, [23, 26, 29, 32, 35],
-                               [550, 1900, 6000, 15000, 37000]),
-        'biteRadius':  Upgrade(3.4, [3.65, 3.9, 4.2, 4.5, 4.8],
-                               [850, 2800, 8750, 22500, 54000]),
-        'biteDepth':   Upgrade(3.6, [4.1, 4.6, 5.1, 5.6, 6.2],
-                               [800, 2650, 8000, 20500, 50500]),
+                               [300, 1000, 3400, 11500, 39000]),
+        'biteRadius':  Upgrade(2.4, [2.65, 2.9, 3.2, 4.5, 5.8],
+                               [450, 1550, 5250, 17800, 60500]),
+        'biteDepth':   Upgrade(2.6, [3.1, 3.6, 4.1, 5.6, 6.2],
+                               [440, 1500, 5100, 17300, 58800]),
         'eatSpeed':    Upgrade(4, [4.4, 4.75, 5.05, 5.3, 5.6],
-                               [700, 2450, 7700, 19500, 47500]),
+                               [390, 1300, 4400, 15000, 51000]),
         'gymEff':      Upgrade(1, [1.2, 1.45, 1.7, 2.0, 2.35],
-                               [1000, 3350, 10000, 26000, 61500]),
-        'burnSpeed':   Upgrade(0.06, [0.10, 0.16, 0.25, 0.40, 0.65],
-                               [500, 1700, 5000, 13000, 31500]),
+                               [550, 1850, 6300, 21400, 72800]),
+        'burnSpeed':   Upgrade(0.20, [0.28, 0.40, 0.58, 0.85, 1.25],
+                               [280, 950, 3200, 10900, 37000]),
         'burnPerTap':  Upgrade(0.10, [0.14, 0.20, 0.30, 0.45, 0.70],
-                               [450, 1550, 4550, 12000, 28750]),
+                               [250, 850, 2900, 9800, 33300]),
         'instantBurn': Upgrade(0, [0.20, 0.45, 0.70, 1.00],
-                               [6000, 17500, 46500, 117500]),
+                               [3300, 11200, 38100, 129500]),
     }
 
 
@@ -385,7 +395,15 @@ class Field:
         eligible = inside & sub_mask & (sub_h > floor_units)
         delta = np.floor((sub_h - floor_units) * clear_frac).astype(np.int64)
         delta = np.where(eligible & (delta > 0), delta, 0)
-        new_h = np.maximum(floor_units, sub_h - delta)
+        # ⚠ The floor clamp must apply ONLY to cells this bite is allowed to touch.
+        # Clamping the whole window (the pre-2026-08-05 code) RAISED every
+        # out-of-cake cell in it from 0 to the band floor and counted the rise as
+        # NEGATIVE removed volume — so every bite whose disc overlapped the rim
+        # under-reported food, and the opening bites (argmax ties on a flat cake
+        # resolve to the lowest index, i.e. the rim) reported food in the tens of
+        # thousands NEGATIVE. Lua has no such bug: CakeOps.ApplyBite iterates the
+        # cells it selected, one at a time.
+        new_h = np.where(eligible, np.maximum(floor_units, sub_h - delta), sub_h)
         removed_units = int((sub_h - new_h).sum())
         self.h[z0:z1 + 1, x0:x1 + 1] = new_h
         return removed_units / UNITS_PER_STUD * cell * cell
@@ -470,6 +488,11 @@ class RunResult:
     progress_at_max: float          # fraction of cake eaten when the tree completed (None -> never)
     minutes_at_max: float
     trips: int
+    # One entry per gym trip: (capacity tier OWNED while that belly filled,
+    # SECONDS OF EATING it took to fill it, fraction of the cake eaten by then).
+    # This is the "how often am I sent to burn fat?" curve — the pacing the player
+    # actually feels, and the thing the flat 84000 capacity made invisible.
+    fills: list = field(default_factory=list)
 
 
 def simulate_run(work=1.0, calories_mult=1.0, seed=1, upgrades=None, trip_seconds=14.0,
@@ -498,6 +521,8 @@ def simulate_run(work=1.0, calories_mult=1.0, seed=1, upgrades=None, trip_second
     stored = 0.0
     progress_at_max = None
     minutes_at_max = None
+    fills = []
+    eat_seconds_at_last_trip = 0.0
 
     def try_buy():
         """Greedy cheapest-first: the policy that maximises tier COUNT."""
@@ -515,9 +540,19 @@ def simulate_run(work=1.0, calories_mult=1.0, seed=1, upgrades=None, trip_second
             stats.tiers[best] = stats.tier(best) + 1
             bought += 1
 
-    def gym_trip():
+    def gym_trip(record=True):
         """Belly -> banked calories. Passive drain only == the conservative bound."""
-        nonlocal belly, stored, banked, gym_seconds, trips
+        nonlocal belly, stored, banked, gym_seconds, trips, eat_seconds_at_last_trip
+        # Recorded BEFORE the purchase pass, so the tier credited is the one the
+        # player owned while that belly was filling.
+        # ⚠ `record=False` for the end-of-run flush: that belly was never FULL (the
+        # cake ran out first), so counting its short interval would drag the last
+        # capacity tier's average down by ~9% and make the published curve look
+        # like it sags at the top.
+        if record:
+            fills.append((stats.tier('capacity'), eat_seconds - eat_seconds_at_last_trip,
+                          food_total / total_edible))
+        eat_seconds_at_last_trip = eat_seconds
         gym_eff = stats.value('gymEff')
         instant = stats.value('instantBurn')
         burn_speed = stats.value('burnSpeed')
@@ -570,7 +605,7 @@ def simulate_run(work=1.0, calories_mult=1.0, seed=1, upgrades=None, trip_second
                                  (eat_seconds + gym_seconds) / 60.0, stats.owned_tiers()))
 
     if stored > 0 or belly > 0:
-        gym_trip()
+        gym_trip(record=False)
         if buy:
             try_buy()
             if progress_at_max is None and stats.owned_tiers() >= stats.max_tiers():
@@ -590,6 +625,7 @@ def simulate_run(work=1.0, calories_mult=1.0, seed=1, upgrades=None, trip_second
         progress_at_max=progress_at_max,
         minutes_at_max=minutes_at_max,
         trips=trips,
+        fills=fills,
     )
 
 
@@ -602,7 +638,11 @@ def maxed_tiers(upgrades):
 def validate(seeds=(1, 2, 3), work=None):
     """Reproduce the endpoint numbers the Luau harness published for this config."""
     print('-' * 100)
-    print('VALIDATION — endpoints vs the Luau harness (docs/features/cake-cycle.md: ~126 min fresh, ~33 min maxed, ~6.8% waste)')
+    print('VALIDATION — endpoints vs the Luau harness (tools/headless-sim, section B)')
+    print('!! the "fresh" row is NOT a session: since ADR-0019 `capacity` base is sized for the')
+    print('  first ~10 s of a run, so a tier-0 eater clearing a whole cake is a hypothetical whose')
+    print('  gym time is hundreds of trips nobody makes. Both rows still bound the BITE MATH; the')
+    print('  number a player lives through is the mid-run report below.')
     print('-' * 100)
     ups = live_upgrades()
     work = MATCH_WORK['easy'] if work is None else work
@@ -652,48 +692,75 @@ def scaled_upgrades(cost_scale: float, instant_scale: float = 1.0):
     return ups
 
 
-def candidate_upgrades():
-    """The PROPOSED 2026-07-30 cost table: the solved x0.07 scale (instantBurn a
-    further x0.35, so one QoL stat stops eating half the tree), rounded to legible
-    numbers. Values are UNCHANGED — the power curve was not the problem, the
-    price of reaching it was."""
-    ups = live_upgrades()
-    costs = {
-        'capacity':    [750, 2500, 7000, 19000, 45000],
-        'runSpeed':    [550, 1900, 6000, 15000, 37000],
-        'biteRadius':  [850, 2800, 8750, 22500, 54000],
-        'biteDepth':   [800, 2650, 8000, 20500, 50500],
-        'eatSpeed':    [700, 2450, 7700, 19500, 47500],
-        'gymEff':      [1000, 3350, 10000, 26000, 61500],
-        'burnSpeed':   [500, 1700, 5000, 13000, 31500],
-        'burnPerTap':  [450, 1550, 4550, 12000, 28750],
-        'instantBurn': [6000, 17500, 46500, 117500],
-    }
-    for stat, values in costs.items():
-        assert len(values) == len(ups[stat].costs), stat
-        ups[stat].costs = values
-    return ups
+# ⚠ `candidate_upgrades()` / `check_candidate()` / the `--candidate` flag were
+# REMOVED on 2026-08-05. They pinned the 2026-07-30 proposal's cost table while
+# reading every other value from `live_upgrades()`, so after ADR-0019 the flag
+# measured a config that has never existed — the new capacity/burnSpeed VALUES
+# against the retired COSTS — and printed it as "the candidate", i.e. as a proposal
+# to revert this rebalance, complete with a stale "was 16,019,500" baseline.
+# A frozen proposal in a live model is a trap: freeze BOTH halves or neither.
+# To evaluate a new table, pass it to `report(upgrades=...)` / `intervals(upgrades=...)`.
 
 
-def check_candidate(work=1.08, seeds=(1, 2, 3, 4, 5)):
-    print('=' * 100)
-    print('CANDIDATE — rounded cost table @ work x%.2f (5 seeds)' % work)
-    print('=' * 100)
-    total = sum(sum(u.costs) for u in candidate_upgrades().values())
-    print('  whole tree: %s calories (was 16,019,500)' % '{:,}'.format(int(total)))
-    rows = []
+def intervals(upgrades=None, seeds=(1, 2, 3, 4, 5), work=None, label='live config'):
+    """How OFTEN is the player sent to burn fat, and does that change as they upgrade?
+
+    The design target (user request, 2026-08-05; ADR-0019) is a VISIBLE stretch:
+    ~10 s per belly at tier 0, ~30 s at capacity tier 1, ~90 s at tier 2, then
+    120/150/180. Before that request the curve ran BACKWARDS (227 s at tier 0 down
+    to 102 s at tier 5) because capacity grew 4x while eating power grows ~20x.
+
+    TWO different statistics, and the docs cite the FIRST one:
+
+      `first s`  the belly the player fills IMMEDIATELY AFTER buying that capacity
+                 tier. This is the number ADR-0019 and features/upgrades.md quote,
+                 because it is what the purchase FEELS like at the moment of
+                 purchase, and it is what the tuning was solved against.
+      `mean s`   the average over every belly filled while owning that tier. It is
+                 systematically LOWER, and legitimately so: the player keeps buying
+                 EATING tiers inside the bucket, so each successive belly at a fixed
+                 capacity fills faster than the last. A bucket whose mean is well
+                 under its first is a bucket the player spent a long time in.
+
+    `n` is how many bellies land in the bucket, i.e. how many gym trips — and
+    therefore how many purchase moments — that tier is responsible for. The
+    end-of-run PARTIAL belly is excluded (see `gym_trip(record=False)`).
+    """
+    ups = upgrades or live_upgrades()
+    work = MATCH_WORK['easy'] if work is None else work
+    print('-' * 100)
+    print('BELLY-FILL INTERVAL by capacity tier - %s (solo easy, work x%.2f, %d seeds)'
+          % (label, work, len(seeds)))
+    print('  `first s` = the belly right after buying that tier (the number the docs quote);')
+    print('  `mean s`  = averaged over the whole bucket, and lower by construction - eating')
+    print('              tiers keep arriving while the capacity tier stays put.')
+    print('-' * 100)
+    buckets, firsts = {}, {}
+    trips_total = 0
     for s in seeds:
-        r = simulate_run(work=work, seed=s, upgrades=candidate_upgrades())
-        rows.append(r)
-        at = ('%5.1f%% (%4.1f min)' % (r.progress_at_max * 100, r.minutes_at_max)
-              if r.progress_at_max is not None else '      NEVER')
-        print('  seed %-3d clear %5.1f min (eat %5.1f + gym %4.1f, %2d trips)  tiers %2d/%2d  tree done at %s  waste %.1f%%'
-              % (s, r.minutes, r.eat_minutes, r.gym_minutes, r.trips,
-                 r.tiers, r.max_tiers, at, r.waste_pct))
-    done = [r for r in rows if r.progress_at_max is not None]
-    print('  MEAN clear %.1f min  |  tree completed %d/%d seeds  |  mean completion at %.1f%% of the cake'
-          % (sum(r.minutes for r in rows) / len(rows), len(done), len(rows),
-             100 * sum(r.progress_at_max for r in done) / len(done) if done else float('nan')))
+        r = simulate_run(work=work, seed=s,
+                         upgrades=live_upgrades() if upgrades is None else ups)
+        trips_total += r.trips
+        seen = set()
+        for tier, seconds, progress in r.fills:
+            buckets.setdefault(tier, []).append((seconds, progress))
+            if tier not in seen:
+                firsts.setdefault(tier, []).append(seconds)
+                seen.add(tier)
+    print('  %-14s %9s %6s %9s %9s %9s %13s'
+          % ('capacity tier', 'value', 'n', 'first s', 'mean s', 'median s', 'cake eaten'))
+    for tier in sorted(buckets):
+        rows = buckets[tier]
+        secs = sorted(x[0] for x in rows)
+        first = firsts.get(tier) or []
+        span = '%.0f%%-%.0f%%' % (100 * min(x[1] for x in rows), 100 * max(x[1] for x in rows))
+        print('  tier %-9d %9s %6d %8.1fs %8.1fs %8.1fs %13s'
+              % (tier, '{:,}'.format(int(ups['capacity'].value(tier))), len(secs),
+                 (sum(first) / len(first)) if first else float('nan'),
+                 sum(secs) / len(secs), secs[len(secs) // 2], span))
+    print('  %d gym trips over %d seeds (%.1f per cake)'
+          % (trips_total, len(seeds), trips_total / len(seeds)))
+    return buckets, firsts
 
 
 def solve(seeds=(1, 2, 3)):
@@ -748,7 +815,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--solve', action='store_true')
     parser.add_argument('--grid', action='store_true')
-    parser.add_argument('--candidate', action='store_true')
+    parser.add_argument('--intervals', action='store_true',
+                        help='belly-fill seconds bucketed by capacity tier (the "how often '
+                             'am I sent to the gym?" curve)')
     parser.add_argument('--work', type=float, default=1.0)
     args = parser.parse_args()
 
@@ -764,8 +833,9 @@ def main():
     if args.grid:
         grid_search()
         return 1 if problems else 0
-    if args.candidate:
-        check_candidate(work=args.work)
+    if args.intervals:
+        # `--work 1` is argparse's default, so only an EXPLICIT value overrides easy.
+        intervals(work=args.work if args.work != 1.0 else None)
         return 1 if problems else 0
 
     validate()

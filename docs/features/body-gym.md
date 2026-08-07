@@ -11,13 +11,20 @@ the cake (the client gates too, with a soft cue), WalkSpeed is −40% (linear
 with fill), and the rig becomes a rolling **ball** (below). The gym is the only
 release valve. Glutton ×2 fires once — on the single bite that TOPS YOU OFF
 (`glutton = fill + volume ≥ capacity`), never on sustained overeating (now
-impossible). **Pacing (2026-07-26)**: the belly is measured in FOOD units — a bite is worth
-`removed volume × the band's density` (features/cake-sim.md), which is what keeps
-one bite worth the same anywhere in any cake. `capacity` base 84000 ≈ **90 s of
-eating per fill at EVERY depth and party size**, so the loop is eating-dominant
-and the gym is a quick beat you take ~25 times a match — each one also being the
-moment you buy an upgrade tier at the checkpoint. See `features/upgrades.md` +
-`2026-07-26_cake-pacing-rebalance.md`.
+impossible). **Pacing (2026-07-26, re-shaped 2026-08-05 — ADR-0019)**: the belly is
+measured in FOOD units — a bite is worth `removed volume × the band's density`
+(features/cake-sim.md), which is what keeps one bite worth the same anywhere in any
+cake. **How often the belly fills IS the progression the player feels**, so
+`capacity` is tuned as a curve, not a constant: ~**10 s** of eating per fill at
+tier 0, **30 s** after the first capacity tier, **90 s** after the second, then
+120/150/180 s. That makes the opening loop fast and legible — you are sent to the
+treadmill within seconds, and every trip is also an upgrade purchase — and lets the
+late game run in long uninterrupted stretches. ~**22 trips per cake**. The full
+table, the measurement command and the coupling rules are in
+`features/upgrades.md`; see also `2026-07-26_cake-pacing-rebalance.md`.
+⚠ `burnSpeed` base is 0.20 (a ~5 s hands-free burn) precisely because burn time is
+a FRACTION of the belly and therefore does NOT shrink with it — at the old 0.06 the
+burn took 16.7 s against a 10 s belly.
 
 ## State
 Profile section `stomach` `{fill, stored}` (persists across rejoins).

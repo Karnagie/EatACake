@@ -52,14 +52,15 @@ path grants **exactly that id**, so the card on screen is the prize you get.
 
 ## Composition roll (`RollComposition`) — THE PACING CURVE (ADR-0011)
 Frosting on top, core at the bottom, the rest random from `middlePool` (no
-immediate repeats). The loaf FOOTPRINT is a FIXED landmark (~90×78 studs) and
+immediate repeats). The FOOTPRINT is a FIXED landmark (a ROUND ~93.3-stud cake
+since 2026-08-03 — equal-area with the old 90×78 loaf, cake-sim.md) and
 EVERY cake is exactly `maxTotalHeight` (**170** studs since 2026-07-26; height is a pure VISUAL knob, measured free by `tools/headless-sim/pacing_scenario.lua`) tall — difficulty and party
 size never change the silhouette. Pacing lives on each BAND instead:
 
 | per-band field | what it does |
 |---|---|
-| `scoop` | multiplies the eater's `biteRadius` on that band. Ramps 2.23 (icing, ~7.6-stud spoonful) → 0.558 (core, ~1.9-stud chip). A bite clears to the band FLOOR, so clear time scales with bite AREA — **this is the difficulty ramp**, and it reads on screen. |
-| `density` | how rich/filling that band is per stud³ (calories AND belly fill) = `refBandWeight / (thickness × scoop²)` — exactly the value that keeps one bite worth the same FOOD as the scoop shrinks, which is what holds the belly→gym rhythm (~90 s) and the income flat at every depth. |
+| `scoop` | multiplies the eater's `biteRadius` on that band. Ramps 2.23 (icing, ~5.4-stud spoonful at base `biteRadius` 2.4) → 0.558 (core, ~1.3-stud chip). A bite clears to the band FLOOR, so clear time scales with bite AREA — **this is the difficulty ramp**, and it reads on screen. |
+| `density` | how rich/filling that band is per stud³ (calories AND belly fill) = `refBandWeight / (thickness × scoop²)` — exactly the value that keeps one bite worth the same FOOD as the scoop shrinks, so the belly→gym rhythm is set by `capacity` ALONE (features/upgrades.md: ~10 s per belly at tier 0 stretching to ~180 s at tier 5) and the income stays flat at every depth. |
 | thickness | follows the same ramp (deeper == chunkier), renormalised to `maxTotalHeight`. Thickness does NOT drive clear time (a bite clears to the floor). |
 
 `work` = `MatchConfig` `workMultiplier` × `(1 + coopWork·(players−1))` (0.5; players
@@ -83,9 +84,9 @@ people actually play):
 
 | solo easy | value |
 |---|---|
-| clear (eat + gym) | **38.9 min** (target ~40) |
-| whole upgrade tree owned at | **46% of the cake**, ~27 min in (5/5 seeds) |
-| gym trips | ~18 |
+| clear (eat + gym) | **35.3 min** = eat 29.6 + gym 5.7 (target ~40) |
+| whole upgrade tree owned at | **48% of the cake** (5/5 seeds) |
+| gym trips | ~22 (84% of the session is spent eating) |
 | forfeited to the sweeps | ~5.5% |
 
 ⚠ The old row "easy solo **40 min**" was never measured this way: the model behind
@@ -125,8 +126,12 @@ inflated by a units bug found 2026-07-30: the scenario multiplied
 `CakeOps.ApplyBite`'s return — already a VOLUME — by `cellArea` a second time, so
 food read 2.25× high, belly→gym TRIPS 2.25× high, and the forfeited fraction
 2.25× low (6.8% shown vs ~17% actual). Fixed in that file. The Python model
-measures the endpoints at **93.8 min fresh / 28.2 min maxed** on the current
-config. Neither endpoint is the run people play — that is the 38.9-min ramped
+measures the endpoints at **478 min at tier 0 / 18 min maxed** on the current
+config. ⚠ Since the 2026-08-05 belly curve the tier-0 endpoint is not even a
+hypothetical session: `capacity` base is sized for the first ~10 SECONDS of a run,
+so that row is a player who eats a whole cake without ever buying a tier and its
+time is dominated by hundreds of gym trips nobody makes.
+Neither endpoint is the run people play — that is the 35.3-min ramped
 figure above.
 
 **`layer-cleared`** is the session's RHYTHM beat: fired by `CakeSimulationSubs`

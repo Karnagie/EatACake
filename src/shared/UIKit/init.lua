@@ -60,6 +60,9 @@ local Components = {
 	PetRevealOverlay = require(ComponentsFolder.PetRevealOverlay),
 	MatchChoice = require(ComponentsFolder.MatchChoice),
 	MatchmakingPanel = require(ComponentsFolder.MatchmakingPanel),
+	-- One-offer window, shared by Invite Friends + the community reward
+	-- (features/referrals.md, features/group-reward.md)
+	SocialPanel = require(ComponentsFolder.SocialPanel),
 	-- Onboarding / tutorial (features/tutorial.md)
 	InputGlyph = require(ComponentsFolder.InputGlyph),
 	TutorialSlides = require(ComponentsFolder.TutorialSlides),

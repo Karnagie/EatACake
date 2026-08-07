@@ -835,6 +835,14 @@ Theme.MatchmakingLayout = {
 	StatusSize = Vector2.new(904 / 904, 44 / 420),
 	StartPosition = Vector2.new(272 / 904, 340 / 420),
 	StartSize = Vector2.new(360 / 904, 68 / 420),
+	-- START breathes while it can be pressed, and its dim-when-disabled CanvasGroup
+	-- CLIPS to its own bounds — a pulse inside a group sized exactly to the button
+	-- would have its peak sliced off on all four sides. So the group is grown by
+	-- this factor about the button's centre and the button is shrunk by 1/factor
+	-- inside it: identical geometry at rest, headroom for the breath.
+	-- Must stay > Theme.Feel.Pulse.Scale (1.10) with a little margin for the
+	-- press/hover bounce (1.05) riding the same button.
+	StartPulseHeadroom = 1.18,
 	HeadingGradient = Theme.Header.TitleGradient,
 	StatusGradient = Theme.Button.TextGradient,
 	ErrorGradient = Theme.Exit.XGradient,
@@ -2046,6 +2054,49 @@ Theme.CodesLayout = {
 	StatusErrorGradient = Theme.Exit.XGradient,
 }
 
+-- Social offer window (Invite Friends / community reward — features/referrals.md,
+-- features/group-reward.md). Portrait Panel family, nominal 512x727, content
+-- region y 128..691 (563 tall) exactly like the settings rows and the codes
+-- dialog. It is the genre's "one offer, one button" archetype: a big piece of
+-- art carries the offer, two text zones explain it, a status line answers the
+-- press, and a single CTA sits at the bottom where the thumb already is.
+-- Vertical check-sum inside the content region:
+--   22 art(180) 14 headline(44) 10 body(84) 14 status(52) 18 button(84) 41 = 563 ✓
+-- The art zone is SQUARE (180x180): ScaleType.Fit draws at the shorter side, so
+-- a wide zone would throw its width away (ui-kit gotcha).
+Theme.SocialLayout = {
+	PanelAspect = Theme.Layout.PanelAspect,
+	PanelMaxViewportFraction = 0.7,
+	ArtPosition = Vector2.new(166 / 512, 150 / 727),
+	ArtSize = Vector2.new(180 / 512, 180 / 727),
+	HeadlinePosition = Vector2.new(47 / 512, 344 / 727),
+	HeadlineSize = Vector2.new(418 / 512, 44 / 727),
+	BodyPosition = Vector2.new(47 / 512, 398 / 727),
+	BodySize = Vector2.new(418 / 512, 84 / 727),
+	StatusPosition = Vector2.new(47 / 512, 496 / 727),
+	StatusSize = Vector2.new(418 / 512, 52 / 727),
+	ButtonPosition = Vector2.new(97 / 512, 566 / 727),
+	ButtonSize = Vector2.new(318 / 512, 84 / 727),
+	HeadlineGradient = Theme.Header.TitleGradient,
+	TextOutlineColor = Theme.Colors.TextOutline,
+	-- DARK ink, because this body sits on the portrait Panel's near-WHITE fill
+	-- (252,253,255 -> 166,219,253). The pale blue the hex-tree Detail card uses
+	-- for the same job is correct THERE (a dark Chip surface) and would be
+	-- invisible here — ~1.07:1. Same ink as TextInput, the kit's other
+	-- dark-on-light body text.
+	BodyColor = Theme.TextInput.TextColor,
+	BodyMaxTextSize = 22,
+	StatusOkGradient = Theme.EquipGreen.TextGradient,
+	StatusErrorGradient = Theme.Exit.XGradient,
+	-- Dim the CTA when it cannot be pressed (claimed / a claim already running),
+	-- the same recipe the matchmaking START uses — and a CanvasGroup CLIPS, so it
+	-- needs the same headroom trick: no pulse rides this button, but
+	-- `usePressable`'s HOVER pose is 1.05 and would be shaved on all four sides
+	-- inside a group cut to the button's exact size.
+	ButtonDisabledTransparency = 0.38,
+	ButtonPressHeadroom = 1.10,
+}
+
 -- Compact HUD menu button (Button family, centered text). Nominal 170x56.
 Theme.MenuButton = {
 	AspectRatio = 170 / 56,
@@ -2394,7 +2445,9 @@ Theme.CheckpointButton = buttonStyleWithAspect(Theme.EquipGreen, 300 / 64) -- HU
 -- cake progress bar, combo badge, announce banner. Two pills stack at
 -- y 24..88 and 96..160; the menu (icon GRID) moves DOWN to clear them:
 -- at 2 columns its tallest sane form is 4 rows: 4*132 + 3*14 = 570 ->
--- y 172..742 on the 1080 reference ✓ (it holds 5 buttons today).
+-- y 172..742 on the 1080 reference ✓ (it holds up to 7 buttons today: the five
+-- meta panels plus Invite Friends and the community reward, each of the last two
+-- shown only once its server push arrives).
 Theme.AppHud.SecondPillPosition = Vector2.new(22 / 1920, 96 / 1080)
 Theme.AppHud.MenuPosition = Vector2.new(22 / 1920, 172 / 1080)
 Theme.AppHud.BellyPosition = Vector2.new(0.5, 0.955) -- anchor (0.5, 1)
@@ -2437,6 +2490,12 @@ Theme.AppHud.MenuIcons = {
 	Settings = Icons.UiSettings,
 	Upgrades = Icons.UiStrength,
 	Index = Icons.BadgeStats,
+	-- The two social offers. Distinct on purpose: `UiFriend` is a person (send an
+	-- invite), `UiHeart` is the LIKE the community reward asks for — the shop's
+	-- Free row already wears UiFriend for the group row, so the heart is what
+	-- keeps the two menu buttons from reading as the same thing.
+	InviteFriends = Icons.UiFriend,
+	GroupReward = Icons.UiHeart,
 }
 
 --- HUD stat-pill icons, as registry NAMES (resolve with Theme.Icon).
@@ -2506,18 +2565,55 @@ Theme.HexTree = {
 	RimScale = 0.9,
 	FaceCenter = Vector2.new(0.5, 0.45),
 	FaceScale = 0.78,
-	-- Content zones (inside the hex's safe middle band).
+	-- Content zones (inside the hex's safe middle band). TWO cuts: the original
+	-- text-only one, and an ICON-FIRST one used whenever the node carries a glyph
+	-- (UpgradeTreeConfig.icons). Both are fractions of the sprite's own 512x444
+	-- nominal grid.
 	NamePosition = Vector2.new(0.15, 0.32),
 	NameSize = Vector2.new(0.7, 0.19),
 	StatusPosition = Vector2.new(0.17, 0.54),
 	StatusSize = Vector2.new(0.66, 0.15),
+	-- ── icon-first cut ──────────────────────────────────────────────────
+	-- The Face layer is 0.78 of the sprite centred at y 0.45, so its box runs
+	-- y 26.8..373.0 of 444. Vertical check-sum inside it:
+	--   63 icon(144) 4 name(60) 4 status(52) = 327, leaving 36.2 of margin above
+	--   (63 - 26.8) and 46 below (373 - 327) ✓
+	-- (the slack sits at the BOTTOM on purpose: a flat-top hex narrows
+	-- toward its bottom edge, so the last zone needs more clearance than the
+	-- first. Widths follow the same profile — at the status band the hex is only
+	-- ~250 wide, which is why that zone is the narrowest of the three.)
+	-- The split is MEASURED, not chosen. Both text zones are HEIGHT-bound at node
+	-- size (a 10-node sub-tree renders a hex ~70x60 px at 1x), so height moved out
+	-- of them goes straight into the glyph — and the glyph is what a non-reader
+	-- has. Two cuts were measured off the live instances before this one:
+	--   icon 116 / name 68 -> 15px glyph vs 8px text = 1.9:1, a picture beside a
+	--     label rather than an icon-first node;
+	--   icon 150 / name 56 -> 2.7:1, but the COST on a gold `available` hex fell
+	--     to ~6px, and the cost is the whole decision on exactly those nodes.
+	-- 144/60 keeps the name at its original rendered size, costs the cost ~12%,
+	-- and still reads 2.4:1.
+	-- The icon zone is SQUARE in absolute pixels: 144/512 of the width and
+	-- 144/444 of the height, on a frame constrained to 512/444, resolve to the
+	-- same number of pixels — which matters because ScaleType.Fit draws at the
+	-- SHORTER side and would otherwise waste the difference (ui-kit gotcha).
+	IconPosition = Vector2.new(184 / 512, 63 / 444), -- centred: (512-144)/2 = 184
+	IconSize = Vector2.new(144 / 512, 144 / 444),
+	IconNamePosition = Vector2.new(0.15, 211 / 444),
+	IconNameSize = Vector2.new(0.7, 60 / 444),
+	IconStatusPosition = Vector2.new(0.22, 275 / 444),
+	IconStatusSize = Vector2.new(0.56, 52 / 444),
 	-- Connector bar between a node and its parent (geometry in UpgradeTreeConfig).
 	ConnectorOwnedGradient = Theme.Button.RimGradient,
 	ConnectorLockedGradient = hexGrayRim,
 	-- Full-screen dim behind the honeycomb.
 	ScrimColor = Color3.fromRGB(8, 12, 22),
 	ScrimTransparency = 0.14,
-	-- Per-state hex visuals.
+	-- Per-state hex visuals. `IconTransparency` fades the node's GLYPH: a locked
+	-- tier is gray everywhere else, and a full-strength colour glyph on a gray hex
+	-- reads as the brightest thing in the tree — i.e. it advertises exactly the
+	-- nodes you cannot buy. Fading rather than tinting keeps the SHAPE readable,
+	-- which is the only thing telling a non-reader which stat the wedge belongs
+	-- to (UpgradeTreeConfig.icons).
 	States = {
 		locked = {
 			Outer = hexGrayOuter,
@@ -2525,6 +2621,7 @@ Theme.HexTree = {
 			Face = hexGrayFace,
 			Outline = Color3.fromRGB(24, 28, 34),
 			Text = hexGrayText,
+			IconTransparency = 0.45,
 		},
 		available = {
 			Outer = Theme.Rarity.Legendary.Outer,
@@ -2612,14 +2709,40 @@ Theme.HexTree = {
 		DescColor = Color3.fromRGB(210, 234, 252),
 		StatusGradient = Theme.PetCard.NameGradient,
 	},
-	-- Red circular "!" notifier badge (fractions of the hex node).
+	-- Red circular "!" notifier badge. `Center` is its centre as a fraction of the
+	-- NODE box (0.5, 0.5 = the hex centre); `Size` is its diameter as a fraction
+	-- of the node WIDTH, on both axes, so it stays round inside a square World.
+	-- ⚠ These were dead until 2026-08-04 — HexTreeOverlay carried its own
+	-- 0.28/0.30/0.46 literals (iron rule 2), which is why the two disagreed.
+	-- Pushed OUT to 0.83 when the nodes gained glyphs: the badge used to hang over
+	-- empty face, and it now overlaps the icon zone's right edge instead. At 0.83
+	-- the overlap is ~11% of the glyph (was ~33%), and hanging further outside the
+	-- hex costs nothing — the badge is drawn in its own TOP layer precisely so
+	-- packed neighbours cannot cover it.
 	Notifier = {
-		Center = Vector2.new(0.77, 0.16),
-		Size = 0.34,
+		Center = Vector2.new(0.83, 0.20),
+		Size = 0.44,
 		OuterGradient = Theme.Exit.OuterGradient,
 		FaceGradient = Theme.Exit.FaceGradient,
 		MarkGradient = Theme.Exit.XGradient,
 		Outline = Theme.Exit.XOutline,
+	},
+	-- Attention PULSE for a hex the player can act on RIGHT NOW: a tier whose
+	-- next buy is AFFORDABLE, and a category node holding one (its "!" badge
+	-- breathes on the same clock, since the badge is drawn in the overlay's own
+	-- top layer rather than as a child of the node).
+	-- Gentler than Theme.Feel.Pulse (1.10) on purpose: `UpgradeTreeConfig.hex
+	-- .nodeFill = 1` packs the comb edge-to-edge, so a node grows straight INTO
+	-- its neighbours — at 1.10 the overlap reads as a z-order bug, at 1.06 it
+	-- reads as a breath.
+	-- ⚠ Gold (`available`) is NOT the trigger. Gold means the tier is UNLOCKED —
+	-- priced, but not necessarily payable (features/upgrades.md) — while a pulse
+	-- PROMISES a purchase, so it rides the same affordability predicate the Buy
+	-- button and the world "N Available" sign use.
+	Pulse = {
+		Scale = 1.06,
+		Tween = TweenInfo.new(0.72, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+		StopTween = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 	},
 }
 Theme.HexTree.BuyButton = buttonStyleWithAspect(Theme.EquipGreen, 168 / 54)
@@ -2877,6 +3000,7 @@ table.freeze(Theme.EatButton)
 table.freeze(Theme.RevealOverlay)
 table.freeze(Theme.RebirthLayout.StatPositions)
 table.freeze(Theme.RebirthLayout)
+table.freeze(Theme.SocialLayout)
 table.freeze(Theme.MatchChoice)
 table.freeze(Theme.MatchmakingStartButton)
 table.freeze(Theme.MatchmakingLayout)
@@ -2889,6 +3013,7 @@ table.freeze(Theme.HexTree.States)
 table.freeze(Theme.HexTree.Tooltip)
 table.freeze(Theme.HexTree.Detail)
 table.freeze(Theme.HexTree.Notifier)
+table.freeze(Theme.HexTree.Pulse)
 table.freeze(Theme.HexTree.BuyButton)
 table.freeze(Theme.HexTree.ZoomButton)
 table.freeze(Theme.HexTree)

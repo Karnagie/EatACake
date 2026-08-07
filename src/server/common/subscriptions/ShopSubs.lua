@@ -120,6 +120,15 @@ local boostDefs
 local function shopPayload(userId: number)
 	local products = {}
 	for key, def in pairs(ShopData.products) do
+		-- HIDDEN products are sold by a WORLD surface, not by a shop cell (the
+		-- checkpoint's LayerEater prompt). They still need a ShopData entry —
+		-- RequestPurchase and ProcessReceipt both look the key up there — but they
+		-- must not appear in the grid: the shop window is LOBBY-only, and a lobby
+		-- cell for a product whose grant kind only exists in the game place would
+		-- charge, defer, and appear to do nothing until the next match.
+		if def.hidden == true then
+			continue
+		end
 		table.insert(products, {
 			key = key,
 			label = def.label,
@@ -232,6 +241,10 @@ local function descriptorValid(reward): (boolean, string?)
 		end
 	elseif kind == "burn" then
 		-- no payload
+	elseif kind == "eatlayer" then
+		-- no payload — the layer it eats is whichever one the shared cake is on
+		-- (features/checkpoint.md). WHEN it can land is a runtime question, not a
+		-- shape one, and it is answered by the readiness predicate below.
 	else
 		return false, `unknown kind '{tostring(kind)}' — add a rule to descriptorValid`
 	end
@@ -242,7 +255,14 @@ end
 -- can't be granted. Validating the WHOLE list BEFORE granting anything is what
 -- makes the grant loop all-or-nothing: a partial failure mid-loop would
 -- otherwise re-mint the successful grants on every Roblox receipt retry.
-local function grantableList(def): ({ { [string]: any } }?, string?)
+--
+-- `player` is optional and enables the third check, RUNTIME READINESS
+-- (RewardGrantSubs.IsReady): "deliverable in this place" is not the same
+-- question as "deliverable to this player right now", and only the latter
+-- catches a `eatlayer` receipt surfacing during the boss phase. Without it the
+-- handler's only way to say no is to return nil — which grantProduct has already
+-- passed the point of caring about, so the player pays and gets nothing.
+local function grantableList(def, player: Player?): ({ { [string]: any } }?, string?)
 	local grants = def.grants or { def.grant }
 	if #grants == 0 then
 		return nil, "no grant/grants"
@@ -262,6 +282,12 @@ local function grantableList(def): ({ { [string]: any } }?, string?)
 		if not ok then
 			return nil, why
 		end
+		if player ~= nil then
+			local isReady, notReady = RewardGrantSubs.IsReady(player, reward)
+			if not isReady then
+				return nil, notReady
+			end
+		end
 	end
 	return grants
 end
@@ -271,7 +297,7 @@ local function grantProduct(player: Player, userId: number, key: string, purchas
 	if not def or not profileData.Get(userId) then
 		return false
 	end
-	local grants, why = grantableList(def)
+	local grants, why = grantableList(def, player)
 	if not grants then
 		Log.Warn(SCOPE, `product '{key}' is not grantable here — refusing: {tostring(why)}`)
 		return false
@@ -279,12 +305,30 @@ local function grantProduct(player: Player, userId: number, key: string, purchas
 	-- No yields from here on: the pre-validated loop applies atomically, and the
 	-- receipt is recorded in the SAME stretch so a re-delivery can never slip
 	-- between the grant and the ledger write.
+	local declined = 0
 	for _, reward in ipairs(grants) do
 		local granted = RewardGrantSubs.Grant(player, reward, `shop:{key}`)
 		if granted == nil then
-			-- Should be impossible after grantableList; log loudly either way.
+			declined += 1
+			-- Should be impossible after grantableList + IsReady; log loudly either way.
 			Log.Warn(SCOPE, `product '{key}': pre-validated grant still declined ({tostring(reward.kind)})`)
 		end
+	end
+	-- A SINGLE-grant product whose only grant declined delivered NOTHING, so the
+	-- receipt must not be consumed: return false and processReceipt answers
+	-- NotProcessedYet, which is the one case where Roblox's forever-retry is
+	-- exactly the behaviour you want. Validation (`grantableList`, which now
+	-- includes runtime readiness) makes this close to unreachable — but "close to
+	-- unreachable" is not a guarantee a money path may rest on, and the old code
+	-- logged the decline and then told Roblox the purchase had succeeded.
+	-- ⚠ MULTI-grant products keep the old behaviour deliberately. Their earlier
+	-- grants have already applied and the ledger entry below has NOT been written,
+	-- so a retry would re-mint them — the exact partial-failure re-mint the
+	-- all-or-nothing validation exists to prevent (ADR-0014). For those, a
+	-- consumed receipt with a logged partial failure is the lesser evil.
+	if declined > 0 and #grants == 1 then
+		Log.Warn(SCOPE, `product '{key}': its ONLY grant declined — receipt NOT consumed, returning NotProcessedYet for retry`)
+		return false
 	end
 	if def.oneTime then
 		ShopService.MarkOneTimePurchased(userId, key)
@@ -434,9 +478,40 @@ function ShopSubs.Start(data, services, subscriptions)
 	MarketplaceService.ProcessReceipt = processReceipt
 	Log.Sum(SCOPE, `ProcessReceipt armed in the {PlaceConfig.current()} place`)
 
+	-- Wiring state (not game data): ONE burst bucket shared by both purchase
+	-- remotes, keyed by userId. `RequestGemPurchase` has always had one;
+	-- `RequestPurchase` went without because it was only reachable from a shop
+	-- cell. It no longer is — a world ProximityPrompt with HoldDuration 0 can be
+	-- mashed (or driven in a loop by an exploiter), and EVERY refusal branch here
+	-- answers with a full catalogue re-push, which is precisely what the gem
+	-- remote's comment warns turns a refusal path into a weapon against the
+	-- server. Sized in ShopData; no human reaches it.
+	local purchaseBuckets: { [number]: { windowStart: number, count: number } } = {}
+	local function overBurst(buckets, userId: number): boolean
+		local now = os.clock()
+		local bucket = buckets[userId]
+		if bucket == nil or (now - bucket.windowStart) >= ShopData.gemPurchaseWindowSeconds then
+			bucket = { windowStart = now, count = 0 }
+			buckets[userId] = bucket
+		end
+		bucket.count += 1
+		return bucket.count > ShopData.gemPurchaseBurst
+	end
+
 	Net.Remote("RequestPurchase").OnServerEvent:Connect(function(player, key)
 		if type(key) ~= "string" then
 			Log.Once(SCOPE, "purchase-badtype", `RequestPurchase with a non-string key from {player.Name} — ignored`)
+			return
+		end
+		if overBurst(purchaseBuckets, player.UserId) then
+			-- Dropped BEFORE any push or warn — the whole point of the gate. Once
+			-- per player per server so the flood cannot flood the log (R8).
+			Log.Once(
+				SCOPE,
+				`buy-throttled-{player.UserId}`,
+				`{player.Name} exceeded {ShopData.gemPurchaseBurst} purchase requests in {ShopData.gemPurchaseWindowSeconds}s — `
+					.. `throttling this player's RequestPurchase (further drops are silent)`
+			)
 			return
 		end
 		local def = ShopData.products[key]
@@ -481,7 +556,25 @@ function ShopSubs.Start(data, services, subscriptions)
 			return
 		end
 		if type(def.devProductId) ~= "number" or def.devProductId <= 0 then
-			Log.Warn(SCOPE, `product '{key}' has no devProductId in ShopData — purchase refused`)
+			-- Log.Once, not Log.Warn: this branch is now reachable from a WORLD
+			-- prompt a player can press repeatedly, and Log.Warn has no dedup, so
+			-- an unconfigured world-sold product was a one-key console flood. The
+			-- boot report already names every unconfigured id once, loudly.
+			Log.Once(SCOPE, `buy-unconfigured-{key}`, `product '{key}' has no devProductId in ShopData — purchase refused (boot report lists it)`)
+			return
+		end
+		-- Don't put the Roblox dialog in front of someone whose purchase cannot
+		-- land yet (the LayerEater pressed during the boss phase). ProcessReceipt
+		-- would defer such a receipt with NotProcessedYet and it would eventually
+		-- deliver, but "you were charged, come back later" is a support ticket;
+		-- refusing the prompt costs the player nothing.
+		local _, notDeliverable = grantableList(def, player)
+		if notDeliverable ~= nil then
+			Log.Info(
+				SCOPE,
+				`RequestPurchase '{key}' from {player.Name}: not deliverable right now - prompt refused ({notDeliverable})`
+			)
+			ShopSubs.SendShop(player)
 			return
 		end
 		-- The Roblox prompt is about to appear. Everything that does NOT reach
@@ -492,7 +585,9 @@ function ShopSubs.Start(data, services, subscriptions)
 		MarketplaceService:PromptProductPurchase(player, def.devProductId)
 	end)
 
-	-- Wiring state (not game data): gem-purchase burst bucket per userId. Every
+	-- Gem-purchase burst bucket, SEPARATE from the Robux one above so a player
+	-- buying boosts cannot throttle their own Robux purchases (and vice versa);
+	-- both use the same `overBurst` helper and the same ShopData sizing. Every
 	-- refusal below answers with a full catalogue re-push and some warn LOUDLY, so
 	-- without a gate a client firing this on Heartbeat costs the whole server CPU
 	-- and buries the console. Sized in ShopData so a HUMAN buying two boosts back
@@ -511,14 +606,7 @@ function ShopSubs.Start(data, services, subscriptions)
 			return
 		end
 		local userId = player.UserId
-		local now = os.clock()
-		local bucket = gemBuckets[userId]
-		if bucket == nil or (now - bucket.windowStart) >= ShopData.gemPurchaseWindowSeconds then
-			bucket = { windowStart = now, count = 0 }
-			gemBuckets[userId] = bucket
-		end
-		bucket.count += 1
-		if bucket.count > ShopData.gemPurchaseBurst then
+		if overBurst(gemBuckets, userId) then
 			-- Dropped BEFORE any push or warn — that is the whole point of the gate.
 			-- Log.Once per player rather than silence: no human reaches this, so a
 			-- player who does is either scripting or hitting a client bug, and a
@@ -572,7 +660,7 @@ function ShopSubs.Start(data, services, subscriptions)
 		-- Validate the WHOLE grants list BEFORE spending anything: the money must
 		-- never be taken for a no-op, and unlike a receipt there is no retry that
 		-- would put it back.
-		local grants, why = grantableList(def)
+		local grants, why = grantableList(def, player)
 		if not grants then
 			Log.Warn(SCOPE, `gem product '{key}' is not grantable here — refused WITHOUT spending: {tostring(why)}`)
 			ShopSubs.SendShop(player)
@@ -702,6 +790,7 @@ function ShopSubs.Start(data, services, subscriptions)
 	Players.PlayerRemoving:Connect(function(player)
 		ShopService.ClearRuntime(player.UserId)
 		gemBuckets[player.UserId] = nil
+		purchaseBuckets[player.UserId] = nil
 	end)
 
 	-- Config validation (after all Starts — grant kinds must be registered).

@@ -18,6 +18,14 @@ function Core.Config()
 	return queueData and queueData["queue-config"]
 end
 
+--API
+-- Countdown length for a party of `memberCount`, per MatchConfig.queue. A solo
+-- player is only waiting on themselves; 2+ needs time for everyone to settle.
+function Core.CountdownSeconds(memberCount: number): number
+	local config = Core.Config()
+	return if memberCount <= 1 then config.countdownSecondsSolo else config.countdownSeconds
+end
+
 function Core.GetQueue(queueId: number)
 	return queueData and queueData["queue-by-id"][queueId]
 end
@@ -142,6 +150,10 @@ local function validConfig(): boolean
 	end
 	if type(config.countdownSeconds) ~= "number" or config.countdownSeconds <= 0 then
 		Log.Warn("LobbyQueue", "MatchConfig.queue.countdownSeconds must be positive")
+		return false
+	end
+	if type(config.countdownSecondsSolo) ~= "number" or config.countdownSecondsSolo <= 0 then
+		Log.Warn("LobbyQueue", "MatchConfig.queue.countdownSecondsSolo must be positive")
 		return false
 	end
 	if type(config.exitGraceSeconds) ~= "number" or config.exitGraceSeconds < 0 then

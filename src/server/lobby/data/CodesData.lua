@@ -24,7 +24,7 @@ CodesData.codes = {
 		reward = { kind = "egg", eggType = "lucky" },
 		expiresAt = nil,
 	},
-	["SWEETTOOTH"] = {
+	["SIXSEVEN"] = {
 		reward = { kind = "boost", boostId = "boost-15m" },
 		expiresAt = nil,
 	},

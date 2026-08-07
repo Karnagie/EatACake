@@ -18,6 +18,18 @@
 	  end)
 	Registration order doesn't matter: Grant only runs at event time, after
 	all subscriptions have started.
+
+	READINESS (`RegisterReady`) — optional, and it exists for the MONEY path.
+	`HasHandler` answers "is this kind deliverable in this place at all"; it
+	cannot answer "can it be delivered to THIS player RIGHT NOW". A handler that
+	answers that question by returning nil is too late: ShopSubs.grantProduct has
+	already committed the receipt, so the player pays and gets nothing (`burn`
+	against a player with no stomach state was exactly that hole). A readiness
+	predicate runs inside `grantableList`, i.e. BEFORE the first grant and before
+	the gem path spends anything, so a "not yet" becomes NotProcessedYet (Roblox
+	re-delivers) or a refusal that never charges. Return `false, reason` to defer.
+	Kinds with no predicate are always ready — nothing had to change to keep
+	working.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -35,6 +47,7 @@ local SCOPE = "RewardGrantSubs"
 local RewardGrantSubs = {}
 
 local handlers: { [string]: (Player, { [string]: any }, string?) -> { [string]: any }? } = {}
+local ready: { [string]: (Player, { [string]: any }) -> (boolean, string?) } = {}
 
 --API
 -- Registers a grant handler for a descriptor kind. Handler returns a
@@ -47,10 +60,44 @@ function RewardGrantSubs.Register(kind: string, handler)
 end
 
 --API
+-- Registers the "can this land RIGHT NOW" predicate for a kind (see the header).
+-- `predicate(player, reward)` returns true, or false + a human reason. Optional:
+-- a kind without one is always ready.
+function RewardGrantSubs.RegisterReady(kind: string, predicate)
+	if ready[kind] ~= nil then
+		Log.Warn(SCOPE, `Readiness predicate for kind '{kind}' overwritten`)
+	end
+	ready[kind] = predicate
+end
+
+--API
 -- Whether a kind can be granted. Features should check this BEFORE consuming
 -- a claim, so a mistuned reward table never eats a player's claim.
 function RewardGrantSubs.HasHandler(kind: string?): boolean
 	return kind ~= nil and handlers[kind :: string] ~= nil
+end
+
+--API
+-- Whether this descriptor can land for THIS player right now. Callers on a money
+-- path must check it BEFORE committing (ShopSubs.grantableList does). A throwing
+-- predicate answers "not ready" rather than taking the purchase path down (R8).
+function RewardGrantSubs.IsReady(player: Player, reward: { [string]: any }?): (boolean, string?)
+	if type(reward) ~= "table" or type(reward.kind) ~= "string" then
+		return false, "malformed descriptor"
+	end
+	local predicate = ready[reward.kind]
+	if predicate == nil then
+		return true
+	end
+	local ok, result, reason = pcall(predicate, player, reward)
+	if not ok then
+		Log.Warn(SCOPE, `readiness predicate for '{reward.kind}' THREW — treating as not ready: {tostring(result)}`)
+		return false, "readiness check failed"
+	end
+	if result then
+		return true
+	end
+	return false, reason or `kind '{reward.kind}' is not ready for {player.Name}`
 end
 
 --API

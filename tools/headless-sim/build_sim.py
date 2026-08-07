@@ -47,7 +47,34 @@ MODULE_SETS = {
 # pacing_scenario has always run on the cake module set (it measures clear time
 # and income against the same configs), so it is named rather than left to the
 # fallback — a scenario silently getting the wrong module list looks like a pass.
-MODULE_SETS["pacing_scenario.lua"] = MODULE_SETS["treasure_scenario.lua"]
+# ⚠ It also needs UpgradeConfig since 2026-08-05: its fresh/maxed eater used to
+# HARDCODE radius/depth/rate/capacity/burnSpeed, and a later hand-tune of those
+# values left the scenario measuring an eater the game no longer ships (it was
+# still reporting a 3.4-stud base bite two commits after the game moved to 2.4).
+MODULE_SETS["pacing_scenario.lua"] = MODULE_SETS["treasure_scenario.lua"] + [
+    ("Shared.config.UpgradeConfig", "src/shared/config/UpgradeConfig.lua"),
+    # TutorialConfig is here for ONE field — `burnPromptStat`, the stat whose
+    # tier-1 price section D asserts is reachable. Hardcoding "biteRadius" there
+    # would make the assertion silently pass the day the gate is retargeted, which
+    # is the exact failure mode the section exists to prevent.
+    ("Shared.config.TutorialConfig", "src/shared/config/TutorialConfig.lua"),
+]
+
+# layereater_scenario drives the REAL CakeFieldService (not a re-implementation
+# of the bite math like pacing does), so it needs the server data modules the
+# service takes in Init — and CakeConfigData pulls in every shared config.
+MODULE_SETS["layereater_scenario.lua"] = [
+    ("Shared.GridUtil", "src/shared/GridUtil.lua"),
+    ("Shared.config.CakeConfig", "src/shared/config/CakeConfig.lua"),
+    ("Shared.config.UpgradeConfig", "src/shared/config/UpgradeConfig.lua"),
+    ("Shared.config.BodyConfig", "src/shared/config/BodyConfig.lua"),
+    ("Shared.config.PetConfig", "src/shared/config/PetConfig.lua"),
+    ("Shared.config.TreasureConfig", "src/shared/config/TreasureConfig.lua"),
+    ("Shared.CakeOps", "src/shared/CakeOps.lua"),
+    ("__CakeConfigData", "src/server/common/data/CakeConfigData.lua"),
+    ("__CakeStateData", "src/server/game/data/CakeStateData.lua"),
+    ("__CakeFieldService", "src/server/game/services/CakeFieldService.lua"),
+]
 MODULES = MODULE_SETS.get(SCENARIO_FILE, MODULE_SETS["treasure_scenario.lua"])
 
 

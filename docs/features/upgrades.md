@@ -44,36 +44,103 @@ is a second door into the same room.
 NOWHERE" and needed a HUD button — the game checkpoint's prompt was live the whole
 time. `AppRoot`'s meta menu is `Visible = showLobby`, so that button only ever
 existed in the LOBBY, where a run-scoped tree has nothing to spend.
-`LocalUpgradeTree.AnyAffordable` (the old badge feed) now has no caller and is
-kept, not wired. Service + subs + `UpgradesUiData` stay COMMON.
+Service + subs + `UpgradesUiData` stay COMMON.
 
-## Progression (re-priced 2026-07-30, ADR-0013)
+## The world sign: "N Available" (2026-08-05)
+The authored `UpgradeStationBody.AvailableGui.Txt` billboard shows the local
+player how many upgrades they can buy RIGHT NOW, so the walk to the station is a
+decision made from across the cake instead of after arriving. Owner:
+`UpgradeStationSubsClient` (client, COMMON, game-place gated on `GameUiData`);
+authored contract + tuning in `UpgradesUiData["station"]`; string
+`LocaleData["station-available"]` (`"{n} Available"`); count from
+`LocalUpgradeTree.AffordableCount` — the same predicate the tree's Buy button and
+category badge use, so the sign can never promise a purchase the tree refuses.
+- **Count = distinct STATS whose next tier the player can PAY for.** Deliberately
+  not a greedy spending sequence: a sign promising "7" over a tree you can only
+  buy 3 things from is a lie the player can see.
+  ⚠ It is NOT the gold-hex count. A hex is gold when it is the next UNLOCKED tier
+  (`owned == tier - 1`, no reference to the balance) — a tier must show its price
+  before you can afford it — so gold hexes >= the sign's N at all times.
+- **0 affordable hides the whole BillboardGui** (`hide-when-zero`) — "0 Available"
+  reads as a broken station.
+- **It POLLS `AppRoot` at 2 Hz, it does not listen to the remotes.** The two
+  updates that move the count (`UpgradesUpdate`, `CurrencyUpdate`) are consumed by
+  other subscriptions that write into AppRoot, and client subs Start
+  alphabetically — `UpgradeStation…` connects BEFORE `Upgrades…`, so a handler
+  here would render one push behind forever. The tick is needed anyway for the
+  INSTANCE (place content, replicates late).
+- ⚠ **Resolve by explicit chain, never `FindFirstChild("Txt", true)`.**
+  `UpgradeStationBody` carries TWO BillboardGuis and both their labels are named
+  `Txt`; a recursive search silently relabels the static "Upgrades" nameplate.
+- The generated fallback checkpoint (`MapService.GenerateAssets`) has no
+  BillboardGui at all — a missing sign warns once via `Log.GraceOnce` and the
+  prompt still opens the tree.
+
+`LocalUpgradeTree.AnyAffordable` (the old badge feed) is now a thin wrapper over
+`AffordableCount`, which the sign uses — it is wired again.
+
+## Progression (re-priced 2026-07-30 ADR-0013; belly curve re-shaped 2026-08-05 ADR-0019)
 Each stat is ~5 tiers (`instantBurn` 4). `StatsService.upgradeValue` returns
 `tier==0 and def.base or def.tiers[min(tier,#tiers)].value`.
-- **`capacity` base 84000** — the belly is in FOOD units (`removed × the band's
-  density`), and 84000 ≈ 90 s of eating per fill at every depth.
-- **`biteRadius` base 3.4 is the strongest eating stat**: a bite clears to the
+- **`capacity` base 4400 is THE PACING STAT** — the belly is in FOOD units
+  (`removed × the band's density`), and how OFTEN it fills is the rhythm the
+  player feels. Measured seconds of eating per belly (`pacing.py --intervals`,
+  solo easy, 5 seeds, first belly filled at each tier):
+
+  | tier | value | seconds per belly |
+  |---|---|---|
+  | base | 4,400 | **10.0** |
+  | I | 13,000 | **30.6** |
+  | II | 58,000 | **89.1** |
+  | III | 120,000 | 122.3 |
+  | IV | 235,000 | 148.5 |
+  | V | 645,000 | 183.8 |
+
+  ⚠ Before 2026-08-05 this curve ran BACKWARDS — 227 s per belly at tier 0 down to
+  63 s at tier 5 — because capacity grew 4× while eating power grew ~20×, so every
+  purchase made the interruption *more* frequent. Growing 147× is not extravagance,
+  it is what winning that race costs.
+- **`biteRadius` base 2.4 is the strongest eating stat**: a bite clears to the
   layer floor, so clear time scales with bite AREA. It is multiplied by the
-  band's `scoop` (2.23 icing → 0.558 core), so a base eater takes a ~7.6-stud
-  spoonful of frosting and a ~1.9-stud chip of the core.
-- **`biteDepth` is bite STRENGTH** against `sim.biteClearRefDepth`: it widens the
-  fully-cleared core of the scoop (and lets you take a dense band in one bite
-  instead of three).
+  band's `scoop` (2.23 icing → 0.558 core), so a base eater takes a ~5.4-stud
+  spoonful of frosting and a ~1.3-stud chip of the core.
+  ⚠ Its **tier-1 cost (450) is load-bearing for onboarding** — see
+  `features/tutorial.md`. A full base belly of frosting is worth ~612 calories;
+  past ~600 the tutorial's step 3 can no longer fire from affordability.
+  `pacing_scenario.lua` section D asserts that margin (≥ ×1.2).
+- **`biteDepth` base 2.6 is bite STRENGTH** against `sim.biteClearRefDepth` (3.6):
+  it widens the fully-cleared core of the scoop (and lets you take a dense band in
+  one bite instead of three).
 - **`runSpeed` base 20 matters more than it looks**: on the wide top layers the
   scoop clears cake faster than you can walk over it.
+- **`burnSpeed` base 0.20** — burn time is a FRACTION of the belly, so it is a
+  constant ~1/value SECONDS at any belly size. At the old 0.06 a hands-free burn
+  took 16.7 s against a 10 s opening belly, i.e. longer than the eating it
+  interrupted.
 
-**Costs — the whole tree is 772,250 calories** (was 16,019,500; VALUES unchanged,
-only prices). Target: every tier owned by the time HALF the cake is eaten.
-Measured by `tools/balance-model/pacing.py --candidate` (5 seeds, solo easy):
-clear **38.9 min**, tree complete at **46% of the cake** (5/5 seeds) around the
-27-minute mark, ~18 gym trips. Total eating power still grows ~2.4× end to end.
+**Costs — the whole tree is 755,260 calories** (was 772,250). Target unchanged:
+every tier owned by the time HALF the cake is eaten. The 2026-08-05 pass halved
+the tier-1 prices and steepened the per-tier ratio 3.1 → 3.4 to hold that total —
+so the first purchases arrive within the first minute (they are what teaches the
+loop) without the tree finishing any earlier.
+Measured (`tools/balance-model/pacing.py`, 5 seeds, solo easy): clear **35.3 min**
+= eat 29.6 + gym 5.7 over **22 trips** (84% of the session spent eating), tree
+complete at **48% of the cake** (5/5 seeds), ~6% forfeited to the sweeps.
+Before: 38.7 = eat 33.4 + gym 5.3 over 20 trips. ⚠ The gym is slightly LONGER in
+total (two more trips, each far shorter); the whole 3.4-minute win is EAT time,
+bought by the halved tier-1 prices putting the eating stats in the player's hands
+minutes sooner.
+⚠ Total eating power grows **~20×** end to end, NOT the ~2.4× this doc claimed
+until 2026-08-05 — a hand-tune (commit `1c21a15`) moved `biteRadius` base 3.4→2.4
+and `biteDepth` 3.6→2.6 while pushing their top tiers up, and neither the doc nor
+the models were re-measured. Re-measure, never extrapolate.
 ⚠ `instantBurn` is priced at ~0.35× the others' scale: at a flat scale its 4 tiers
 were 48% of the whole tree, so one gym-convenience stat crowded out every stat
 that touches the cake.
-⚠ **Cost changes are coupled to the 50%-of-cake target** — re-measure with the
-model, don't eyeball. The old numbers were calibrated against a simulation that
-never bought tiers mid-run, which is how a documented "40 min" shipped as a real
-1 h 01 m.
+⚠ **Cost changes are coupled to the 50%-of-cake target, and capacity values are
+coupled to the interval curve** — re-measure with the model, don't eyeball. The
+old numbers were calibrated against a simulation that never bought tiers mid-run,
+which is how a documented "40 min" shipped as a real 1 h 01 m.
 
 Tier COUNT and the remote contract are unchanged → **no profile migration** (a
 returning save's `levels[id]` still means tier count; the run reset only changes
@@ -98,6 +165,31 @@ rebirth system; what resets tiers now is the run reset above.
   (name/desc/status/buyText/affordable) for the tap panel, categories a `badge`.
 - Node states: `locked` (gray) / `available` (gold, the next buy) /
   `owned` (blue) / `category` (purple) / `back` (teal) / `logo`.
+- **Anything buyable RIGHT NOW BREATHES** (2026-08-05). `node.pulse` runs a
+  looping scale tween on the hex (`HexNode`, its own centre-anchored UIScale —
+  ADR-0006: React never writes that `Scale`), tuned in `Theme.HexTree.Pulse`.
+  It fires for an AFFORDABLE tier and for any category holding one, and the
+  category's "!" badge pulses on the same clock (it lives in the overlay's top
+  layer, so it cannot inherit the node's scale and needs its own).
+  ⚠ It is NOT the gold `available` state — gold means UNLOCKED and priced, which
+  a tier must be before you can afford it. Same predicate as the Buy button and
+  the world sign, so a breathing hex can never refuse the purchase it advertises.
+  1.06, not `Theme.Feel.Pulse`'s 1.10: `nodeFill = 1` packs the comb
+  edge-to-edge, so a node grows straight into its neighbours.
+- **Every node carries a GLYPH** (2026-08-04). `UpgradeTreeConfig.icons` maps
+  each stat / category / back to a `Theme.Icons` registry NAME;
+  `LocalUpgradeTree` attaches it as `node.icon` and `HexNode` switches to the
+  icon-first cut in `Theme.HexTree` (`Icon*` zones: glyph 144 / name 60 / status
+  52 on the sprite's 512x444 grid). All five tiers of one stat share one glyph —
+  the roman numeral separates them; a per-tier glyph would make a stat's wedge
+  read as five unrelated upgrades. A LOCKED node fades its glyph
+  (`States.locked.IconTransparency`) instead of tinting it, so the SHAPE — the
+  only thing telling a non-reader which stat a wedge is — survives. A node with
+  no mapping renders the original text-only cut unchanged.
+  ⚠ Judge a glyph at NODE size: `biteRadius` shipped as `UiAim` for one
+  screenshot and read as an X (cancel) on the hex the player is asked to buy.
+  Icon:text is 2.4:1 by measurement — both text zones are HEIGHT-bound at node
+  size, so height moved out of them goes straight into the glyph.
 
 ## Flow
 `BuyUpgrade` remote (statId) → UpgradeSubs: `IsLoaded` gate → `NextCost` gate
@@ -179,11 +271,18 @@ Server (all COMMON): `ProfileSchema/UpgradesSection` (v2),
 `subscriptions/UpgradeSubs`, `subscriptions/RunResetSubs` (the run wipe);
 `data/MapConfigData` (station),
 `services/MapService` (builds/rides the computer). Shared:
-`config/UpgradeConfig` (tiers), `config/UpgradeTreeConfig` (honeycomb), `HexUtil`
-(axial math), `UIKit/Theme` (`HexTree`), `UIKit/Components/HexNode` +
-`HexTreeOverlay`. Client: `LocalStatsService`, `LocalUpgradeTree` (view-model),
+`config/UpgradeConfig` (tiers), `config/UpgradeTreeConfig` (honeycomb + `icons`),
+`HexUtil`
+(axial math), `UIKit/Theme` (`HexTree`, incl. the `Icon*` zones + `Notifier`
+placement), `UIKit/Icons` (`UiPunch`/`UiHammer`/`UiShoe`/`UiBoom`/`UiHand`/
+`UiCake`/`UiDumbbell` were added for this), `UIKit/Components/HexNode` +
+`HexTreeOverlay`. Client: `LocalStatsService` (+`GymEfficiency`),
+`LocalUpgradeTree` (view-model + the shared affordability predicates
+`AffordableCount`/`AnyAffordable`/`CanAffordNext`),
 `AppRoot` (overlay + nav-stack; NO HUD button), `subscriptions/UpgradesSubsClient`
-(HUD/prompt open/close), common `data/UpgradesUiData` (modal config/state),
+(prompt open/close + buys), `subscriptions/UpgradeStationSubsClient` (the world
+"N Available" sign), common `data/UpgradesUiData` (modal config/state +
+`["station"]` world contract),
 `PlayerControlData`/`PlayerControlService`, `UIKit/Templates/UpgradeTreeBlur`,
-`data/LocaleData` (`hex-*`, `cat-*`, `upgrade-*-desc`).
+`data/LocaleData` (`hex-*`, `cat-*`, `upgrade-*-desc`, `station-available`).
 The old flat `UIKit/UpgradesPanel`/`UpgradeRow` are now UNUSED (kept, not wired).

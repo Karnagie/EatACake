@@ -11,11 +11,17 @@
 	through onNodeActivated(action): category tap → {open,id}, back → {back},
 	Buy → {buy,id}. Tier focus + pan/zoom are overlay-local.
 
+	Anything the player can buy RIGHT NOW BREATHES: a tier whose cost the current
+	balance covers, and any category holding one (its "!" badge pulses on the same
+	clock). The flag rides `node.pulse` from LocalUpgradeTree — deliberately a
+	narrower set than the gold `available` hexes, which are merely unlocked.
+
 	props: { name, visible, zIndex, treeKey, nodes, nodeWidth, nodeHeight,
 		caloriesText, onNodeActivated(action), onClose }
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local React = require(ReplicatedStorage.Packages.React)
 local Theme = require(script.Parent.Parent.Theme)
@@ -138,17 +144,55 @@ end
 -- Red "!" notifier rendered in a TOP layer (above all hexes) at a node's
 -- top-right corner, so neighbouring packed hexes can't cover it. World-space so
 -- it pans/zooms with the tree. Size is square (the World is square).
-local function notifierElement(key, cx, cy, nodeW, nodeH, zIndex)
+--
+-- A COMPONENT rather than a plain element builder because it owns a hook: the
+-- badge marks a category holding an affordable upgrade, which is exactly when
+-- that category's hex breathes — and a badge sitting perfectly still over a
+-- moving hex reads as a detached sprite. It is not a child of the node (it lives
+-- in the overlay's top layer), so it cannot inherit the node's UIScale and needs
+-- its own on the same clock.
+local function NotifierBadge(props)
 	local n = Theme.HexTree.Notifier
+	local cx, cy = props.cx, props.cy
+	local nodeW, nodeH, zIndex = props.nodeW, props.nodeH, props.zIndex
+
+	local pulse = props.pulse == true
+	local pulseRef = React.useRef(nil)
+	React.useEffect(function()
+		local scale = pulseRef.current
+		if scale == nil then
+			return
+		end
+		local feel = Theme.HexTree.Pulse
+		if not pulse then
+			TweenService:Create(scale, feel.StopTween, { Scale = 1 }):Play()
+			return
+		end
+		local tween = TweenService:Create(scale, feel.Tween, { Scale = feel.Scale })
+		tween:Play()
+		return function()
+			tween:Cancel()
+			local instance = pulseRef.current
+			if instance then
+				instance.Scale = 1
+			end
+		end
+	end, { pulse })
+
+	-- Placement comes from Theme (iron rule 2). `Center` is a fraction of the node
+	-- box measured from its top-left, so it is converted to an offset from the
+	-- node's CENTRE here; `Size` is a fraction of the node WIDTH on both axes so
+	-- the badge stays circular inside the square World frame.
 	return React.createElement("Frame", {
-		Name = "Badge_" .. key,
+		Name = "Badge_" .. tostring(props.nodeKey),
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(cx + nodeW * 0.28, cy - nodeH * 0.3),
-		Size = UDim2.fromScale(nodeW * 0.46, nodeW * 0.46),
+		Position = UDim2.fromScale(cx + nodeW * (n.Center.X - 0.5), cy + nodeH * (n.Center.Y - 0.5)),
+		Size = UDim2.fromScale(nodeW * n.Size, nodeW * n.Size),
 		BackgroundColor3 = Color3.new(1, 1, 1),
 		BorderSizePixel = 0,
 		ZIndex = zIndex,
 	}, {
+		PulseScale = React.createElement("UIScale", { ref = pulseRef }),
 		Corner = React.createElement("UICorner", { CornerRadius = UDim.new(1, 0) }),
 		Outer = React.createElement("UIGradient", { Color = n.OuterGradient, Rotation = 90 }),
 		Face = React.createElement("Frame", {
@@ -462,14 +506,29 @@ local function HexTreeOverlay(props)
 			position = UDim2.fromScale(node.cx, node.cy),
 			size = UDim2.fromScale(props.nodeWidth, props.nodeHeight),
 			state = node.state,
+			icon = node.icon,
 			title = node.title,
 			status = node.status,
+			-- "Affordable right now" (LocalUpgradeTree). NOT the gold `available`
+			-- state — gold only means the tier is unlocked and priced.
+			pulse = node.pulse == true,
 			zIndex = z + 2,
 		})
 	end
 	for _, node in ipairs(nodes) do
 		if node.badge then
-			worldChildren[`Badge_{node.key}`] = notifierElement(node.key, node.cx, node.cy, props.nodeWidth, props.nodeHeight, z + 6)
+			worldChildren[`Badge_{node.key}`] = React.createElement(NotifierBadge, {
+				nodeKey = node.key,
+				cx = node.cx,
+				cy = node.cy,
+				nodeW = props.nodeWidth,
+				nodeH = props.nodeHeight,
+				-- A badge is only ever drawn for a category that HOLDS an affordable
+				-- upgrade, so it breathes with its hex rather than sitting still on a
+				-- moving one.
+				pulse = node.pulse == true,
+				zIndex = z + 6,
+			})
 		end
 	end
 

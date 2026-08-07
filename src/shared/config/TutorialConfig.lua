@@ -20,9 +20,37 @@ TutorialConfig.slideIcons = {
 	"TutorialSlide4",
 }
 
--- Step 3 fires at this belly fraction. LATCHED, never re-armed: the belly
--- falls again the moment the gym drain starts (~8 Hz resync pushes), and a
--- beam that blinked off at 89% while the player walked would read as a bug.
+-- Step 3 ("go burn it off") fires when the player can afford their FIRST REAL
+-- UPGRADE — not when the belly meter looks full (user request, 2026-08-05).
+-- Rationale: "your stomach is full" is a punishment cue, and it arrives at the
+-- moment the game stops responding to the button it just taught. "You have
+-- earned a bigger bite, go and collect it" is the same walk with a reward at the
+-- end of it, and it puts the player at the upgrade station holding exactly
+-- enough calories to buy something — so their first trip to the checkpoint ends
+-- in a purchase instead of a chore.
+--
+-- ⚠ The calories are UNBANKED at this point. A player who has never been to the
+-- gym has `economy.calories == 0` and everything they earned sitting in
+-- `stomach.stored`; the gate therefore tests `calories + floor(stored × gymEff)`,
+-- which is exactly what the trip they are being sent on will pay out
+-- (GymService banks `floor(startStored × gymEff)`).
+-- ⚠ This stat's tier-1 cost is load-bearing — see the comment on
+-- `UpgradeConfig.upgrades.biteRadius`. A full base belly of frosting is worth
+-- ~612 calories against a 450 cost, so the gate opens ~74% of the way through
+-- the very first belly.
+TutorialConfig.burnPromptStat = "biteRadius"
+
+-- SAFETY NET for the step above, not the trigger. If the gate somehow cannot
+-- open — a re-priced `biteRadius`, a low-calorie biome, an already-maxed stat —
+-- the player would sit at a full belly that refuses to eat with no guidance at
+-- all, which is the worst state the first session can reach. Crossing this
+-- fraction advances the step regardless.
+-- Also read by BodySubs for the `belly-full` analytics beat: one definition of
+-- "the belly is effectively full", so the funnel and the guidance can't disagree
+-- about when that happened.
+-- LATCHED, never re-armed: the belly falls again the moment the gym drain starts
+-- (~8 Hz resync pushes), and a beam that blinked off at 89% while the player
+-- walked would read as a bug.
 TutorialConfig.bellyThreshold01 = 0.90
 
 -- World contract (place-authored; ADR-0007 — none of this is in the repo).

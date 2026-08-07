@@ -68,8 +68,14 @@ stat crowded out everything that touches the cake. Difficulty
 `workMultiplier`s rose ×1.08 (easy 1 → 1.08) to absorb the speed-up from
 finishing the tree early.
 
-Measured (`--candidate`, 5 seeds, solo easy): **clear 38.9 min**, whole tree
+Measured (`--candidate`, since RETIRED — it froze this proposal's costs while
+reading every other value live, so after ADR-0019 it measured a config that never
+existed; 5 seeds, solo easy): **clear 38.9 min**, whole tree
 owned at **46% of the cake** (5/5 seeds) around the 27-minute mark.
+⚠ SUPERSEDED 2026-08-05 by ADR-0019 (the belly-fill curve): the tree total is now
+755,260, tier-1 prices are ~0.55× with a steeper 3.4 per-tier ratio, and the
+re-measured run is **35.3 min / 48% of the cake**. The 50%-of-cake target itself is
+unchanged.
 
 ## Consequences
 

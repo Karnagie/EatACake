@@ -38,12 +38,14 @@ you asked for — it looks like a pass, of the wrong thing.
 | | |
 |---|---|
 | `treasure_scenario.lua` | `easy` (solo), `hard` (4p, work ×5.5), anything else = no-library fallback orbs |
-| `pacing_scenario.lua` | mode unused — always runs sections A/B/C |
+| `pacing_scenario.lua` | mode unused — always runs sections A/B/C/D. Its eater stats are READ from `UpgradeConfig` (they were hardcoded literals until 2026-08-05 and had gone stale by two commits). ⚠ Section B's "fresh" row stopped being a session estimate with ADR-0019: `capacity` base is now sized for the first ~10 s of a run, so a tier-0 eater clearing a whole cake is a hypothetical whose gym time is hundreds of trips nobody makes — use `tools/balance-model/pacing.py` for a real run. Section **D** asserts the ONBOARDING GATE margin (one full base belly of frosting must be worth ≥ ×1.2 the price of `biteRadius` I, or the tutorial's step 3 can never fire — `features/tutorial.md`) and ERRORS if it is not. |
 | `analytics_scenario.lua` | mode unused — 66 assertions over the analytics pipeline |
+| `layereater_scenario.lua` | mode unused — 19 assertions on the PAID one-shot layer clear |
 
 ```bash
 SCENARIO_FILE=pacing_scenario.lua python tools/headless-sim/build_sim.py 20260729 easy && luau tools/headless-sim/sim.luau
 SCENARIO_FILE=analytics_scenario.lua python tools/headless-sim/build_sim.py && luau tools/headless-sim/sim.luau
+SCENARIO_FILE=layereater_scenario.lua python tools/headless-sim/build_sim.py && luau tools/headless-sim/sim.luau
 ```
 
 `build_sim.py` inlines every module in the scenario's `MODULE_SETS` entry plus
@@ -78,6 +80,7 @@ shim above: an over-permissive stub makes broken code look like passing code.
 | `roblox_stub.lua` | Instance tree, `Vector3`, `CFrame` (**real 3×3 rotation**), `Color3`, `Enum`, `Model:GetBoundingBox/GetPivot/PivotTo/ScaleTo` |
 | `harness_head.lua` | fake `game`/`workspace`/`Players`/`RunService`/`task`, a `Log` stub, and the module registry + `require` shim |
 | `treasure_scenario.lua` | the buried-find scenario: builds a cake, mows it band by band, asserts on reveal/collect/placement |
+| `layereater_scenario.lua` | the PAID layer clear (`features/checkpoint.md`). Unlike `pacing_scenario`, which re-implements the bite math, this one drives the REAL `CakeFieldService` through the real `CakeStateData`/`CakeConfigData`. It exists because the feature cannot be reached in Studio until the 9 R$ dev product is created — a receipt is the only route to the grant handler — so the two things that decide whether the purchase is HONEST are asserted here: the volume reported to the buyer equals the volume actually removed (exactly, not within a tolerance), and two purchases inside one 1 Hz window clear two DIFFERENT bands (the stale-`activeBandIndex` race). |
 | `build_sim.py` | bundles the above + the real `src/` modules into `sim.luau` |
 
 Two non-obvious constraints, both learned the hard way:

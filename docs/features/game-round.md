@@ -23,7 +23,7 @@ require a started match and a present roster participant.
 
 | Mode | Cake WORK | Calorie payout | Boss HP | Boss time | Solo clear |
 |---|---:|---:|---:|---:|---:|
-| `easy` | 1.08× | 1.00× | 0.75× | 1.50× | **38.9 min** (measured) |
+| `easy` | 1.08× | 1.00× | 0.75× | 1.50× | **35.3 min** (measured 2026-08-05) |
 | `medium` | 1.27× | 1.25× | 1.00× | 1.20× | ~41 min (extrapolated) |
 | `hard` | 1.49× | 1.55× | 1.25× | 1.00× | ~44 min (extrapolated) |
 
@@ -31,7 +31,7 @@ Work buys more LAYERS and smaller scoops, never a taller cake; payout rises
 faster than work, so hard mode is the efficient farm. Party size multiplies work
 by `1 + 0.5(n−1)` and payout per head by `1 + 0.62(n−1)`.
 ⚠ Every `workMultiplier` rose ×1.08 on 2026-07-30: the upgrade tree is RUN-scoped
-and re-priced so it is fully owned by ~46% of the cake, which means the back half
+and re-priced so it is fully owned by ~48% of the cake, which means the back half
 of a run is played at full power — the bump buys the 40-minute target back.
 Only solo easy was measured across seeds; the other rows scale from it.
 Knobs + the measurement: `features/cake-cycle.md`, ADR-0011, ADR-0013.

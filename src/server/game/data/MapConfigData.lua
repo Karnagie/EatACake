@@ -19,13 +19,22 @@
 local MapConfigData = {}
 
 MapConfigData.floor = { size = 340, thickness = 2 }
--- Rectangular cake tray under the loaf. A 5-stud lip on a 90x78 loaf read as a
--- bare slab at ground level — the cake appeared to meet the floor with nothing
--- under it (map inspection, 2026-07-26). A ~12-stud lip and a thicker slab read
--- as a cake PLATE, which is what the eye expects under a layer cake.
+-- Cake tray under the cake. A 5-stud lip read as a bare slab at ground level —
+-- the cake appeared to meet the floor with nothing under it (map inspection,
+-- 2026-07-26). A ~12-stud lip and a thicker slab read as a cake PLATE, which is
+-- what the eye expects under a layer cake.
+-- ROUND since 2026-08-03, when the cake became ROUND (MapService gives the part
+-- a CylinderMesh, so length == width is a DIAMETER): the cake is a disc of
+-- radius `footprint.corner * grid.cell` = 46.65 studs, so the old 114x102 tray
+-- kept a 10.4-stud lip in X but left only 4.4 in Z — the thin-lip bug above,
+-- back on two sides. ⌀117.3 restores the uniform ~12-stud lip all round.
 -- ⚠ DEFAULT-GENERATOR ONLY (ADR-0007): an already-authored Environment keeps
--- its own tray until it is re-modelled in Studio.
-MapConfigData.platform = { length = 114, width = 102, height = 4 } -- top = cake bottom
+-- its own tray, so this number does NOT ship. MEASURED in Studio 2026-08-03:
+-- the authored `Assets.Environment.CakePlate` is 100 x 88 (±50 x ±44), so the
+-- round cake CLEARS it by 3.35 studs in X but OVERHANGS it by 2.65 in Z. The
+-- authored plate has to be re-modelled (round, ⌀ ≥ 117) — a config edit cannot
+-- move it.
+MapConfigData.platform = { length = 117.3, width = 117.3, height = 4 } -- top = cake bottom
 MapConfigData.spawnHeightAboveCake = 8 -- fall onto the frosting (§7.1 crust crack)
 
 -- The room: four decorated walls around the play area.
@@ -67,15 +76,22 @@ MapConfigData.room = {
 -- This REPLACES the old floor gym zone: fat is now extracted here, always at
 -- your eating height, so a full belly is seconds from the machine.
 --
--- Placement: the +X side of the loaf. The loaf's +X edge is at
--- footprint.hx * grid.cell (30 * 1.5 = 45 studs); the plate's inner edge sits
--- `edgeGap` studs off it (its z-span stays inside the straight edge, clear of
--- the rounded corners). Legs drop to the floor (y = 0). All heights are RELATIVE
+-- Placement: the +X side of the cake. MapService sets the plate's inner edge
+-- `edgeGap` studs past `footprint.hx * grid.cell` — the cake's +X extreme, which
+-- is 46.65 studs since the cake went ROUND (was the loaf's 45-stud straight edge,
+-- so the whole checkpoint simply shifted out 1.65 studs).
+-- ⚠ A DISC HAS NO STRAIGHT EDGE, so that gap is only `edgeGap` at z = 0 and
+-- widens toward the plate's z-ends: at z = ±plateWidth/2 (±13) the cake has
+-- curved back to x = 44.8, i.e. a 2.3-stud gap. Crossing happens at the centre
+-- (the F teleport lands mid-plate and the walk-back path runs along z ~ 0), so
+-- the crossing itself is unchanged — but do not widen `plateWidth` without
+-- re-checking this, and treat the plate's two cake-side corners as a hop.
+-- Legs drop to the floor (y = 0). All heights are RELATIVE
 -- to the cake origin; MapService adds origin.x/z.
 MapConfigData.checkpoint = {
-	edgeGap = 0.5, -- studs between the loaf edge and the plate's inner (cake-side) edge
+	edgeGap = 0.5, -- studs from the cake's +X extreme (z=0 only — see above) to the plate
 	plateDepth = 18, -- studs, X extent (away from the cake)
-	plateWidth = 26, -- studs, Z extent (along the cake side; < straight-edge span)
+	plateWidth = 26, -- studs, Z extent. ⚠ Widening it widens the cake gap at the ends
 	plateThickness = 2,
 	legSize = 3, -- studs, square leg cross-section
 	legInset = 2, -- studs the legs are inset from the plate edges
@@ -99,6 +115,39 @@ MapConfigData.checkpoint = {
 	stationScreenSize = Vector3.new(4.4, 3.2, 0.5),
 	upgradePromptName = "UpgradeStation",
 	upgradePromptRange = 10, -- ProximityPrompt.MaxActivationDistance (open range)
+	-- LAYER EATER (features/checkpoint.md): an authored prop standing on the
+	-- plate whose ProximityPrompt offers the 9 R$ `layer-eater` dev product; the
+	-- receipt clears the layer the cake is currently on. Unlike the machine and
+	-- the station — which code PLACES at computed corners — this one keeps the
+	-- position and ROTATION it was authored with, expressed as its offset from
+	-- the authored plate, and only rides the plate's movement. Two reasons:
+	-- authoring it is the whole point (it is a decorative contraption, not a
+	-- collider box), and its authored pivot carries a yaw that a
+	-- `PivotTo(CFrame.new(...))` would silently throw away.
+	-- ⚠ `layerEaterPromptName` is DUPLICATED in the client's `ShopUiData` (the
+	-- client is what listens for the trigger — same split as `UpgradeStation` /
+	-- `UpgradesUiData`). Rename in both or the prompt stops selling anything.
+	layerEaterName = "LayerEater",
+	layerEaterPromptName = "LayerEaterPrompt",
+	-- ⚠ MEASURED, not guessed: the F-teleport lands the player at the plate CENTRE
+	-- and the authored eater sits 10.1 studs from it, so at the machine's range of
+	-- 10 the prompt was invisible at exactly the moment it is relevant (you arrive
+	-- with a full belly, look at the checkpoint, and the thing you can buy is not
+	-- there). 14 shows it on arrival with margin and still keeps it plate-local.
+	-- Re-measure if the authored LayerEater is moved. There is NO server-side range
+	-- re-check for this one (unlike the gym): buying the product from anywhere is a
+	-- legitimate purchase, not an exploit.
+	layerEaterPromptRange = 14, -- ProximityPrompt.MaxActivationDistance
+	layerEaterSize = Vector3.new(4, 5, 4), -- DEFAULT GENERATOR ONLY (authored model wins)
+	layerEaterColor = Color3.fromRGB(250, 170, 60),
+	-- REFUSE the sale below this much of the top band left (fraction of what the
+	-- band held when the cake was built). The prompt sits where a player arrives
+	-- with a FULL BELLY — i.e. usually deep into the current layer — so without a
+	-- floor the common case is paying a fixed 9 R$ for the last scraps, and a
+	-- dev product's price is permanent so it can never be corrected downward.
+	-- 0.25 keeps the offer worth at least a quarter of a layer; the refusal is
+	-- logged and the Roblox dialog never opens, so the player is not charged.
+	layerEaterMinRemainingFraction = 0.25,
 	-- Treadmill (fat removal, user req 4): the GymMachine's authored Model IS a
 	-- treadmill; pressing the gym prompt MOUNTS the player on the belt (anchored +
 	-- a run animation, BodySubs) and, when the belly empties, DISMOUNTS them beside
@@ -118,8 +167,11 @@ MapConfigData.checkpoint = {
 	stationScreenColor = Color3.fromRGB(120, 224, 255),
 }
 
--- Landmark candles (§6.3): static towers on the TRAY corners, just outside
--- the loaf footprint (now ±45 × ±39) but inside the tray (±50 × ±44).
+-- Landmark candles (§6.3): static towers on the TRAY corners, outside the cake
+-- but inside the tray. The cake is a disc of radius 46.65 studs and the tray is
+-- ±58.65, so the three corner candles (|pos| ~ 63.8 from the centre, minus their
+-- own radius) sit in margin the disc cannot reach — a round cake frees the four
+-- corners completely, which is exactly where these stand.
 -- Inside-the-cake placement clipped through the mesh walls and read as
 -- rendering glitches (user feedback 2026-07-17) — moved out with the bigger loaf.
 MapConfigData.candles = {

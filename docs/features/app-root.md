@@ -4,10 +4,22 @@
 The ONE React tree rendered through `UiRoot.Render` (single-root contract,
 `docs/features/ui-kit.md`). Game HUD: calories + gems StatPills, CakeBar,
 BellyBar, checkpoint/eat controls, the boss prize card and game overlays. Lobby
-meta HUD: 5-button GRID — Pets, Shop, DailyRewards, Codes, Settings — bare icon
-+ label-BELOW buttons, NO background (`HudMenuButton`; the only badge left is
-Daily-claimable; NO Upgrades — see below). The menu is a
-`UIGridLayout` (`Theme.AppHud.MenuColumns`, default 2). CakeBar (top
+meta HUD: icon GRID — Pets, Shop, DailyRewards, Codes, Settings, **InviteFriends,
+GroupReward** — bare icon
++ label-BELOW buttons, NO background (`HudMenuButton`; badges: Daily-claimable
+and the unclaimed community reward; NO Upgrades — see below). The menu is a
+`UIGridLayout` (`Theme.AppHud.MenuColumns`, default 2) — 7 entries = 4 rows,
+y 172→742 on the 1080 reference, the tallest form its arithmetic was cut for.
+⚠ The two social buttons are APPENDED, never inserted: the established four have
+years of muscle memory attached. Each is gated on its own server push
+(`referral` for Invite, `group.configured` for the reward) — a button whose only
+possible answer is "not available" is worse than no button, and neither push
+happens in the game place.
+The GAME place gets ONE button in that same slot: **Settings**
+(`GameSettingsBtn`, `Visible = showGame`, one menu cell at
+`Theme.AppHud.MenuPosition`). It is deliberately OUTSIDE the meta-menu frame —
+that frame is lobby-gated because its other handlers are lobby subs, while
+settings are COMMON end to end (`features/settings.md`). CakeBar (top
 center, phase-aware — **hidden during normal eating**, shown only for
 boss/spawn/reward), BellyBar (bottom center, glutton state), ComboBadge,
 AnnounceBanner, TO CHECKPOINT button (bottom-center, shown only when away from
@@ -16,7 +28,9 @@ right thumb zone, **TOUCH devices only** — hold to eat / tap for one bite; sho
 in eating/boss phases, hidden while a panel or the gym overlay is up; see
 `features/cake-sim.md` input). Panels toggled by ONE `openPanel` (zIndex 50):
 Pets (PetsInspectPanel), Upgrades (hex-tree overlay), Shop, DailyRewards, Codes,
-Settings, Matchmaking. Overlays: GymOverlay (40), PetRevealOverlay (90).
+Settings, Matchmaking, **InviteFriends + GroupReward** (both `SocialPanel`, both
+lobby-only — `features/referrals.md`, `features/group-reward.md`).
+Overlays: GymOverlay (40), PetRevealOverlay (90).
 `GameUiData` / `LobbyUiData` partition markers gate place-specific presentation:
 the lobby hides cake/belly/checkpoint/eat/game overlays, shows its meta menu,
 and can show the matchmaking selector or chocolate-triggered Shop. The game
@@ -49,7 +63,12 @@ lives in that layer; panels/overlays are direct children of `App`.
 - Data IN: `AppRoot.Set(patch)` — fields: `calories, gems, settings, daily,
   shop, group, codesStatus, cake, stomach, gym, upgrades, pets,
   petReveal (+petRevealCount), combo, announceKey,
-  matchmaking, checkpointFar, openPanel`. Works pre-mount. `checkpointFar` (default true;
+  matchmaking, checkpointFar, openPanel, referral, inviteStatus, groupClaim`.
+  The last three are the social offers: `referral` is a server snapshot
+  (`{rewarded, rewardGems}`) and doubles as the Invite button's gate, while
+  `inviteStatus` / `groupClaim` are CLIENT-owned transient status written by
+  `SocialSubsClient` — the reward's red "wait" line has to appear on the press,
+  a round-trip before the server has said anything. Works pre-mount. `checkpointFar` (default true;
   fed by BodySubsClient's proximity check) hides the TO CHECKPOINT button when
   false.
 - **⚠ `Set` cannot CLEAR a field** — `{ field = nil }` is a silent no-op
@@ -57,6 +76,7 @@ lives in that layer; panels/overlays are direct children of `App`.
   `AppRoot.Open(name?)` (assigns openPanel directly, nil closes).
 - Actions OUT: `AppRoot.SetCallbacks({...})` (merges): onClaimDaily,
   onToggleSetting, onShopActivated, onRedeem, onBuyUpgrade,
+  onInviteFriends, onClaimGroupReward,
   onEquipPet(petId, equip), onToggleUpgrades, onGymTap,
   onDismissReveal, onReturnCheckpoint, onEatDown/onEatUp (EAT button hold —
   CakeSubsClient drives `eating`), onCloseUpgrades (routes the hex-tree close

@@ -5,7 +5,20 @@ of real players returning across real days, and it only starts existing once the
 place is published. This is the checklist that stands between "built" and
 "measurable".
 
-## 1. Monetization ids — ALL 11 ARE LIVE (created 2026-07-31)
+## 1. Monetization ids — 11 LIVE, **1 STILL PENDING**
+
+⚠ **`layer-eater` (9 R$) IS NOT CREATED YET.** Added 2026-08-04 with
+`devProductId = 0`, so the checkpoint's LayerEater prompt refuses every press
+(boot warns `NOT ON SALE`) and the feature is dead in a published place. It is
+sold by a WORLD PROMPT, not a shop cell, so the "wall of SOON buttons" symptom
+below does NOT surface it — nothing on screen says it is broken. Create it with:
+
+```bash
+python tools/monetization/create_monetization.py --apply --write-shopdata --only layer-eater --cookie-file <path>
+```
+
+Then re-run `--verify`. The 11 below were created 2026-07-31 and are live.
+
 
 Why it mattered: `LocalShopService` renders a cell with an unset id as the
 **disabled "SOON" state**, so a player who opened the shop on their first session
@@ -75,9 +88,11 @@ for either resource. Get product-vs-pass right BEFORE the POST.
 a seed for its own ladder and the base price does not come back equal to what you
 asked — the card would print `ShopData.priceRobux` while Roblox charged something
 else. Verified 2026-07-31: `isRegionalPricingEnabled=false` at create pins the
-exact amount (all 11 read back correct).
+exact amount (all 11 read back correct). `layer-eater` will be the first
+create to exercise this since — it is the CHEAPEST product, so it is also the one
+the price gate reads back first.
 
-⚠ **Dev-product icons cannot be set over the API — these 5 are still unset.** Add
+⚠ **Dev-product icons cannot be set over the API — these 5 (6 with `layer-eater`) are still unset.** Add
 them by hand: Creator Dashboard → Monetization → Developer Products. Game-pass
 icons are set (the experience icon) via the `File` multipart part on the pass
 PATCH; the previously documented `imageFile` part name was carried from Dices and

@@ -91,6 +91,17 @@ function LocalStatsService.EatRate(): number
 end
 
 --API
+-- Calories banked per stored calorie. Mirrors StatsService.GymEfficiency EXACTLY
+-- (upgrade tier only — gymEff takes no pet bonus, no pass and no boost, so there
+-- is nothing to go stale here the way BiteRadiusMult can).
+-- Used to answer "what will this belly be WORTH once I burn it off?", which is the
+-- only honest affordability question before the player's first gym trip: calories
+-- earned by eating sit in `stomach.stored` and buy nothing until they are banked.
+function LocalStatsService.GymEfficiency(): number
+	return upgradeValue("gymEff")
+end
+
+--API
 -- Next-tier cost for the upgrades tree (same table as the server); nil = maxed.
 function LocalStatsService.NextCost(id: string): number?
 	local def = UpgradeConfig.upgrades[id]

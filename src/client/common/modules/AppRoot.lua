@@ -4,13 +4,15 @@
 	over HUD zIndex 1, hidden panels stay MOUNTED with visible = false).
 
 	Eat the Cake composition:
-	  HUD: calories + gems StatPills; LOBBY meta menu (5 icon+label buttons, no
-	       bg) / GAME single Upgrades button in the same slot (the tree is
-	       RUN-scoped, ADR-0013 — there is nothing to spend in the lobby);
+	  HUD: calories + gems StatPills; LOBBY meta menu (up to 7 icon+label buttons,
+	       no bg — the two social offers appear only once their server push lands) / GAME single SETTINGS button in the same slot (there is NO
+	       Upgrades button in either place since 2026-07-30 — the tree opens from
+	       the checkpoint prompt, features/upgrades.md);
 	       CakeBar (top center), BellyBar (bottom center), ComboBadge,
 	       AnnounceBanner, BossPrizeCard (boss phase)
 	  Panels (zIndex 50): Pets (inspect), Shop, DailyRewards, Codes,
-	       Settings, Matchmaking
+	       Settings, Matchmaking, InviteFriends + GroupReward (the two
+	       SocialPanel offers — lobby only, each gated on its server push)
 	  Overlays: HintArrow (45), GymOverlay (40), Upgrades hex-tree (60, lobby
 	       UpgradeStation opener pending — no HUD button), TutorialHint (70),
 	       PetRevealOverlay (90), TutorialSlides (95)
@@ -22,12 +24,15 @@
 
 	State fields: openPanel, calories, gems, settings, daily, shop,
 	group, codesStatus, cake, stomach, gym, upgrades, pets, petReveal,
-	petRevealCount, combo, announceKey, matchmaking, checkpointFar, tutorial.
+	petRevealCount, combo, announceKey, matchmaking, checkpointFar, tutorial,
+	referral, inviteStatus, groupClaim.
 	Callbacks: onClaimDaily(day), onToggleSetting(id, v),
 	onShopActivated(rowId), onRedeem(code), onBuyUpgrade(id),
+	onInviteFriends(), onClaimGroupReward(),
 	onEquipPet(petId, equip), onToggleUpgrades(), onGymTap(),
 	onDismissReveal(), onEatDown(input), onEatUp(input), onReturnCheckpoint(),
 	onConfigureMatch(difficulty, maxPlayers), onCancelMatch(),
+	onMatchDifficultyPick(difficulty, isDefault), onMatchPartyPick(n, isDefault),
 	onTutorialSkip(), onTutorialHintDismiss(), onTutorialArrowTarget() -> Vector3?,
 	onPanelChanged(panel|nil) — fired whenever `openPanel` changes (never on
 	mount); AudioSubsClient turns it into the open/close whoosh.
@@ -89,6 +94,15 @@ local current = {
 	combo = nil,
 	announceKey = false,
 	matchmaking = false,
+	-- Social offers (features/referrals.md, features/group-reward.md). `referral`
+	-- is the server snapshot ({ rewarded, rewardGems }) and doubles as the gate
+	-- for the Invite button — until it lands there is no reward figure to show.
+	-- `inviteStatus` / `groupClaim` are CLIENT-owned transient status, written by
+	-- SocialSubsClient, because the claim's red "wait" line has to appear on the
+	-- press rather than a round-trip later.
+	referral = nil,
+	inviteStatus = false,
+	groupClaim = false,
 	-- Whether the player is far enough from the checkpoint platform to show the
 	-- TO CHECKPOINT button (BodySubsClient proximity check). Shown by default.
 	checkpointFar = true,
@@ -303,6 +317,11 @@ local function App()
 	local petsScale, setPetsScale = React.useState(function()
 		return calculateScale(Theme.PetsInspectLayout.PanelAspect, Theme.PetsInspectLayout.PanelMaxViewportFraction)
 	end)
+	-- Invite Friends + the community reward share ONE portrait shell
+	-- (Components.SocialPanel), so they share its fit.
+	local socialScale, setSocialScale = React.useState(function()
+		return calculateScale(Theme.SocialLayout.PanelAspect, Theme.SocialLayout.PanelMaxViewportFraction)
+	end)
 	local matchScale, setMatchScale = React.useState(function()
 		return calculateScale(
 			Theme.MatchmakingLayout.PanelAspect,
@@ -393,6 +412,7 @@ local function App()
 			setWideScale(calculateScale(Theme.RewardsLayout.PanelAspect, Theme.RewardsLayout.PanelMaxViewportFraction))
 			setCodesScale(calculateScale(Theme.CodesLayout.PanelAspect, Theme.CodesLayout.PanelMaxViewportFraction))
 			setPetsScale(calculateScale(Theme.PetsInspectLayout.PanelAspect, Theme.PetsInspectLayout.PanelMaxViewportFraction))
+			setSocialScale(calculateScale(Theme.SocialLayout.PanelAspect, Theme.SocialLayout.PanelMaxViewportFraction))
 			setMatchScale(calculateScale(
 				Theme.MatchmakingLayout.PanelAspect,
 				Theme.MatchmakingLayout.PanelMaxViewportFraction
@@ -651,6 +671,37 @@ local function App()
 
 	local reveal = if type(state.petReveal) == "table" then LocalPetsService.BuildReveal(state.petReveal) else nil
 
+	-- ── social offers (features/referrals.md, features/group-reward.md) ──
+	-- Both status lines are CLIENT-owned transient state (`inviteStatus` /
+	-- `groupClaim`, written by SocialSubsClient) rather than fields of the
+	-- server payloads: the red "like the game and wait" message has to appear on
+	-- the press, a round-trip before the server has said anything at all.
+	-- Each offer also waits for its own server push before it exists at all: the
+	-- reward figure and the friend count are server-side facts, so rendering
+	-- early would advertise "0 Gems Per Friend", and a community button whose
+	-- only possible answer is "not available" is worse than no button. Both
+	-- pushes are lobby-only, which is where the whole feature lives.
+	local groupState = if type(state.group) == "table" then state.group else nil
+	local groupConfigured = groupState ~= nil and groupState.configured == true
+	local referral = if type(state.referral) == "table" then state.referral else nil
+	local referralRewardGems = if referral ~= nil then math.floor(tonumber(referral.rewardGems) or 0) else 0
+	local referralRewarded = if referral ~= nil then math.floor(tonumber(referral.rewarded) or 0) else 0
+	local inviteStatus = if type(state.inviteStatus) == "table" then state.inviteStatus else nil
+	local inviteStatusText = if inviteStatus ~= nil
+		then locale.T(inviteStatus.statusKey, inviteStatus.statusParams)
+		elseif referralRewarded > 0 then locale.T("invite-count", { n = formatNumber(referralRewarded) })
+		else locale.T("invite-count-none")
+	local inviteStatusKind = if inviteStatus ~= nil then (inviteStatus.statusKind or "ok") else "ok"
+
+	local groupClaim = if type(state.groupClaim) == "table" then state.groupClaim else nil
+	local groupClaimed = groupState ~= nil and groupState.claimed == true
+	local groupPending = groupClaim ~= nil and groupClaim.pending == true
+	local groupStatusText = if groupClaim ~= nil
+		then locale.T(groupClaim.statusKey, groupClaim.statusParams)
+		elseif groupClaimed then locale.T("group-claimed")
+		else nil
+	local groupStatusKind = if groupClaim ~= nil then (groupClaim.statusKind or "error") else "ok"
+
 	-- ── onboarding view-model (features/tutorial.md) ─────────────────────
 	-- Every surface is game-place only, exactly like Gym/PetReveal: the panels
 	-- themselves are not place-gated and would otherwise render in the lobby.
@@ -680,6 +731,13 @@ local function App()
 	-- had a button in the one place it was useless and none in the one place the
 	-- pacing depends on it. The authored `UpgradeStation` prompt at the game
 	-- checkpoint still opens it too (features/upgrades.md).
+	-- 7 entries at 2 columns = 4 rows (570/1080 from y 172 -> 742 ✓, the tallest
+	-- form Theme.AppHud's grid arithmetic was cut for). The two social buttons sit
+	-- at the END: the meta menu's order is stable across sessions and shuffling the
+	-- established four would cost every returning player their muscle memory.
+	-- `GroupReward` is hidden until the server says the community is CONFIGURED
+	-- (SocialData.groupId ~= 0) and `InviteFriends` until `ReferralUpdate` lands —
+	-- both resolved in the social view-model above.
 	local menu = {
 		{ name = "Pets", label = locale.T("menu-pets"), badge = false },
 		{ name = "Shop", label = locale.T("menu-shop"), badge = false },
@@ -687,13 +745,28 @@ local function App()
 		{ name = "Codes", label = locale.T("menu-codes"), badge = false },
 		{ name = "Settings", label = locale.T("menu-settings"), badge = false },
 	}
+	if referral ~= nil then
+		table.insert(menu, { name = "InviteFriends", label = locale.T("menu-invite"), badge = false })
+	end
+	if groupConfigured then
+		-- Badge while it is still claimable: this is a free 15-minute boost and the
+		-- only thing in the menu that expires from the player's attention, not from
+		-- a clock.
+		table.insert(menu, {
+			name = "GroupReward",
+			label = locale.T("menu-group"),
+			badge = groupState.claimed ~= true,
+		})
+	end
 	local hud = Theme.AppHud
 	local menuCount = #menu
 	-- Icon GRID: buttons flow left-to-right, wrapping after MenuColumns, so the
 	-- buttons form a compact block (2 columns, currently 3 rows with the last
 	-- cell empty) instead of a column running to the bottom of the screen. Cell
 	-- size/padding are fractions of this frame, both derived from menuCount —
-	-- adding or removing an entry needs no constant here.
+	-- adding or removing an entry needs no constant here (which is what let the
+	-- two social buttons take it from 5 entries to 7, i.e. 3 rows to 4, with no
+	-- layout edit).
 	local menuColumns = math.max(hud.MenuColumns or 1, 1)
 	local menuRows = math.ceil(menuCount / menuColumns)
 	local menuTotalHeight = hud.MenuButtonHeight * menuRows + hud.MenuGap * (menuRows - 1)
@@ -796,6 +869,35 @@ local function App()
 			BorderSizePixel = 0,
 			ZIndex = 1,
 		}, menuChildren),
+		-- SETTINGS in the GAME place. The meta menu above is lobby-only because its
+		-- handlers are lobby subs — but settings are NOT one of those: SettingsData,
+		-- LocalSettingsService, SettingsSubsClient, SettingsSubs and the panel itself
+		-- are all COMMON, and the panel is already rendered here in both places. Only
+		-- the BUTTON was inside the lobby-gated frame, so a player in a match had no
+		-- way to mute the music. One bare icon, in the same 22px left column and the
+		-- same cell size as a lobby menu button, taking the slot the meta menu
+		-- occupies in the lobby (directly under the two stat pills, which is free in
+		-- the game HUD — the cake bar is top-centre and the boss prize is top-right).
+		GameSettingsBtn = React.createElement("Frame", {
+			Name = "GameSettingsBtn",
+			Visible = showGame,
+			Position = UDim2.fromScale(hud.MenuPosition.X, hud.MenuPosition.Y),
+			Size = UDim2.fromScale(hud.MenuButtonWidth, hud.MenuButtonHeight),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			ZIndex = 1,
+		}, {
+			Button = React.createElement(Components.HudMenuButton, {
+				name = "Settings",
+				icon = hud.MenuIcons.Settings or hud.MenuIconPlaceholder,
+				label = locale.T("menu-settings"),
+				badge = false,
+				zIndex = 1,
+				onActivated = function()
+					togglePanel("Settings")
+				end,
+			}),
+		}),
 		-- ⚠ NO Upgrades button, in EITHER place. The tree's only entry point is the
 		-- authored `UpgradeStation` ProximityPrompt on the checkpoint's computer
 		-- (built by MapService, opened by UpgradesSubsClient) — you are stood at the
@@ -1122,6 +1224,11 @@ local function App()
 			playersTitle = locale.T("match-players-heading"),
 			difficultyOptions = difficultyOptions,
 			playerCounts = playerCountOptions,
+			-- The selector opens on Easy / 1 Player (MatchConfig.defaults) so a solo
+			-- run is ONE tap. The panel ignores a default it is not offering — the
+			-- party row is capped by the pad's own maxPlayers.
+			defaultDifficulty = MatchConfig.defaults.difficulty,
+			defaultPlayers = MatchConfig.defaults.playerCount,
 			startText = locale.T("match-start"),
 			busyText = locale.T("match-starting"),
 			unselectedStatusText = locale.T("match-status-choose"),
@@ -1139,17 +1246,71 @@ local function App()
 			-- Observation only — the panel already owns the selection state.
 			-- Neither choice reaches the server before START, so this is the
 			-- one place they can be recorded (docs/features/analytics.md).
-			onSelectDifficulty = function(difficulty)
+			-- `isDefault` is true for the preselection the panel applies when a
+			-- session opens; the beat fires either way (the flow step must not go
+			-- dark for a player who just presses START), and whether a finger
+			-- actually landed on a choice is carried by the kit's press counting.
+			onSelectDifficulty = function(difficulty, isDefault)
 				if callbacks.onMatchDifficultyPick then
-					callbacks.onMatchDifficultyPick(difficulty)
+					callbacks.onMatchDifficultyPick(difficulty, isDefault == true)
 				end
 			end,
-			onSelectPlayers = function(maxPlayers)
+			onSelectPlayers = function(maxPlayers, isDefault)
 				if callbacks.onMatchPartyPick then
-					callbacks.onMatchPartyPick(maxPlayers)
+					callbacks.onMatchPartyPick(maxPlayers, isDefault == true)
 				end
 			end,
 			onClose = closeMatchmaking,
+		}),
+		-- Invite Friends. The button asks Roblox for the native invite prompt
+		-- (SocialSubsClient owns the SocialService call — R4); the gems are paid
+		-- server-side when an invited account actually joins, which is why the
+		-- status line reports a COUNT rather than a claim.
+		InviteFriends = React.createElement(Components.SocialPanel, {
+			name = "InvitePanel",
+			title = locale.T("title-invite"),
+			visible = showLobby and state.openPanel == "InviteFriends" and referral ~= nil,
+			size = UDim2.fromScale(socialScale.X, socialScale.Y),
+			zIndex = 50,
+			iconName = "UiFriend",
+			headlineText = locale.T("invite-headline", { n = formatNumber(referralRewardGems) }),
+			bodyText = locale.T("invite-body", { n = formatNumber(referralRewardGems) }),
+			statusText = inviteStatusText,
+			statusKind = inviteStatusKind,
+			buttonText = locale.T("invite-button"),
+			onActivated = function()
+				if callbacks.onInviteFriends then
+					callbacks.onInviteFriends()
+				end
+			end,
+			onClose = function()
+				AppRoot.Open(nil)
+			end,
+		}),
+		-- Like + join the community -> a 15-minute boost. The CTA goes dead while a
+		-- claim is counting down and stays dead once claimed: the reward is
+		-- one-time, and a live button over "Already claimed" is a lie.
+		GroupReward = React.createElement(Components.SocialPanel, {
+			name = "GroupRewardPanel",
+			title = locale.T("title-group-reward"),
+			visible = showLobby and state.openPanel == "GroupReward" and groupConfigured,
+			size = UDim2.fromScale(socialScale.X, socialScale.Y),
+			zIndex = 50,
+			iconName = "UiHeart",
+			headlineText = locale.T("group-headline"),
+			bodyText = locale.T("group-body"),
+			statusText = groupStatusText,
+			statusKind = groupStatusKind,
+			buttonText = locale.T("group-button"),
+			buttonEnabled = not groupClaimed and not groupPending,
+			onActivated = function()
+				if callbacks.onClaimGroupReward then
+					callbacks.onClaimGroupReward()
+				end
+			end,
+			onClose = function()
+				AppRoot.Open(nil)
+			end,
 		}),
 		Codes = React.createElement(Components.CodesPanel, {
 			name = "CodesPanel",

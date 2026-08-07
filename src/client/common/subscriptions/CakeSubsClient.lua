@@ -75,6 +75,37 @@ function CakeSubsClient.Start(data, modules)
 		return lockedOrError == true
 	end
 
+	-- The cake is only COLLIDABLE once this client's columns are built, but the
+	-- character spawns on `CakeSpawn` as soon as the player joins — so a slow load
+	-- drops them THROUGH the cake and the columns come up around them. Called right
+	-- after every rebuild (see the snapshot handler); config + rationale in
+	-- `CakeConfig.render.collision.buriedRescue*`.
+	local function rescueBuriedLocal()
+		if inputLocked() then
+			return -- a teleport handoff owns the character; never yank it mid-flight
+		end
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if root == nil then
+			return -- not spawned yet; the NEXT snapshot's rebuild will catch them
+		end
+		local surface = LocalCakeField.SurfacePoint(root.Position.X, root.Position.Z)
+		if surface == nil then
+			return -- standing off the cake: nothing to be buried in
+		end
+		local cfg = CakeConfig.render.collision
+		local buriedBy = surface.Y - root.Position.Y
+		if buriedBy < cfg.buriedRescueStuds then
+			return
+		end
+		root.CFrame = CFrame.new(root.Position.X, surface.Y + cfg.buriedRescueLift, root.Position.Z)
+		Log.Warn(
+			SCOPE,
+			`local character was {math.floor(buriedBy)} studs INSIDE the cake when the columns came up `
+				.. `(join/load race) — lifted onto the surface`
+		)
+	end
+
 	CakeRenderer.Setup(LocalCakeField)
 	CakeWaxShell.Setup(LocalCakeField)
 	CakeWrapper.Setup(LocalCakeField)
@@ -135,7 +166,8 @@ function CakeSubsClient.Start(data, modules)
 		end
 		LocalCakeField.ApplySnapshot(buf, meta)
 		CakeWrapper.OnSnapshot() -- pick this cake's wall texture (before the renderer rebuild yields)
-		CakeRenderer.OnSnapshot()
+		CakeRenderer.OnSnapshot() -- ends in columnsRebuild(): the cake is collidable NOW
+		rescueBuriedLocal() -- ...so this is the first moment a fall-through is recoverable
 		-- OnSnapshot can YIELD (lazy mesh-pool build). If a newer snapshot
 		-- was applied while we yielded, ITS handler owns phase/HUD state —
 		-- never overwrite it with this stale meta.
@@ -696,7 +728,11 @@ function CakeSubsClient.Start(data, modules)
 			local velocity = root.AssemblyLinearVelocity
 			local speed = math.sqrt(velocity.X * velocity.X + velocity.Z * velocity.Z)
 			local now = os.clock()
-			if speed >= crunch.minSpeed and now - lastCrunchAt >= crunch.interval then
+			-- `crunch.biteSuppressSeconds`: the crunch reuses the BITE sample, and a
+			-- bite drops the column under you — the settle drift alone trips
+			-- `minSpeed`, so one click used to fire the bite plus two crunches.
+			local biting = now - lastBiteAt < crunch.biteSuppressSeconds
+			if not biting and speed >= crunch.minSpeed and now - lastCrunchAt >= crunch.interval then
 				lastCrunchAt = now
 				local surfaceH = footPos.Y - CakeConfig.grid.origin.y
 				local layer = LocalCakeField.LayerAtStuds(surfaceH)

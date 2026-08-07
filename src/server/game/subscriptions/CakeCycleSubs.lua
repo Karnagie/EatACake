@@ -266,15 +266,27 @@ function CakeCycleSubs.SpawnNewCake(fixedPlayerCount: number?)
 	-- with the plate when it jumps to the fresh top layer.
 	local grid = cakeCfg.grid
 	local topY = grid.origin.y + composition[#composition].top + 3
-	local extentX = footprint.hx * grid.cell + 4
-	local extentZ = footprint.hz * grid.cell + 4
+	-- "Inside the new cake" = the footprint's own rounded-rect SDF in WORLD studs,
+	-- grown by a body width so someone hugging the rim is lifted too. This is
+	-- GridUtil.InCake's test, but it deliberately does NOT go through the cell
+	-- grid: the grown shape reaches past the 96-stud field along the axes, and
+	-- an InBounds check would clip exactly the margin this is here to provide.
+	-- ⚠ It used to be an AABB (`hx*cell+4` by `hz*cell+4`). Against the ROUND
+	-- footprint (2026-08-03) a box over-reaches by sqrt(2) at the diagonals, so a
+	-- player standing on a TRAY CORNER — where the landmark candles are — was
+	-- inside the box, outside the cake, and got teleported to cake-top height
+	-- with nothing under them: a ~170-stud fall on every new cake. The wrong
+	-- region was 1597 studs² under the old loaf and would have been 3425 here.
+	local edgeX = (footprint.hx - footprint.corner) * grid.cell
+	local edgeZ = (footprint.hz - footprint.corner) * grid.cell
+	local liftR = footprint.corner * grid.cell + cakeCfg.composition.liftMarginStuds
 	for _, player in ipairs(cakePlayers) do
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if root then
-			local dx = math.abs(root.Position.X - grid.origin.x)
-			local dz = math.abs(root.Position.Z - grid.origin.z)
-			if dx <= extentX and dz <= extentZ and root.Position.Y < topY then
+			local qx = math.max(math.abs(root.Position.X - grid.origin.x) - edgeX, 0)
+			local qz = math.max(math.abs(root.Position.Z - grid.origin.z) - edgeZ, 0)
+			if qx * qx + qz * qz <= liftR * liftR and root.Position.Y < topY then
 				root.CFrame = CFrame.new(root.Position.X, topY, root.Position.Z)
 			elseif services_.MapService.IsOverCheckpoint(root.Position) then
 				local checkpoint = services_.MapService.GetCheckpointCFrame()

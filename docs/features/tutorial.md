@@ -10,6 +10,8 @@ First-session guidance in the GAME place. Two independent halves:
 Entry points: `TutorialSubs` (server, game) / `TutorialSubsClient` (client,
 common + place-gated), `AppRoot`, UIKit `TutorialSlides` / `TutorialHint` /
 `InputGlyph` / `HintArrow`. Tuning: `Shared.config.TutorialConfig`.
+Step 3's affordability gate reads `LocalUpgradeTree.CanAffordNext` +
+`LocalStatsService.GymEfficiency` (features/upgrades.md owns both).
 
 ## The five steps
 
@@ -17,7 +19,7 @@ common + place-gated), `AppRoot`, UIKit `TutorialSlides` / `TutorialHint` /
 |---|---|---|
 | `slides` | 4-panel comic board, 2x2, one SKIP button | SKIP pressed |
 | `eat` | instruction popup (mouse glyph on PC, EAT-button glyph on touch) | GOT IT pressed **or** the first bite lands |
-| `belly` | nothing on screen | `fill / capacity >= TutorialConfig.bellyThreshold01` (0.90) |
+| `belly` | nothing on screen | they can AFFORD their first upgrade — `calories + floor(stored × gymEff) >= cost(TutorialConfig.burnPromptStat)`. Safety net: `fill / capacity >= TutorialConfig.bellyThreshold01` (0.90) |
 | `path` | guidance BEAM player → checkpoint plate + the HUD TO CHECKPOINT button pulses | player stands on the plate |
 | `upgrades` | world-tracking arrow at the upgrade computer | the `UpgradeStation` prompt fires → `TutorialComplete` |
 
@@ -70,9 +72,30 @@ stalling.
   through — except the EAT button, which is *also* gated on its own `visible`
   prop, because `Interaction` releases a hold on `enabled` flipping, not on an
   ancestor's `Visible`.
-- **The 90% threshold is LATCHED.** The belly falls the moment a gym drain
-  starts (~8 Hz resyncs), so an un-latched test would blink the beam off at 89%
-  while the player is still walking.
+- **Step 3 fires on AFFORDABILITY, not on a full belly** (2026-08-05, user
+  request). "Your stomach is full" is a punishment cue that arrives exactly when
+  the game stops responding to the button it just taught; "you have earned a
+  bigger bite, go and collect it" is the same walk with a reward at the end, and
+  it puts the player at the station holding enough to buy something. With the
+  2026-08-05 belly curve it fires ~74% of the way through the very first belly
+  (≈7.4 s in), i.e. EARLIER than the old 90% gate.
+- **The calories it tests are UNBANKED.** A player who has never been to the gym
+  has `economy.calories == 0` (`RunResetSubs` wipes it on every profile load) and
+  everything they earned in `stomach.stored`. The gate therefore tests
+  `calories + floor(stored × gymEff)` — exactly what `GymService` will bank on the
+  trip it is sending them on. Testing the banked balance alone would never fire:
+  the only thing that banks calories is the gym trip the step exists to prompt.
+- **`bellyThreshold01` is now a SAFETY NET, not the trigger.** If the gate cannot
+  open — a re-priced `biteRadius`, a config typo, a stat already maxed — the
+  player would sit at a full belly that refuses to eat with no guidance at all.
+  ⚠ The margin is only ×1.36: a full base belly of frosting is worth ~612
+  calories against a 450 cost. `pacing_scenario.lua` section D asserts ≥ ×1.2 so a
+  re-price fails in the tool, not in a playtest.
+- **Both gates are LATCHED** (structurally: `evaluateBurnPrompt` returns unless
+  `step == "belly"`, and `setStep` only moves forward). Each un-latches itself the
+  moment it fires — the belly falls as the gym drain starts (~8 Hz resyncs) and
+  banking SPENDS `stored` — so an un-latched test would blink the beam off behind
+  a player who is already walking.
 - **`StomachUpdate` has two payload shapes on one remote.** Per-bite carries
   `layerId`; join/gym resyncs do not. That field is the first-bite discriminator.
 - **The prompt and the arrival zone DO NOT coincide.** The station's prompt is a

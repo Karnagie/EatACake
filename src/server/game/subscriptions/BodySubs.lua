@@ -90,9 +90,15 @@ function BodySubs.SendStomach(player: Player)
 	uStomach:FireClient(player, stomachState)
 	-- The belly filling up is the moment the game STOPS letting the player eat
 	-- and starts requiring the walk to the checkpoint — the single biggest
-	-- "what do I do now?" cliff in the first session. Read from the same
-	-- threshold the tutorial's guidance beam uses, so the funnel step and the
-	-- on-screen help can never disagree about when it happened.
+	-- "what do I do now?" cliff in the first session. `bellyThreshold01` is the
+	-- one definition of "the belly is effectively full", shared with the
+	-- tutorial's SAFETY NET so the funnel step and the on-screen help cannot
+	-- disagree about when that happened.
+	-- ⚠ Since 2026-08-05 it is no longer what TRIGGERS the tutorial's guidance:
+	-- step 3 fires on affordability of the first upgrade (TutorialConfig
+	-- .burnPromptStat), which normally lands well before this beat. A `belly-full`
+	-- with no `tutorial/belly` funnel step ahead of it is therefore expected for
+	-- returning players and NOT a dropped beat.
 	if AnalyticsSubs ~= nil and stomachState.capacity > 0 then
 		if stomachState.fill / stomachState.capacity >= TutorialConfig.bellyThreshold01 then
 			AnalyticsSubs.Flow(player, "belly-full")

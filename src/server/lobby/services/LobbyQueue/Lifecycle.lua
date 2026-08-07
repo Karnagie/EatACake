@@ -56,13 +56,15 @@ function Lifecycle.Configure(player: Player, sessionKey: any, difficulty: string
 	queue.difficulty = difficulty
 	queue["max-players"] = maxPlayers
 	queue.state = "countdown"
-	queue["countdown-ends-at"] = now + Core.Config().countdownSeconds
+	-- Solo starts get a short countdown, parties a long one (MatchConfig.queue).
+	local countdownSeconds = Core.CountdownSeconds(#queue.members)
+	queue["countdown-ends-at"] = now + countdownSeconds
 	queue["session-key"] = ""
 	queue["launch-members"] = {}
 	Core.Refresh(queue, now)
 	Log.Info(
 		"LobbyQueue",
-		`queue {queue.id} configured by {player.Name}: {difficulty}, {#queue.members}/{maxPlayers}, {Core.Config().countdownSeconds}s`
+		`queue {queue.id} configured by {player.Name}: {difficulty}, {#queue.members}/{maxPlayers}, {countdownSeconds}s`
 	)
 	return { ok = true, queueId = queue.id, closePlayer = player }
 end

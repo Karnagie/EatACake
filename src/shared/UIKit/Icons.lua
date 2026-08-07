@@ -22,10 +22,12 @@
 local Icons = {}
 
 -- UI glyphs (Roblox icons pack) — menu buttons, chips, status glyphs
+Icons.UiAim =        "rbxassetid://120259440013057"
 Icons.UiArrowLeft =  "rbxassetid://73524128042364"
 Icons.UiArrowRight = "rbxassetid://84537622065671"
 Icons.UiBolt =       "rbxassetid://77697722557816"
 Icons.UiBomb =       "rbxassetid://129794777234647"
+Icons.UiBoom =       "rbxassetid://130845077374461"
 Icons.UiBoost =      "rbxassetid://133399522288424"
 Icons.UiBox =        "rbxassetid://126911441369736"
 Icons.UiBulb =       "rbxassetid://125610557336087"
@@ -40,6 +42,7 @@ Icons.UiFriend =     "rbxassetid://91418962999771"
 Icons.UiGem =        "rbxassetid://79394485672993"
 Icons.UiGift =       "rbxassetid://76352890473075"
 Icons.UiGiftOpen =   "rbxassetid://75479330452904"
+Icons.UiHammer =     "rbxassetid://109680361857409"
 Icons.UiHeart =      "rbxassetid://124607685593319"
 Icons.UiInventory =  "rbxassetid://81335973094261"
 Icons.UiJetpack =    "rbxassetid://121935175995643"
@@ -47,12 +50,14 @@ Icons.UiLock =       "rbxassetid://123826571941514"
 Icons.UiMap =        "rbxassetid://74203109485878"
 Icons.UiMoreGift =   "rbxassetid://71428364780679"
 Icons.UiPaw =        "rbxassetid://94212668985853"
+Icons.UiPunch =      "rbxassetid://72479475799518"
 Icons.UiQuest =      "rbxassetid://115447050603864"
 Icons.UiRebirth =    "rbxassetid://80418189242112"
 Icons.UiRewardStar = "rbxassetid://95434256111031"
 Icons.UiRobux =      "rbxassetid://118207993108763"
 Icons.UiSearch =     "rbxassetid://92899149015792"
 Icons.UiSettings =   "rbxassetid://81051372859087"
+Icons.UiShoe =       "rbxassetid://112448418121354"
 Icons.UiShop =       "rbxassetid://73616261814412"
 Icons.UiShocked =    "rbxassetid://104112343212762"
 Icons.UiSpring =     "rbxassetid://111427218897351"
@@ -199,6 +204,16 @@ Icons.BadgeStats =     "rbxassetid://111711765776852"
 Icons.BadgeStorage =   "rbxassetid://78078863082780"
 Icons.BadgeTrophy =    "rbxassetid://85335418886874"
 Icons.TextInfinity =   "rbxassetid://104419767277337"
+
+-- Upgrade-tree glyphs that come from OUTSIDE the Roblox-icons pack. One per hex
+-- node (features/upgrades.md): the tree's audience may not read, so the glyph
+-- IS the node — see UpgradeTreeConfig.icons for the stat -> name mapping.
+-- `UiCake` is the vector-food-pack "-outline-256" cut (same cut as the Sq*
+-- squishies, so it sits in the kit's Outer/Rim/Face family); `UiDumbbell` is a
+-- standalone perk glyph — nothing in the packs above reads as "gym".
+Icons.UiCake =         "rbxassetid://96232110647703"
+Icons.UiDumbbell =     "rbxassetid://113435550918213"
+Icons.UiHand =         "rbxassetid://137811233003146" -- open cartoon glove: one TAP
 
 -- Onboarding comic (features/tutorial.md). FOUR PANELS OF ONE STORY, read
 -- TL -> TR -> BL -> BR: the character finds the poster, reads the challenge,

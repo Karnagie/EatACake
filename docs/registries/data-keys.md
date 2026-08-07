@@ -15,7 +15,7 @@
 | `pets` | `ProfileSchema/PetsSection.lua` | `features/pets.md` |
 | `progress` | `ProfileSchema/ProgressSection.lua` | `features/game-round.md` (`rebirths` legacy/always 0; `foundKinds` = buried-find discovery set, `features/treasures.md`; `activeBoosts`, `features/boosts.md`) |
 | `dailyRewards` | `ProfileSchema/DailyRewardsSection.lua` | `features/daily-rewards.md` |
-| `social` | `ProfileSchema/SocialSection.lua` | `features/group-reward.md` |
+| `social` | `ProfileSchema/SocialSection.lua` (v1; `referredBy` + `referralsRewarded` ADDED with defaults — no migration, P2) | `features/group-reward.md` + `features/referrals.md` |
 | `shop` | `ProfileSchema/ShopSection.lua` | `features/shop.md` |
 | `codes` | `ProfileSchema/CodesSection.lua` | `features/promo-codes.md` |
 | `tutorial` | `ProfileSchema/TutorialSection.lua` | `features/tutorial.md` — one-time `done` flag; deliberately NOT run-scoped (ADR-0013) |
@@ -32,6 +32,7 @@ as orphan top-level keys in old saves — `features/persistence.md`).
 | `gems` (`rawAmount` opt) | `RewardGrantSubs` (built-in) | `features/economy.md` |
 | `boost` (`boostId`) | `RewardGrantSubs` (built-in) | `features/boosts.md` |
 | `burn` | `BodySubs` | `features/body-gym.md` |
+| `eatlayer` | `CakeSubs` (GAME partition only) | `features/checkpoint.md` — clears the active cake layer + pays its calories |
 | `egg` (`eggType`) | `PetSubs` | `features/pets.md` |
 
 ## Setting ids (profile `core.settings` = the whitelist)
@@ -41,10 +42,12 @@ as orphan top-level keys in old saves — `features/persistence.md`).
 
 ## Shop keys / codes / boosts / eggs
 
-Products: `starterpack`, `boost-15m`, `boost-bite`, `boost-speed`,
+Products: `starterpack`, `layer-eater` (HIDDEN — no shop cell; sold by the
+checkpoint `LayerEaterPrompt`, `features/checkpoint.md`), `boost-15m`,
+`boost-bite`, `boost-speed`,
 `boost-capacity`, `gems-s/m/l/xl`; gamepasses: `x2calories`, `x2gems`,
 `autoeat`, `autogym`, `capacity2`, `vip` (`ShopData.lua`). Codes: `WELCOME`,
-`EATCAKE`, `SWEETTOOTH` (`CodesData.lua`). Boost DEF ids (≠ the product keys):
+`EATCAKE`, `SIXSEVEN` (`CodesData.lua`). Boost DEF ids (≠ the product keys):
 `boost-15m`, `bite-15m`, `speed-15m`, `capacity-15m` (`TreasureConfig.boosts`,
 `features/boosts.md`) — the deleted `golden-slice` boost def is NOT free to
 reuse as a boostId: the name still belongs to a FIND
@@ -90,8 +93,29 @@ Event names, currencies (`Calories`, `Gems`, `Robux`) and transaction types are
 
 `GymPrompt` (gym start, server `BodySubs`), `UpgradeStation` (open the upgrades
 hex-tree, client `UpgradesSubsClient`; ALSO the tutorial's completion trigger,
-`features/tutorial.md`) — both defined in `MapConfigData.checkpoint`
-(`promptName` / `upgradePromptName`).
+`features/tutorial.md`), `LayerEaterPrompt` (offer the 9 R$ `layer-eater`
+product, client `ShopSubsClient`, `features/checkpoint.md`) — all three defined
+in `MapConfigData.checkpoint` (`promptName` / `upgradePromptName` /
+`layerEaterPromptName`). ⚠ A prompt handled CLIENT-side is written down TWICE:
+once server-side in `MapConfigData` (which builds it) and once in the client data
+module that listens for it (`UpgradesUiData`, `ShopUiData`). Rename in both.
+
+## Authored world-instance contracts read by the CLIENT
+
+Named instances under `workspace.Map.Checkpoint` that a client subscription
+resolves by name. Place content (ADR-0007) — none of it is in the repo, so the
+NAME is the whole contract.
+
+| Path (under the Checkpoint clone) | Read by | Doc |
+|---|---|---|
+| `CheckpointPlate` | `BodySubsClient` (near/far), `TutorialSubsClient` (beam target) | `features/checkpoint.md` |
+| `GymMachine` + its ProximityPrompt | `BodySubsClient` (local prompt gate) | `features/body-gym.md` |
+| `UpgradeStationBody` | `TutorialSubsClient` (arrow target) | `features/tutorial.md` |
+| `UpgradeStationBody.AvailableGui.Txt` | `UpgradeStationSubsClient` ("N Available") | `features/upgrades.md` |
+
+⚠ `UpgradeStationBody` holds TWO BillboardGuis and BOTH their TextLabels are
+named `Txt` (the other is the static "Upgrades" nameplate). Resolve by explicit
+chain; a recursive `FindFirstChild("Txt", true)` relabels the wrong sign.
 
 ## Locale keys
 
@@ -110,7 +134,9 @@ ShopRow list; `shop-section-eggs` was DELETED with the eggs). Shop tabs
 `price-gems-short` ("{n}") — the glyph-less amounts the card price shelf uses,
 because the shelf draws the currency icon itself. `price-robux` ("R$ {n}") is
 now RESERVED: no call site, kept for a future glyph-less context (a chat
-message, a toast).
+message, a toast). Upgrade station sign (2026-08-05): `station-available`
+("{n} Available") — the world BillboardGui over the checkpoint computer,
+`features/upgrades.md`.
 Boost names (`TreasureConfig.boosts[*].nameKey`, one per def):
 `boost-15m`, `boost-bite`, `boost-speed`, `boost-capacity`
 (`features/boosts.md`; `label-boost` is the shorter daily-card alias for the
@@ -123,6 +149,15 @@ down — `features/cake-cycle.md`); `cake-finds` ("FINDS n/N", the per-cake goal
 the HUD bar carries while eating — `features/treasures.md`).
 Boss: `boss-prize-caption` (the caption on the boss PRIZE card — the squishy at
 stake during the fight; `features/cake-cycle.md`, `UIKit/BossPrizeCard`).
+Social offers (2026-08-05): `menu-invite`, `menu-group` (ONE short word each —
+the menu label zone is 22px tall and TextScaled binds on width); Invite Friends
+`title-invite`, `invite-headline`, `invite-body`, `invite-button`,
+`invite-count`, `invite-count-none`, `invite-sent`, `invite-unavailable`
+(`features/referrals.md`); community reward `title-group-reward`,
+`group-headline`, `group-body`, `group-button`, `group-wait` ("Like the game and
+wait {n} seconds." — `{n}` comes from the server's `waitSeconds`, never
+hardcoded), `group-not-in-group`, `group-granted`, `group-claimed`,
+`group-unconfigured` (`features/group-reward.md`).
 Onboarding (`features/tutorial.md`): `tutorial-title`, `tutorial-skip`,
 `tutorial-eat-title`, `tutorial-eat-body-pc` / `-touch` (one per input device,
 picked by `IS_TOUCH`), `tutorial-eat-ok`, `tutorial-arrow-upgrades`. The touch
@@ -158,7 +193,7 @@ Client movement-lock reasons: `teleport-handoff`, `upgrade-overlay`
 | `MapConfigData` | header of `services/MapService.lua` |
 | `PlayerRuntimeData` (runtime) | `features/body-gym.md` |
 | `DailyRewardsData` | `features/daily-rewards.md` |
-| `SocialData` | `features/group-reward.md` |
+| `SocialData` (lobby) | `features/group-reward.md` + `features/referrals.md` |
 | `ShopData` | `features/shop.md` |
 | `CodesData` | `features/promo-codes.md` |
 | `SettingsData` (client) | `features/settings.md` |

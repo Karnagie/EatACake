@@ -22,7 +22,8 @@ our server charges it), `devProductId` — **0 = not configured, purchase refuse
 `gamepasses[key]` (`gamePassId`, `priceRobux`, `label`, `desc`, `icon`, `accent`,
 `premium`, `order`), `receiptLedgerSize`, and `gemPurchaseWindowSeconds` /
 `gemPurchaseBurst` (the gem remote's rate limit).
-Ids are PER GAME. **All 11 are LIVE as of 2026-07-31** (universe 10593425705) —
+Ids are PER GAME. **11 of 12 are LIVE** (universe 10593425705, created 2026-07-31);
+`layer-eater` was added 2026-08-04 and its id is still 0 —
 the ids, and how to create/audit more with `tools/monetization/`, are in
 `docs/recipes/publish-readiness.md`. ⚠ A developer product is CREATE-ONCE: no
 delete endpoint and no update endpoint, so its name/description/price are
@@ -30,9 +31,11 @@ permanent. A gamepass can be re-PATCHed and retired (`isForSale=false`).
 
 ⚠ **`ShopData.IsGemProduct(def)` is the ONLY correct currency test** — it reads
 `currency`, nothing else. Testing "has no `devProductId`" instead makes any Robux
-product whose id is 0 read as a gem product, i.e. **free**. All 11 ids are live
-now, so the trap is no longer standing — but it re-arms the moment a new Robux
-product is added, or the template is copied into a game whose ids start at 0. The
+product whose id is 0 read as a gem product, i.e. **free**. ⚠ The trap is LIVE
+again: `layer-eater` is exactly a Robux product whose id is still 0. It does not
+mis-route (the predicate reads `currency`, which is absent = robux), and that is
+the whole point of the predicate — but do not restore the old "all ids are live,
+so this cannot happen" reading. The
 predicate is shared by the payload, the boot report and both purchase remotes so
 they cannot drift into disagreeing.
 Consequences the code already encodes: a gem product must never appear in the
@@ -40,6 +43,32 @@ Consequences the code already encodes: a gem product must never appear in the
 misconfiguration is a missing `priceGems`, reported on its own line), and
 `configured` means "nonzero dashboard id" for Robux and "nonzero price" for gems.
 The boosts' price and pacing rule live in `features/boosts.md`.
+
+## HIDDEN products (sold by the WORLD, not by a cell)
+`hidden = true` keeps a product out of `ShopUpdate` entirely, so it draws no shop
+cell — it is still a full catalogue entry (`RequestPurchase` and
+`ProcessReceipt` both resolve the key in `ShopData`). The buy surface is a
+ProximityPrompt instead: `ShopUiData["prompt-products"]` pairs a prompt NAME with
+a product key, and `ShopSubsClient` fires `RequestPurchase` on
+`PromptTriggered`. Ships with one — `layer-eater`, the checkpoint contraption
+that eats the layer you are standing on (`features/checkpoint.md`).
+⚠ Hiding it is not cosmetic: the shop window opens in the LOBBY, where
+`layer-eater`'s `eatlayer` grant kind has no handler, so a lobby cell would take
+Robux and appear to do nothing until the next match started.
+
+## Grant READINESS — "deliverable here" ≠ "deliverable now"
+`RewardGrantSubs.HasHandler` answers whether a kind exists in this place;
+`RewardGrantSubs.RegisterReady(kind, predicate)` answers whether it can land for
+THIS player right now, and `grantableList(def, player)` checks it BEFORE the
+first grant and before the gem path spends anything. A handler that answers by
+returning nil is too late — `grantProduct` has already committed the receipt, so
+the player pays and gets nothing (that hole is why `burn` against a player with
+no stomach state was silently unsafe). A "not ready" therefore becomes:
+- `RequestPurchase` → **prompt refused** (the Roblox dialog never appears, +
+  resync), so the player is never charged for something that has to wait;
+- `ProcessReceipt` → **NotProcessedYet**, and Roblox re-delivers until it lands;
+- `RequestGemPurchase` → refusal with **no spend**.
+Kinds with no predicate are always ready — nothing that existed had to change.
 
 ## Money-path guarantees
 - **ProcessReceipt is armed in BOTH places.** `ShopSubs` was lobby-only, so a
@@ -58,11 +87,19 @@ The boosts' price and pacing rule live in `features/boosts.md`.
   Robux, consumed the receipt and lost the reward with the released session. It
   now returns `NotProcessedYet`; the destination server grants it.
 - Receipt grant is ALL-OR-NOTHING: the whole grants list is validated
-  (`HasHandler` + per-kind `descriptorValid`) BEFORE the first grant — a
-  partial-failure retry can never re-mint earlier grants.
+  (`HasHandler` + per-kind `descriptorValid` + runtime `IsReady`) BEFORE the first
+  grant — a partial-failure retry can never re-mint earlier grants.
 - A product with no grants, or a descriptor that fails its per-kind rule
-  (`gems`/`calories` amount > 0, `boost` needs a `boostId`, unknown kind), is
-  refused + warns. Money is never taken for a no-op.
+  (`gems`/`calories` amount > 0, `boost` needs a real `TreasureConfig.boosts` id,
+  `burn` and `eatlayer` take no payload, unknown kind), is refused + warns. Money
+  is never taken for a no-op.
+- **A SINGLE-grant product whose only grant still declines does NOT consume the
+  receipt** — `grantProduct` returns false and Roblox re-delivers. It used to log
+  the decline and answer `PurchaseGranted` anyway, which was survivable only while
+  every grant was unconditional; `eatlayer` is the first whose success depends on
+  live world state. ⚠ MULTI-grant products keep the old behaviour on purpose:
+  their earlier grants have already applied and the ledger entry has not been
+  written, so a retry would re-mint them (ADR-0014).
 - **A grant kind registered only by the GAME partition** (`burn`) is deferred
   with `NotProcessedYet` in the lobby and granted when Roblox re-delivers it in
   a game server. Self-healing, but not instant — boot logs the kinds affected.
@@ -139,7 +176,8 @@ purchase (including every gem-path refusal, so a stale client corrects itself).
 `configured` = sellable: a nonzero dashboard id for Robux, a nonzero `priceGems`
 for a gem product.
 **The payload is an explicit field whitelist** (`ShopSubs.shopPayload`): a new
-field in `ShopData` never reaches the client until a line is added there.
+field in `ShopData` never reaches the client until a line is added there. A
+`hidden` product is skipped entirely and appears in NEITHER array.
 ⚠ Both gem fields are load-bearing on the client and omitting either is SILENT:
 `currency` routes the click to the right remote and picks the price glyph,
 `priceGems` is what the affordable/unaffordable state is computed against — a
@@ -353,7 +391,9 @@ compatibility (kit iron rule 8).
 
 ## Files
 Server (all COMMON): `ShopData`, `ShopSection`, `ShopService`, `ShopSubs`,
-`PassOwnershipSubs`. Client: `ShopSubsClient`, `LocalShopService`. Kit:
+`PassOwnershipSubs`, `RewardGrantSubs` (`RegisterReady`/`IsReady`).
+Client: `ShopSubsClient` (cells + world prompts), `ShopUiData`
+(prompt→product pairs), `LocalShopService`. Kit:
 `ShopPanel`, `ShopTab`, `ShopCard`, `ShopHeroCard`, `ShopSectionHeader`,
 `PriceButton`, `Ribbon`, `ShopBanner`. Remotes: `RequestPurchase`,
 `RequestGemPurchase`, `RequestGamepass`, `ShopUpdate`. Id creation + audit:

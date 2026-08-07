@@ -9,7 +9,7 @@ the only source; they pay gems only now — `features/treasures.md`).
 
 | def id | stat | mult | sold / granted as |
 |---|---|---|---|
-| `boost-15m` | calories | ×2 | shop `boost-15m`, daily day 5, Starter Pack |
+| `boost-15m` | calories | ×2 | shop `boost-15m`, daily day 5, Starter Pack, **the one-time community reward** (`features/group-reward.md`) |
 | `bite-15m` | biteRadius | ×1.4 | shop `boost-bite`, daily day 2, Starter Pack |
 | `speed-15m` | walkSpeed | ×2 | shop `boost-speed`, Starter Pack |
 | `capacity-15m` | capacity | ×2 | shop `boost-capacity` |

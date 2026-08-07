@@ -13,6 +13,16 @@ default }`. Ids are kebab-case and MUST equal the profile keys in
 defaults (the section IS the whitelist), so a mismatched id silently won't
 persist.
 
+## Where it opens from
+- **Lobby**: the meta menu's Settings button (the 5-button grid, `app-root.md`).
+- **Game**: its own bare icon button in the HUD's top-left column, directly under
+  the two stat pills (`AppRoot.GameSettingsBtn`, at `Theme.AppHud.MenuPosition` —
+  the slot the lobby menu occupies). Added 2026-08-04: everything else about this
+  feature was already COMMON and the panel was already rendered in both places,
+  so only the BUTTON was missing and a player in a match had no way to mute the
+  music. It is NOT part of the meta-menu frame — that frame is `Visible =
+  showLobby` because its other handlers are lobby subs.
+
 ## Flow
 Join: `SettingsSubs.SendSettings` → `SettingsUpdate { settings = map }` →
 client applies effects + feeds AppRoot. Toggle: optimistic local update

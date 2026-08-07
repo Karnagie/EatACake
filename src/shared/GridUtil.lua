@@ -65,9 +65,15 @@ function GridUtil.InBounds(size: number, x: number, z: number): boolean
 end
 
 --API
--- Whether the cell is inside the cake footprint — a rounded RECTANGLE
--- ("loaf cake", Drain-the-Lake scale): footprint = { hx, hz, corner }
--- in cells (half-length, half-width, corner radius).
+-- Whether the cell is inside the cake footprint. The test is the standard
+-- rounded-RECTANGLE SDF: footprint = { hx, hz, corner } in cells (half-length,
+-- half-width, corner radius).
+-- ⚠ THIS IS THE ONE PLACE EVERY CONSUMER READS THE THREE APART, so the invariant
+-- lives here too: when `hx == hz == corner` the straight edges collapse to zero
+-- length and this returns a pure DISC of radius `corner` — which is what ships
+-- (a ROUND cake since 2026-08-03, see CakeConfig.composition.footprint). The
+-- equal triple is load-bearing, not redundant; "tidying" it turns the cake back
+-- into a loaf. Values may be FLOATS — nothing here loops over or floors them.
 function GridUtil.InCake(size: number, footprint, x: number, z: number): boolean
 	local half = (size - 1) * 0.5
 	local qx = math.max(math.abs(x - half) - (footprint.hx - footprint.corner), 0)

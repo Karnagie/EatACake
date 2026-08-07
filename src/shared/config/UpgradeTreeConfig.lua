@@ -41,4 +41,43 @@ UpgradeTreeConfig.trees = {
 	gym = { stats = { "gymEff", "burnPerTap", "burnSpeed", "instantBurn" } },
 }
 
+-- ONE GLYPH PER NODE — `Theme.Icons` registry NAMES, never asset ids (kit iron
+-- rule 2; LocalUpgradeTree attaches the name, HexNode resolves it through
+-- `Theme.Icon`, which warns once on a miss and draws a visible fallback).
+--
+-- This is a HARD requirement of the audience, not decoration: a tier hex renders
+-- its name at ~34-43 px in a packed sub-tree, and a large part of this game's
+-- players do not read the label at all (squint-test skill). The glyph is what
+-- says which stat a hex is, so every stat and every category has one and they
+-- must stay mutually distinguishable BY SHAPE — not only by colour, since a
+-- whole sub-tree also shares one state colour at a time (all-gray when locked).
+--
+-- ⚠ `biteRadius` shipped as `UiAim` for exactly one screenshot and was changed:
+-- the crosshair is two crossed red bars, and at node size it reads as an X —
+-- i.e. as CANCEL, on the hex a player is being asked to buy. It is still in the
+-- registry; do not bring it back here. Judge a glyph at NODE size, not in the
+-- sprite folder.
+--
+-- The centre LOGO deliberately has NO icon: it touches the eating category, and
+-- a second cake there would read as a duplicate node rather than a title.
+UpgradeTreeConfig.icons = {
+	stats = {
+		biteRadius = "UiPunch", -- fist: a bigger, harder-hitting bite
+		biteDepth = "UiHammer", -- hammer: drives DOWN through the layer
+		eatSpeed = "UiBolt",
+		capacity = "BadgeStorage", -- the belly is a storage box
+		runSpeed = "UiShoe",
+		gymEff = "UiCharts", -- calories PER burn = a yield, not a flame
+		burnPerTap = "UiHand", -- one TAP of the gym button
+		burnSpeed = "UiFire", -- the passive drain
+		instantBurn = "UiBoom", -- the whole belly, at once
+	},
+	categories = {
+		eating = "UiCake",
+		body = "UiStrength",
+		gym = "UiDumbbell",
+	},
+	back = "UiArrowLeft",
+}
+
 return UpgradeTreeConfig

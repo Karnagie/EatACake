@@ -140,7 +140,7 @@ function CakeFieldService.ResetCake(composition, footprint, rareKind: string?, b
 
 	Log.Sum(
 		"CakeField",
-		`cake #{state.cakeIndex} built — {footprint.hx * 2}x{footprint.hz * 2} cells, h={topStuds} studs, edible={math.floor(state.edibleVolume)} studs³, rare={rareKind or "no"}, biome={biome}`
+		`cake #{state.cakeIndex} built — round ⌀{math.floor(footprint.corner * 2 * grid.cell)} studs, h={topStuds} studs, edible={math.floor(state.edibleVolume)} studs³, rare={rareKind or "no"}, biome={biome}`
 	)
 end
 
@@ -540,6 +540,133 @@ function CakeFieldService.ScanStats()
 	end
 
 	return { progress = state.progress, topBandIndex = topBandIndex, sweptBand = sweptBand }
+end
+
+--API
+-- Clears the WHOLE top band in one step: every in-cake cell standing above that
+-- band's bottom collapses to it. Geometrically identical to the auto-sweep's tail
+-- collapse, but for the entire band at any fill level — it is what the paid
+-- LayerEater does (features/checkpoint.md, features/shop.md). The band is read
+-- from the FIELD, not from `activeBandIndex` (see below).
+-- Returns `removed` (studs^3 actually taken away — a half-eaten band pays for
+-- what was LEFT, never for the whole layer), the band, and its layer def, so the
+-- caller can price it as FOOD exactly like a bite does (band.density x
+-- layer.calories — CakeSubs). Returns 0, nil, nil when there is nothing to take.
+--
+-- ⚠ It does NOT touch the layer gate. `ScanStats` (1 Hz) sees the flattened
+-- surface, drops `activeBandIndex` itself, and that ONE path is what moves the
+-- checkpoint plate down, fires the "layer cleared" announce and the retention
+-- beat (CakeSimulationSubs). Advancing the gate here would make the band index
+-- already match by the time the scan runs, and the cleared layer would be
+-- celebrated for a natural clear but silent for a bought one.
+-- Which band is on top RIGHT NOW, read from the FIELD — not `activeBandIndex`,
+-- which only refreshes at 1 Hz. Two receipts landing inside the same tick would
+-- otherwise both target the same band, and the second buyer would pay for one
+-- that is already flat (removed = 0, PurchaseGranted, nothing delivered). Same
+-- rule ScanStats uses, so outside that race the two always agree — including
+-- right after an auto-sweep, where the swept band is at its own bottom and both
+-- resolve to the band below.
+-- Returns the band INDEX and the volume (studs^3) standing above its bottom.
+local function topBandFromField(): (number, number)
+	local field = state.field :: buffer
+	local grid = cakeCfg.grid
+	local size = grid.size
+	local footprint = state.footprint
+	local maxH = 0
+	for z = 0, size - 1 do
+		for x = 0, size - 1 do
+			if GridUtil.InCake(size, footprint, x, z) then
+				local h = GridUtil.ReadHeight(field, GridUtil.Index(size, x, z))
+				if h > maxH then
+					maxH = h
+				end
+			end
+		end
+	end
+	local maxHStuds = GridUtil.UnitsToStuds(maxH)
+	local index = 1
+	for idx = #state.composition, 1, -1 do
+		if maxHStuds > state.composition[idx].bottom + 0.05 then
+			index = idx
+			break
+		end
+	end
+	local band = state.composition[index]
+	if band == nil then
+		return index, 0
+	end
+	local floorUnits = math.max(state.floorUnits, GridUtil.StudsToUnits(band.bottom))
+	local aboveUnits = 0
+	for z = 0, size - 1 do
+		for x = 0, size - 1 do
+			if GridUtil.InCake(size, footprint, x, z) then
+				local h = GridUtil.ReadHeight(field, GridUtil.Index(size, x, z))
+				if h > floorUnits then
+					aboveUnits += h - floorUnits
+				end
+			end
+		end
+	end
+	return index, GridUtil.UnitsToStuds(aboveUnits) * grid.cell * grid.cell
+end
+
+--API
+-- How much of the CURRENT top band is still standing, as a fraction of what that
+-- band held when the cake was built, plus its index. The paid LayerEater refuses
+-- below a threshold: the prompt lives where a player arrives with a full belly,
+-- i.e. usually DEEP into a band, and a fixed-price product that removes the last
+-- 10% of a layer is a bad deal the player cannot see before paying — and a dev
+-- product's price is permanent, so it cannot be corrected later.
+-- Returns 0 for the inedible core band (index 1) so callers refuse there too.
+function CakeFieldService.TopBandFill(): (number, number)
+	local index, above = topBandFromField()
+	local initial = bandInitialVolume[index]
+	if index <= 1 or initial == nil or initial <= 0 then
+		return 0, index
+	end
+	return math.clamp(above / initial, 0, 1), index
+end
+
+--API
+-- Collapses every in-cake cell above the TOP band's bottom onto it — the
+-- auto-sweep tail collapse, applied to a whole band. Returns the volume actually
+-- removed plus the band it hit. The band is read from the FIELD, not from the
+-- 1 Hz `activeBandIndex`, so two purchases inside one tick cannot both target it
+-- (features/checkpoint.md).
+function CakeFieldService.ClearActiveBand(): (number, any?, any?)
+	local field = state.field :: buffer
+	local grid = cakeCfg.grid
+	local size = grid.size
+	local footprint = state.footprint
+
+	local index = topBandFromField()
+	local band = state.composition[index]
+	-- Band 1 is the inedible core (its TOP is `state.floorUnits`), so there is
+	-- never anything above it to clear.
+	if band == nil or index <= 1 then
+		return 0, nil, nil
+	end
+	local floorUnits = math.max(state.floorUnits, GridUtil.StudsToUnits(band.bottom))
+	local removedUnits = 0
+	for z = 0, size - 1 do
+		for x = 0, size - 1 do
+			if GridUtil.InCake(size, footprint, x, z) then
+				local i = GridUtil.Index(size, x, z)
+				local h = GridUtil.ReadHeight(field, i)
+				if h > floorUnits then
+					removedUnits += h - floorUnits
+					GridUtil.WriteHeight(field, i, floorUnits)
+					markNetDirty(i)
+				end
+			end
+		end
+	end
+	local removed = GridUtil.UnitsToStuds(removedUnits) * grid.cell * grid.cell
+	Log.Sum(
+		"CakeField",
+		`layer eaten: band '{band.id}' (#{index}) cleared in one step — {math.floor(removed)} studs³ removed`
+	)
+	return removed, band, cakeCfg.layers[band.id]
 end
 
 --API

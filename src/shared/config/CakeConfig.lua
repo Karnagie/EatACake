@@ -202,11 +202,13 @@ CakeConfig.render = {
 		tilt = 18, -- degrees each pressed piece tips (one edge up — "наклоняются")
 	},
 	-- Outer WALL that hides the whole cake BELOW the single rendered top layer
-	-- (CakeRenderer window, Task 2 / Req 1). A plain textured Part (Block, NOT a
-	-- mesh — cheaper + the Texture path reliably tiles the image), sized to the
-	-- loaf, standing from the base up to the current top layer's bottom and
-	-- shrinking as each layer clears. Wears a RANDOM cake photo (one per cake, by
-	-- cakeIndex) on its 4 sides + top cap. Built + driven by CakeWrapper (client).
+	-- (CakeRenderer window, Task 2 / Req 1). A plain textured Part carrying a
+	-- `CylinderMesh` (NOT an EditableMesh, and NOT a native cylinder Part — see
+	-- the CakeWrapper header: a native cylinder must be ROTATED upright, which
+	-- rotates the texture UVs with it and lays the cake photo on its side).
+	-- Round-cake sized, standing from the base up to the current top layer's
+	-- bottom and shrinking as each layer clears. Wears a RANDOM cake photo (one
+	-- per cake, by cakeIndex) on its curved side + top cap. Driven by CakeWrapper.
 	wrapper = {
 		-- ⚠ These MUST be IMAGE ids, not DECAL ids. A decal id renders BLANK on a
 		-- `Texture` (resolve one via `InsertService:LoadAsset(decalId)` → the
@@ -226,11 +228,31 @@ CakeConfig.render = {
 		textures = {
 			"rbxassetid://111184124905083", -- Toolbox "Cakie", layered sponge/cream
 		},
+		-- ⭑ THIS IS THE KNOB for how big the cake photo reads on the outer wall.
+		-- Bigger = fewer, larger tiles (thicker sponge/cream bands); smaller = more,
+		-- finer ones. A true SQUARE tile in studs, both directions.
+		-- ⚠ It only works because the wall is a RING OF FLAT BLOCK SEGMENTS. A part
+		-- carrying a mesh (CylinderMesh/SpecialMesh) maps its Textures through the
+		-- MESH's UVs and IGNORES StudsPerTile entirely — 55/20/5 rendered
+		-- pixel-identical when the wall was briefly one CylinderMesh. If this knob
+		-- ever stops doing anything, that is the first thing to check.
+		-- (The per-LAYER top-surface textures are a different knob:
+		-- `render.layerTextureTiles` + each `layers.<id>.texture`.)
 		-- Studs per texture tile. Sized so the cake photo reads a FEW times up the
 		-- wall, not a dozen: at the old 26 on a 330-stud wall it tiled ~12x and
-		-- turned the silhouette into stripes. ~55 on the 170-stud cake is ~3 up
-		-- and ~1.7 across — a cake side.
+		-- turned the silhouette into stripes. ~55 on the 170-stud cake is ~3 up.
+		-- Across: on the round wall each of the 4 faces spans a 74.5-stud quadrant
+		-- of the 293-stud circumference (was a flat 90-stud side), so it reads ~1.35
+		-- per quadrant / ~5.3 around — the layer BANDS are what must line up, and
+		-- they run horizontally, so the circumferential figure is the loose one.
 		tileStuds = 55,
+		-- Flat Block segments the round wall is built from. More = rounder
+		-- silhouette + softer facet shading, at one Part each (anchored, no
+		-- collision, no query — cheap). 32 puts the facet sag at ~0.23 studs on the
+		-- 47.4-stud radius, which reads as a smooth curve at play distance.
+		segments = 32,
+		segmentThickness = 0.4, -- studs; only ever seen edge-on at the top rim
+		capThickness = 0.5, -- the flat top disc (shown through a crater, not a void)
 		gloss = 0.05, -- Part.Reflectance
 		color = Color3.fromRGB(232, 205, 165), -- warm cake tint under the texture (shows if it's missing)
 	},
@@ -273,7 +295,26 @@ CakeConfig.render = {
 	-- 60+ ms while eating (settling only when the surface stabilized). The player
 	-- only collides with nearby columns, so distant ones keep their last size
 	-- until the player approaches (the radius scan corrects them then).
-	collision = { riseRate = 6, slabSnapStuds = 8, updateRadiusStuds = 18 },
+	collision = {
+		riseRate = 6,
+		slabSnapStuds = 8,
+		updateRadiusStuds = 18,
+		-- JOIN-RACE RESCUE (2026-08-03). `CakeSpawn` drops the character onto the
+		-- crust the instant they join, but the cake only becomes COLLIDABLE when
+		-- THIS client finishes its first `columnsRebuild`. On a slow load you fall
+		-- clean through and the columns rise around you: measured HRP at Y=141 with
+		-- the surface at 175 — 34 studs inside, permanently stuck. (A mid-session
+		-- respawn is fine, which is what proves it a load race and not the spawn
+		-- geometry.) After each rebuild the client lifts a LOCAL character found
+		-- more than `buriedRescueStuds` under the surface to `buriedRescueLift`
+		-- above it.
+		-- ⚠ Keep `buriedRescueStuds` WELL above the depth you legitimately sink to
+		-- when refilling cake buries you (riseRate above): that is deliberate feel
+		-- ("jump to get back out") and must not be undone. The rescue only fires at
+		-- a snapshot boundary, never per-frame, so the two cannot collide.
+		buriedRescueStuds = 6,
+		buriedRescueLift = 3,
+	},
 	-- Rare-cake tints (renderer): saturated butter-gold, not washed beige.
 	goldenTint = { color = Color3.fromRGB(255, 200, 45), alpha = 0.5 },
 	rainbowTintAlpha = 0.6,
@@ -515,8 +556,16 @@ CakeConfig.feel = {
 --   density — how RICH/FILLING that band is per stud³ (calories AND belly fill).
 --             Computed so the food value of one bite stays ~constant as the
 --             scoop shrinks and the layers change thickness, which is what keeps
---             the belly→gym rhythm (~90 s) and the calorie income steady from
---             the first layer to the last, on every difficulty and party size.
+--             the calorie income steady from the first layer to the last, on
+--             every difficulty and party size — and what makes `capacity` the
+--             SOLE owner of the belly→gym rhythm.
+--             ⚠ That rhythm is NOT a constant any more (ADR-0019, 2026-08-05).
+--             It is a curve — ~10 s per belly at capacity tier 0 stretching to
+--             ~180 s at tier 5 — because how often the belly interrupts eating
+--             is the progression the player feels. Changing `density`,
+--             `scoop` or the layer count moves food-per-second and therefore
+--             moves that whole curve: re-measure with
+--             `tools/balance-model/pacing.py --intervals`.
 --
 -- Thickness rides the same curve (deeper == chunkier, `thicknessExponent`),
 -- normalised so EVERY cake is exactly `maxTotalHeight` tall. A harder or more
@@ -528,11 +577,42 @@ CakeConfig.feel = {
 CakeConfig.composition = {
 	middlePool = { "sponge", "chocolate", "jelly", "cotton", "caramel", "crumb", "filling" },
 	coreThickness = 3, -- exposed cavity floor, not edible
-	-- Footprint: a rounded-rectangle LOAF (Drain-the-Lake scale). A LANDMARK,
-	-- not a per-player snack — the XZ size is FIXED for any population (the 64-
-	-- cell grid caps hx/hz at ~31; growing the grid would blow the render
-	-- vertex budget). 30x26 cells at 1.5 studs = 90x78 studs of cake.
-	footprint = { hx = 30, hz = 26, corner = 10 },
+	-- Footprint: a ROUND cake (2026-08-03; was a 30x26x10 rounded-rect loaf).
+	-- A LANDMARK, not a per-player snack — the XZ size is FIXED for any
+	-- population (the grid caps the radius just UNDER 31.5 cells — `InCake` uses
+	-- `half = (size-1)*0.5 = 31.5` with a `<=`, so at exactly 31.5 the outermost
+	-- columns x=0/x=63 become in-cake, `CakeRenderer` can no longer place a ring
+	-- cell outside them, and the skirt seal opens up at the field boundary with no
+	-- warning. 31.1 leaves 0.4 cells of margin. Growing the grid instead would
+	-- blow the render vertex budget).
+	--
+	-- ⚠ `hx == hz == corner` is not a redundant triple — it is HOW a circle is
+	-- expressed here. `GridUtil.InCake` is the standard rounded-rect SDF
+	-- (`|q| - (h - corner)` clamped at 0, then `|q| <= corner`); setting the
+	-- corner radius equal to BOTH half-extents collapses the straight edges to
+	-- zero length and leaves a pure disc of radius `corner`. Every consumer
+	-- inherits the circle for free — `CakeRenderer`'s outline projection
+	-- degenerates to `dir * (R+0.5)*cell`, `CakeWaxShell`'s four corner arcs
+	-- share one centre and concatenate into one circle, and `TreasureService`'s
+	-- inset (`hx/hz/corner - margin`) stays a disc. Keep all THREE equal or the
+	-- cake silently becomes a stadium/rect again.
+	--
+	-- AREA IS PRESERVED so the pacing curve (ADR-0011) is untouched: the balance
+	-- quantity is the CELL COUNT (edible volume = cells × cell² × height, and
+	-- height is always `maxTotalHeight`), not the continuous area. The loaf
+	-- covered 3036 cells; R = 31.1 covers 3032 (-0.13%, the closest a 64-cell
+	-- lattice can land — the count steps in jumps of 4-8 cells here). Measured
+	-- end-to-end by `tools/headless-sim/pacing_scenario.lua`: session time and
+	-- food both move < 0.5%. R = 31.1 cells × 1.5 = 46.65 stud radius, a 93.3-
+	-- stud disc (was 90x78) — still inside the 96-stud field, with the render
+	-- outline at (R+0.5)*cell = 47.4 of the 48-stud half-extent.
+	footprint = { hx = 31.1, hz = 31.1, corner = 31.1 },
+	-- How far PAST the footprint a player still counts as "in the new cake" when
+	-- one materializes under them (CakeCycleSubs lifts them onto the fresh top).
+	-- A body width, so someone hugging the rim comes up too. ⚠ Measured from the
+	-- cell-CENTRE extreme (corner*cell = 46.65), while the rendered rim is at
+	-- (corner+0.5)*cell = 47.4 — so the real grow past visible cake is ~3.25.
+	liftMarginStuds = 4,
 
 	-- Layer count + silhouette
 	baseLayers = 28, -- edible layers of a solo EASY cake (incl. the frosting)

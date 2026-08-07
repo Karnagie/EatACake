@@ -87,9 +87,21 @@ function CakeWaxShell.Setup(localCakeField)
 end
 
 -- world XZ -> grid cell index (clamped into the field).
-local function cellAt(x: number, z: number): number
+-- ⚠ Pass `fallback` for any sample that can land on the RIM. Cells outside the
+-- footprint hold height 0 (CakeFieldService.ResetCake), so a boundary vertex that
+-- samples one gets written at the cake BASE while the rest of its piece rides the
+-- surface — two fan triangles stretched ~170 studs down the side, a wax streamer.
+-- The wax outline is inset from the footprint, but it is an ANALYTIC curve while
+-- InCake is a cell staircase, so short stretches of it do overhang an out-of-cake
+-- cell. On the loaf only the 4 corner arcs could do this (the two long straight
+-- edges were exactly cell-aligned); the ROUND cake makes the entire rim an arc,
+-- which is what turned a latent case into a reachable one.
+local function cellAt(x: number, z: number, fallback: number?): number
 	local gx = math.clamp(math.floor(x / CELL + HALF), 0, SIZE - 1)
 	local gz = math.clamp(math.floor(z / CELL + HALF), 0, SIZE - 1)
+	if fallback ~= nil and not GridUtil.InCake(SIZE, FOOTPRINT, gx, gz) then
+		return fallback
+	end
 	return GridUtil.Index(SIZE, gx, gz)
 end
 
@@ -167,11 +179,28 @@ local function ensureBuilt()
 	local cornerR = (FOOTPRINT.corner + 0.5) * CELL - waxCfg.edgeInset
 	local outline: { Vector2 } = {}
 	local corners = { { rectX, rectZ, 0 }, { -rectX, rectZ, math.pi / 2 }, { -rectX, -rectZ, math.pi }, { rectX, -rectZ, math.pi * 1.5 } }
+	-- ⚠ On the ROUND cake `rectX == rectZ == 0`, so all four "corner" centres
+	-- collapse to the origin and the four quarter-arcs concatenate into ONE circle
+	-- — which is what makes a disc work here at all. Two consequences:
+	--   · each seam angle (90/180/270/360°) is emitted TWICE. A duplicate makes a
+	--     zero-length edge → zero normal → a clip plane that silently does nothing.
+	--     It happened to be harmless; dedupe so every plane is a real one.
+	--   · the outline is a polygon inscribed in the circle, so the effective
+	--     `edgeInset` is larger at the chord midpoints than at the vertices. 8 steps
+	--     per quarter (11.25°) keeps that sag under ~0.22 studs.
+	local ARC_STEPS = 8
 	for _, cn in ipairs(corners) do
-		for k = 0, 6 do
-			local a = cn[3] + k / 6 * (math.pi / 2)
-			outline[#outline + 1] = Vector2.new(cn[1] + math.cos(a) * cornerR, cn[2] + math.sin(a) * cornerR)
+		for k = 0, ARC_STEPS do
+			local a = cn[3] + k / ARC_STEPS * (math.pi / 2)
+			local p = Vector2.new(cn[1] + math.cos(a) * cornerR, cn[2] + math.sin(a) * cornerR)
+			local prev = outline[#outline]
+			if prev == nil or (p - prev).Magnitude > 1e-4 then
+				outline[#outline + 1] = p
+			end
 		end
+	end
+	if #outline > 1 and (outline[#outline] - outline[1]).Magnitude <= 1e-4 then
+		outline[#outline] = nil -- closing point duplicates the first
 	end
 	local nOut = #outline
 
@@ -214,12 +243,16 @@ local function ensureBuilt()
 				cz /= #poly
 				-- Boundary verts on the EXACT Voronoi edge → neighbours meet with
 				-- no gap; a raised CENTRE vert domes each piece (visible seams).
+				-- The piece's own centre cell is always in-cake (seeds are rejected
+				-- otherwise), so it is the safe fallback for rim samples — a vertex
+				-- that overhangs the staircase rides its piece instead of the base.
+				local ciCentre = cellAt(cx, cz)
 				local vids, rx, rz, vc = {}, {}, {}, {}
 				for _, v in ipairs(poly) do
 					vids[#vids + 1] = m:AddVertex(Vector3.new(v.X, birthY, v.Y))
 					rx[#rx + 1] = v.X
 					rz[#rz + 1] = v.Y
-					vc[#vc + 1] = cellAt(v.X, v.Y)
+					vc[#vc + 1] = cellAt(v.X, v.Y, ciCentre)
 				end
 				local cvid = m:AddVertex(Vector3.new(cx, birthY, cz))
 				local nB = #vids
@@ -233,10 +266,13 @@ local function ensureBuilt()
 				local tc = {}
 				for k = 1, nB do
 					local nx, nz = rx[k % nB + 1], rz[k % nB + 1]
-					tc[k] = cellAt((cx + rx[k] + nx) / 3, (cz + rz[k] + nz) / 3)
+					-- Same fallback: an out-of-cake triangle centre reads height 0, which
+					-- is always < hideBelow, so the piece would hide FOREVER — a fixed
+					-- bald patch in the coating rather than a spike.
+					tc[k] = cellAt((cx + rx[k] + nx) / 3, (cz + rz[k] + nz) / 3, ciCentre)
 				end
 				local ta = rng:NextNumber(0, math.pi * 2)
-				cells[#cells + 1] = { vids = vids, restX = rx, restZ = rz, vc = vc, tc = tc, cvid = cvid, cx = cx, cz = cz, ci = cellAt(cx, cz), tdx = math.cos(ta), tdz = math.sin(ta), dent = 0, wH = -1, wDent = -1, wHidden = false }
+				cells[#cells + 1] = { vids = vids, restX = rx, restZ = rz, vc = vc, tc = tc, cvid = cvid, cx = cx, cz = cz, ci = ciCentre, tdx = math.cos(ta), tdz = math.sin(ta), dent = 0, wH = -1, wDent = -1, wHidden = false }
 			end
 		end
 	end)

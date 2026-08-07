@@ -208,6 +208,20 @@ function SoundPool.Init()
 		-- lazily on the first avalanche (Step).
 		slumpVoice = voice
 	end
+
+	-- R8: a cue that never fires must be explainable from the console. An
+	-- `enabled = false` key is deliberate, but silence is indistinguishable from a
+	-- broken sample unless we say so once at boot.
+	local off = {}
+	for key, def in pairs(AudioConfig.sounds) do
+		if def.enabled == false then
+			table.insert(off, key)
+		end
+	end
+	if #off > 0 then
+		table.sort(off)
+		Log.Sum(SCOPE, `{#off} sound(s) DISABLED in AudioConfig (intentional, not missing): {table.concat(off, ", ")}`)
+	end
 end
 
 --API
@@ -238,6 +252,9 @@ function SoundPool.Play(key: string, opts: { pitchMult: number?, volumeMult: num
 	if def == nil then
 		Log.Once(SCOPE, `no-key-{key}`, `unknown sound key '{key}' — add it to AudioConfig.sounds`)
 		return
+	end
+	if def.enabled == false then
+		return -- switched off in AudioConfig on purpose; Init already reported it (R8)
 	end
 	local now = os.clock()
 	if def.throttle then

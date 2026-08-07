@@ -95,9 +95,14 @@ AudioConfig.sounds = {
 
 	slumpLoop = { asset = "slump_loop" },
 	crustCrack = { asset = "crust_crunch", cut = 0.55 },
-	-- Layered UNDER the per-bite crumbles: throttled so it keeps a slow mouth
-	-- rhythm at any eat-rate instead of turning into mush at 10 bites/s.
-	chew = { asset = "bite_chew", volume = 0.7, cut = 0.5, throttle = 0.55 },
+	-- Was layered UNDER the per-bite crumbles (throttled to keep a slow mouth
+	-- rhythm at any eat-rate). ⚠ OFF since 2026-08-03 by user request: one tap
+	-- must be ONE sound. Even throttled it doubled up every click — measured, a
+	-- single click fired the layer bite + this + a walk crunch. `enabled = false`
+	-- is honoured by `SoundPool.Play` for ANY key here, and the disabled set is
+	-- reported once at boot so silence never reads as a broken sample (R8).
+	-- Flip to true to bring the chew layer back.
+	chew = { asset = "bite_chew", volume = 0.7, cut = 0.5, throttle = 0.55, enabled = false },
 	gulp = { asset = "gulp", cut = 0.6 },
 	bossAppear = { asset = "muehehe" },
 	bossHit = { asset = "softhit", cut = 0.3 },

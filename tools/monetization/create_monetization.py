@@ -122,6 +122,12 @@ THROTTLE_SECONDS = 0.7
 # ORDER MATTERS: the first entry is the one --apply proves the pricing hypothesis on
 # (see PRICING). It must be a cheap, low-stakes product — not the Starter Pack.
 PRODUCT_COPY = {
+    # CHEAPEST FIRST — --apply creates this one first and aborts the run if its
+    # live price does not read back equal (there is no dev-product repair path).
+    "layer-eater": (
+        "Layer Eater",
+        "Instantly eat the whole cake layer you are on, and keep the calories.",
+    ),
     "gems-s":      ("100 Gems",     "100 Gems, added to your balance instantly."),
     "gems-m":      ("450 Gems",     "450 Gems, added to your balance instantly."),
     "gems-l":      ("1,050 Gems",   "1,050 Gems, added to your balance instantly."),

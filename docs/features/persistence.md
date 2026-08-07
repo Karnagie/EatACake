@@ -61,6 +61,7 @@ Sections removed from the schema are preserved in stored data untouched.
   succeeds only when that exact nonce and a nil persisted session appear
   together. Routine leave omits it.
 - `PersistenceService.IsLoaded(userId)`.
+- `PersistenceService.SendMessage(userId, message)` / `.RegisterMessageHandler(name, handler)` — see **Messages** below.
 - `PersistenceService.IsReleased(userId)` / yielding `VerifyReleased(userId)` /
   `ClearReleaseState(userId)` — intentional-handoff proof and cleanup; callers
   must not treat ordinary unload as a verified release.
@@ -124,6 +125,40 @@ kick `messages`.
 ## Rules
 P1–P5 in `CLAUDE.md`. Recipe: `docs/recipes/add-profile-section.md`.
 Decision record: ADR-0001.
+
+## Messages — writing to a profile this server does not own
+
+The only way to pay a player who is on another server, or offline, without
+touching `DataStoreService` (P5). Wraps ProfileStore's `MessageAsync` /
+`Profile:MessageHandler`; the referral reward is its one caller today
+(`features/referrals.md`).
+
+- `SendMessage(userId, message) -> boolean` — YIELDS. Queues a JSON table onto
+  that profile. Delivered to their active session (immediately if that is this
+  server) or on their next load. Can only APPEND — it never mutates their data;
+  everything the message does happens inside the receiving session.
+  ⚠ **A message is only consumed in a place that REGISTERED a handler for it.**
+  Handlers are registered per subscription, and a lobby-partition subscription
+  does not exist in the game place — so a message arriving while its recipient is
+  in a match waits, intact, until they are next in the lobby.
+  Returns false only when the server is closing / the store is unavailable
+  (ProfileStore retries DataStore errors itself).
+- `RegisterMessageHandler(name, handler)` — call from a subscription's `Start`.
+  `LoadProfile` attaches every registered handler to a session as it opens it,
+  **after** publishing it into `PlayerProfileData` (a handler that pays the
+  player needs `.Get(userId)` to work), so a handler registered later never sees
+  that session. `handler(player, message, processed)`.
+- **`processed()` is the consume.** Call it only once the message has actually
+  been applied; unprocessed messages are re-delivered on the next load. A
+  throwing handler is logged and left unprocessed on purpose.
+- ⚠ `processed()` only takes effect once a save commits, so `processed()` then
+  `Save()` is the correct order. A crash in that window re-delivers and
+  over-pays by one — the safe direction, since saving first would lose the
+  reward outright.
+- ⚠ A message is offered to registered handlers until one processes it, so every
+  handler must check the message's own `type` field and return WITHOUT processing
+  when it is not theirs — otherwise one feature silently consumes another's.
+  A malformed (non-table) message is consumed by the wrapper and warned about.
 
 ## SaveAndWait — the money-path save
 

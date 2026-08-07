@@ -18,7 +18,9 @@
 
 	CHECKPOINT is dynamic (features/checkpoint.md): SetCheckpointHeight positions
 	the NAMED parts (CheckpointPlate, CheckpointLeg×4, GymMachine[+GymPrompt],
-	UpgradeStationBody[+UpgradeStation prompt], UpgradeStationScreen) to track the
+	UpgradeStationBody[+UpgradeStation prompt], UpgradeStationScreen, LayerEater
+	[+LayerEaterPrompt — the ONE part whose authored POSE is preserved rather than
+	recomputed; it rides the plate by its captured offset]) to track the
 	current top cake layer. KEEP the names; each may be a single BasePart OR a
 	MODEL (code positions via PivotTo + sizes via GetExtentsSize, so a resized /
 	multi-part authored model still aligns). POSITION is code-driven for all of
@@ -64,6 +66,15 @@ local checkpointLegs: { BasePart } = {}
 local checkpointMachine: PVInstance?
 local checkpointStationBody: PVInstance? -- upgrade "computer" body (rides the plate)
 local checkpointStationScreen: PVInstance? -- its glowing screen
+-- LayerEater (paid one-shot layer clear). Unlike everything above it is NOT
+-- placed at a computed corner: it keeps the pose it was AUTHORED with and only
+-- rides the plate. `layerEaterOffset` is its authored pivot MINUS the authored
+-- plate pivot, captured once at resolve time; `layerEaterPivot` is that authored
+-- pivot (rotation included — a `PivotTo(CFrame.new(...))` would discard the yaw
+-- the prop was posed with).
+local checkpointLayerEater: PVInstance?
+local layerEaterOffset: Vector3?
+local layerEaterPivot: CFrame?
 local checkpointCenter: Vector3? -- XZ center of the plate (Y unused), from config
 local checkpointTopY: number? -- current world Y of the plate's top surface
 local cakeSpawnPart: BasePart? -- CakeSpawn pad; Y rides the cake top (SetCheckpointHeight)
@@ -333,7 +344,11 @@ local function buildEnvironment(folder: Instance)
 	conveyor.TopSurface = Enum.SurfaceType.Studs
 	conveyor:SetAttribute("BiomeRole", "conveyor")
 
-	makePart({
+	-- ROUND plate under the round cake. `CylinderMesh` (not a native cylinder
+	-- Part) for the same reason CakeWrapper uses one: no rotation, so the part
+	-- stays axis-aligned and its faces/UVs behave normally. Fallback only —
+	-- an authored Environment brings its own plate (ADR-0007).
+	local plate = makePart({
 		Name = "CakePlate",
 		Size = Vector3.new(mapCfg.platform.length, mapCfg.platform.height, mapCfg.platform.width),
 		CFrame = CFrame.new(origin.x, origin.y - mapCfg.platform.height / 2, origin.z),
@@ -341,7 +356,9 @@ local function buildEnvironment(folder: Instance)
 		Material = Enum.Material.SmoothPlastic,
 		Reflectance = 0.05,
 		Parent = folder,
-	}):SetAttribute("BiomeRole", "platform")
+	})
+	Instance.new("CylinderMesh").Parent = plate
+	plate:SetAttribute("BiomeRole", "platform")
 
 	-- ── Walls: 3 chocolate + 1 pink accent, studded, with X-braces ──────
 	local walls = {
@@ -462,7 +479,10 @@ end
 local function buildCheckpoint(folder: Instance)
 	local origin = gridCfg.origin
 	local cp = mapCfg.checkpoint
-	local loafEdgeX = footprintCfg.hx * gridCfg.cell -- +X straight edge of the loaf
+	-- +X extreme of the cake. The cake is ROUND (2026-08-03), so this is reached
+	-- only at z = origin.z — the plate's gap to the cake opens up toward its
+	-- z-ends. See MapConfigData.checkpoint for the numbers.
+	local loafEdgeX = footprintCfg.hx * gridCfg.cell
 	local plateCenterX = origin.x + loafEdgeX + cp.edgeGap + cp.plateDepth / 2
 	local plateCenterZ = origin.z
 
@@ -536,6 +556,32 @@ local function buildCheckpoint(folder: Instance)
 	upgradePrompt.MaxActivationDistance = cp.upgradePromptRange
 	upgradePrompt.RequiresLineOfSight = false
 	upgradePrompt.Parent = stationBody
+
+	-- Layer eater: the paid one-shot layer clear. The default look is a plain box
+	-- on the plate's OTHER cake-side corner (−Z, mirroring the station at +Z) —
+	-- the authored copy replaces it with the real contraption, and its pose there
+	-- is what ships (SetCheckpointHeight preserves the authored offset).
+	local layerEater = makePart({
+		Name = cp.layerEaterName,
+		Size = cp.layerEaterSize,
+		CFrame = CFrame.new(
+			plateCenterX - cp.plateDepth / 2 + cp.layerEaterSize.X / 2 + 1,
+			cp.plateThickness / 2 + cp.layerEaterSize.Y / 2,
+			plateCenterZ - cp.plateWidth / 2 + cp.layerEaterSize.Z / 2 + 1.5
+		),
+		Color = cp.layerEaterColor,
+		Material = Enum.Material.SmoothPlastic,
+		Parent = folder,
+	})
+	studAllSurfaces(layerEater)
+	local eatPrompt = Instance.new("ProximityPrompt")
+	eatPrompt.Name = cp.layerEaterPromptName
+	eatPrompt.ActionText = "Eat this layer"
+	eatPrompt.ObjectText = "Layer Eater"
+	eatPrompt.HoldDuration = 0
+	eatPrompt.MaxActivationDistance = cp.layerEaterPromptRange
+	eatPrompt.RequiresLineOfSight = false
+	eatPrompt.Parent = layerEater
 end
 
 --API
@@ -647,15 +693,93 @@ local function resolveEnvironment(folder: Folder)
 	end
 end
 
+-- The LayerEater's ProximityPrompt is what SELLS the paid layer clear
+-- (features/checkpoint.md). The prop is place-authored, so the prompt may or may
+-- not have been authored with it — ensure it either way, exactly like
+-- GenerateAssets self-heals a missing template. Idempotent: an authored prompt
+-- of that name is adopted (its tuning wins) and only the range is re-asserted.
+local function ensureLayerEaterPrompt(eater: PVInstance)
+	local cp = mapCfg.checkpoint
+	-- The BIGGEST part, not the first one found: an authored contraption is a pile
+	-- of same-named `Part`s in no meaningful order, so `FindFirstChildWhichIsA`
+	-- lands on whatever whisker happens to be first and floats the prompt off the
+	-- model — and it would move whenever the author re-orders anything. Volume is
+	-- stable and picks the body. A PrimaryPart, if the author set one, wins.
+	local host: BasePart? = nil
+	if eater:IsA("BasePart") then
+		host = eater
+	else
+		host = (eater :: Model).PrimaryPart
+		if host == nil then
+			local best = -1
+			for _, descendant in ipairs(eater:GetDescendants()) do
+				if descendant:IsA("BasePart") then
+					local volume = descendant.Size.X * descendant.Size.Y * descendant.Size.Z
+					if volume > best then
+						best, host = volume, descendant
+					end
+				end
+			end
+		end
+	end
+	if host == nil then
+		Log.Warn(
+			"Map",
+			`Assets.Checkpoint '{cp.layerEaterName}' holds no BasePart to host its prompt — the paid layer clear cannot be bought`
+		)
+		return
+	end
+	local existing = eater:FindFirstChild(cp.layerEaterPromptName, true)
+	if existing and existing:IsA("ProximityPrompt") then
+		existing.MaxActivationDistance = cp.layerEaterPromptRange
+		existing.Enabled = true
+		return
+	end
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = cp.layerEaterPromptName
+	prompt.ActionText = "Eat this layer"
+	prompt.ObjectText = "Layer Eater"
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = cp.layerEaterPromptRange
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = host
+	Log.Info("Map", `'{cp.layerEaterName}' had no '{cp.layerEaterPromptName}' — added one on '{host.Name}'`)
+end
+
 local function resolveCheckpoint(folder: Folder)
 	table.clear(checkpointLegs)
 	checkpointPlate = resolvePV(folder, "CheckpointPlate")
 	checkpointMachine = resolvePV(folder, "GymMachine")
 	checkpointStationBody = resolvePV(folder, "UpgradeStationBody")
 	checkpointStationScreen = resolvePV(folder, "UpgradeStationScreen")
+	checkpointLayerEater = resolvePV(folder, mapCfg.checkpoint.layerEaterName)
+	layerEaterOffset, layerEaterPivot = nil, nil
 	for _, child in ipairs(folder:GetChildren()) do
 		if child:IsA("BasePart") and child.Name == "CheckpointLeg" then
 			table.insert(checkpointLegs, child)
+		end
+	end
+	-- Captured BEFORE the first SetCheckpointHeight, while the clone still holds
+	-- the AUTHORED positions: everything after this is code-driven.
+	if checkpointLayerEater == nil then
+		Log.Warn(
+			"Map",
+			`Assets.Checkpoint '{mapCfg.checkpoint.layerEaterName}' missing or not a Part/Model — the paid layer clear has no world surface to sell from (features/checkpoint.md)`
+		)
+	else
+		-- The prompt is ensured whether or not the PLATE resolved: those are
+		-- independent failures, and an `and` here meant a renamed plate silently
+		-- took the prompt down too, with only the generic plate warn to go on.
+		ensureLayerEaterPrompt(checkpointLayerEater)
+		if checkpointPlate then
+			local pivot = checkpointLayerEater:GetPivot()
+			layerEaterPivot = pivot
+			layerEaterOffset = pivot.Position - checkpointPlate:GetPivot().Position
+		else
+			Log.Warn(
+				"Map",
+				`'{mapCfg.checkpoint.layerEaterName}' resolved but 'CheckpointPlate' did not — it keeps its authored position and will NOT ride the cake`
+			)
 		end
 	end
 	if checkpointPlate == nil then
@@ -707,7 +831,7 @@ function MapService.Build()
 	-- template's authored positions are overwritten by SetCheckpointHeight).
 	local origin = gridCfg.origin
 	local cp = mapCfg.checkpoint
-	local loafEdgeX = footprintCfg.hx * gridCfg.cell
+	local loafEdgeX = footprintCfg.hx * gridCfg.cell -- +X extreme of the round cake
 	checkpointCenter = Vector3.new(origin.x + loafEdgeX + cp.edgeGap + cp.plateDepth / 2, 0, origin.z)
 
 	local cpTemplate = assets:FindFirstChild("Checkpoint")
@@ -851,6 +975,16 @@ function MapService.SetCheckpointHeight(topY: number)
 		-- PivotTo moves the collider AND its descendant parts (the authored treadmill
 		-- visual), so the whole machine rides the plate together (user req 4 mount).
 		m:PivotTo(CFrame.new(machineX, topY + mSize.Y / 2, cz))
+	end
+
+	-- The LayerEater keeps its AUTHORED pose and simply rides the plate: its
+	-- captured offset is re-applied to the plate's new pivot, and the authored
+	-- ROTATION is re-applied verbatim (`CFrame.new(pos) * rot` — building the
+	-- CFrame from the position alone would flatten the yaw the prop was posed
+	-- with, which for a modelled contraption reads as it snapping to face north).
+	if checkpointLayerEater and layerEaterOffset and layerEaterPivot then
+		local target = Vector3.new(cx, topY - plateSize.Y / 2, cz) + (layerEaterOffset :: Vector3)
+		checkpointLayerEater:PivotTo(CFrame.new(target) * (layerEaterPivot :: CFrame).Rotation)
 	end
 
 	if checkpointStationBody then

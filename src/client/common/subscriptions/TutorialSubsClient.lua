@@ -12,7 +12,9 @@
 	             finished or not; SKIP is the only way out.
 	  "eat"      the instruction popup. Dismissed by GOT IT *or* by the first
 	             bite landing, whichever comes first.
-	  "belly"    silent watch: the belly crossing TutorialConfig.bellyThreshold01.
+	  "belly"    silent watch: the player earning enough to afford their first
+	             upgrade (TutorialConfig.burnPromptStat), with the belly hitting
+	             TutorialConfig.bellyThreshold01 as the safety net.
 	  "path"     the guidance BEAM (a clone of the authored HintBeam) runs from
 	             the player to the checkpoint plate, and the TO CHECKPOINT
 	             button breathes. Ends on ARRIVAL at the plate.
@@ -23,7 +25,9 @@
 
 	WHY THE THRESHOLD IS LATCHED: the belly falls again the moment a gym drain
 	starts (BodySubs resyncs ~8 Hz), so an un-latched test would blink the beam
-	off at 89% while the player is still walking to the platform.
+	off at 89% while the player is still walking to the platform. The same is true
+	of the affordability gate — banking SPENDS `stored`, so it un-affords itself.
+	Both are one-way: `setStep` only ever moves forward.
 
 	R5: the beam is a CLONE of ReplicatedStorage.Assets.GuidanceTemplates.HintBeam.
 	The two Attachments are Instance.new'd — an attachment is a positioning node,
@@ -91,6 +95,19 @@ function TutorialSubsClient.Start(data, modules)
 		if flowStep then
 			Analytics.Flow(flowStep)
 		end
+	end
+
+	-- Step 3's gate (see TutorialConfig.burnPromptStat). Both modules are COMMON
+	-- and load before subscriptions, so absence means a broken bootstrap, not a
+	-- place split — warn and let the belly safety net carry the step (R8).
+	local LocalStatsService = modules.LocalStatsService
+	local LocalUpgradeTree = modules.LocalUpgradeTree
+	local gateStat = TutorialConfig.burnPromptStat
+	if LocalStatsService == nil or LocalUpgradeTree == nil then
+		Log.Warn(SCOPE, "LocalStatsService/LocalUpgradeTree missing -- step 3 cannot test upgrade affordability; it will advance on the belly threshold alone")
+	elseif type(gateStat) ~= "string" or gateStat == "" then
+		Log.Warn(SCOPE, "TutorialConfig.burnPromptStat missing -- step 3 will advance on the belly threshold alone")
+		gateStat = nil
 	end
 
 	-- The authored UpgradeStation prompt is what ends the flow; its NAME is
@@ -268,6 +285,47 @@ function TutorialSubsClient.Start(data, modules)
 		Log.Info(SCOPE, `step -> {tostring(next)}`)
 	end
 
+	-- ── step 3's gate: "you can afford your first upgrade" ──────────────
+	-- Belly snapshot, kept because the two halves of the gate ride different
+	-- remotes: `fill`/`stored` come on StomachUpdate (every bite), the BANKED
+	-- balance on CurrencyUpdate (AppRoot state), the owned tiers on
+	-- UpgradesUpdate (LocalStatsService).
+	local lastFill, lastCapacity, lastStored = 0, 0, 0
+
+	-- Would the trip we are about to send them on leave them able to buy the gate
+	-- stat's next tier? Before the first gym visit EVERY calorie they have earned
+	-- is unbanked, so the honest test is the post-burn balance:
+	-- `calories + floor(stored × gymEff)` — the exact figure GymService will bank.
+	local function canAffordGateStat(): boolean
+		if LocalStatsService == nil or LocalUpgradeTree == nil or gateStat == nil then
+			return false
+		end
+		local banked = tonumber(AppRoot.Get("calories")) or 0
+		local afterBurn = banked + math.floor(lastStored * LocalStatsService.GymEfficiency())
+		-- nil = the config no longer has this stat; fall through to the belly net
+		-- rather than treating a typo as "gate satisfied" and skipping the step.
+		return LocalUpgradeTree.CanAffordNext(LocalStatsService.Levels(), afterBurn, gateStat) == true
+	end
+
+	local function evaluateBurnPrompt()
+		if step ~= "belly" then
+			return
+		end
+		if canAffordGateStat() then
+			setStep("path")
+			return
+		end
+		-- SAFETY NET (TutorialConfig.bellyThreshold01): a player who cannot eat and
+		-- has not been told where to go is the worst state a first session reaches.
+		if lastCapacity > 0 and lastFill / lastCapacity >= TutorialConfig.bellyThreshold01 then
+			Log.Info(
+				SCOPE,
+				`belly reached {math.floor(TutorialConfig.bellyThreshold01 * 100)}% before '{tostring(gateStat)}' was affordable — advancing step 3 on the safety net`
+			)
+			setStep("path")
+		end
+	end
+
 	-- Called when the slides close, and again when TutorialUpdate lands, so the
 	-- two can arrive in either order without racing.
 	local function beginStepsIfKnown()
@@ -338,31 +396,28 @@ function TutorialSubsClient.Start(data, modules)
 	})
 
 	-- Belly watch (steps "eat" -> "belly" -> "path"). Both payload shapes carry
-	-- `fill`/`capacity`; only the per-bite one carries `layerId`, which is how
-	-- the first BITE is told apart from a join/gym resync.
+	-- `fill`/`capacity`/`stored`; only the per-bite one carries `layerId`, which
+	-- is how the first BITE is told apart from a join/gym resync.
 	Net.Update("StomachUpdate").OnClientEvent:Connect(function(payload)
 		if type(payload) ~= "table" then
 			return
 		end
+		-- Snapshot BEFORE the step logic: a missing field keeps the last known
+		-- value rather than zeroing the gate.
+		lastFill = tonumber(payload.fill) or lastFill
+		lastCapacity = tonumber(payload.capacity) or lastCapacity
+		lastStored = tonumber(payload.stored) or lastStored
 		if step == "eat" and payload.layerId ~= nil then
 			-- They worked it out without reading. Get out of the way.
 			if Analytics then
 				Analytics.Flow("eat-hint-clear")
 			end
 			setStep("belly")
-			return
+			-- deliberately NO return: with the 2026-08-05 belly curve a single
+			-- opening bite can already be worth the first upgrade, and making the
+			-- player wait for the NEXT push to be told so is a visible stall.
 		end
-		if step ~= "belly" then
-			return
-		end
-		local capacity = tonumber(payload.capacity) or 0
-		local fill = tonumber(payload.fill) or 0
-		if capacity <= 0 then
-			return
-		end
-		if fill / capacity >= TutorialConfig.bellyThreshold01 then
-			setStep("path")
-		end
+		evaluateBurnPrompt()
 	end)
 
 	-- The tutorial's goal is the upgrade tree OPENING, so honour the prompt from

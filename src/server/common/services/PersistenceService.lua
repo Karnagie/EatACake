@@ -16,8 +16,25 @@
 	- Manages the session lifecycle: kick on lock conflict, cleanup on
 	  session end, critical saves.
 
+	- Delivers ProfileStore MESSAGES to the owning session (see below).
+
 	State lives in PlayerProfileData; config in PersistenceData; the schema
 	in ProfileSchema (R1). See docs/features/persistence.md and ADR-0001.
+
+	MESSAGES — writing to a profile whose owner is NOT on this server.
+	`SendMessage(userId, message)` queues a JSON table onto that profile through
+	ProfileStore's `MessageAsync`; it is delivered to the owner's active session
+	wherever it is (immediately if that is this server, on their next load
+	otherwise) and survives them being offline entirely. That is the ONLY way to
+	pay someone who is not here without touching DataStoreService directly (P5),
+	and it is what the referral reward rides (features/referrals.md).
+	`RegisterMessageHandler(name, handler)` installs a receiver, once, at
+	subscription Start time: LoadProfile attaches every registered handler to the
+	new session before publishing it. A handler is `(player, message, processed)`
+	and MUST call `processed()` once it has actually applied the message —
+	unprocessed messages are re-delivered on the next load, which is the property
+	that makes the reward survive a crash (at the price of a possible double
+	delivery if the server dies between applying and saving).
 ]]
 
 local Players = game:GetService("Players")
@@ -37,6 +54,10 @@ local schemaData -- ProfileSchema
 local configData -- PersistenceData
 
 local store -- ProfileStore object
+
+-- Cross-session message receivers, registered once at Start (see the header).
+-- Ordered so the boot log and delivery order are reproducible.
+local messageHandlers: { { name: string, fn: (Player, { [string]: any }, () -> ()) -> () } } = {}
 
 export type LoadOptions = {
 	deadline: number?,
@@ -348,9 +369,80 @@ function PersistenceService.LoadProfile(player: Player, options: LoadOptions?): 
 		return nil, false
 	end
 
+	-- Cross-session messages, attached only once the session is PUBLISHED above:
+	-- MessageHandler replays the whole queued backlog immediately (each on its own
+	-- task), and a handler that pays the player would otherwise run against a
+	-- profile no service can see yet. Attaching after `profileData.profiles` is
+	-- set makes `PlayerProfileData.Get(userId)` valid inside every handler.
+	for _, handler in ipairs(messageHandlers) do
+		profile:MessageHandler(function(message, processed)
+			if type(message) ~= "table" then
+				-- Consume it: a malformed message is not going to become valid on the
+				-- next load, and leaving it queued replays this warn forever.
+				Log.Warn(SCOPE, `message for {userId} was {typeof(message)}, not a table — dropped`)
+				processed()
+				return
+			end
+			local ok, err = pcall(handler.fn, player, message, processed)
+			if not ok then
+				-- Deliberately NOT processed: a throwing handler has not applied the
+				-- message, and re-delivery on the next load is the whole point of the
+				-- queue (R8 — say so, don't swallow it).
+				Log.Warn(SCOPE, `{handler.name} message handler FAILED for {userId} — {err}; message stays queued`)
+			end
+		end)
+	end
+
 	local isNew = profile.SessionLoadCount == 1
 	Log.Info(SCOPE, `profile loaded: {player.Name} ({userId}) — isNew={isNew}, session #{profile.SessionLoadCount}`)
 	return profile.Data, isNew
+end
+
+--API
+-- Installs a receiver for cross-session messages (see the module header). Call
+-- from a subscription's Start — handlers are attached to a session at LOAD time,
+-- so one registered after a player's profile loaded never sees that session.
+-- `handler(player, message, processed)` must call `processed()` once the message
+-- has been applied, or it is re-delivered on the player's next load.
+function PersistenceService.RegisterMessageHandler(name: string, handler: (Player, { [string]: any }, () -> ()) -> ())
+	if type(handler) ~= "function" then
+		Log.Warn(SCOPE, `RegisterMessageHandler('{tostring(name)}') ignored — handler is not a function`)
+		return
+	end
+	table.insert(messageHandlers, { name = name, fn = handler })
+	Log.Info(SCOPE, `message handler registered: {name} ({#messageHandlers} total)`)
+end
+
+--API
+-- YIELDS. Queues `message` onto ANOTHER player's profile — they need not be on
+-- this server, or online at all. Returns whether the queue write committed.
+-- ⚠ This is a write to a profile this server does not own: it can only APPEND a
+-- message, never mutate their data. Everything the message does happens inside
+-- the receiving session, through a registered handler.
+function PersistenceService.SendMessage(userId: number, message: { [string]: any }): boolean
+	if store == nil then
+		Log.Warn(SCOPE, `SendMessage({userId}) dropped — profile store unavailable`)
+		return false
+	end
+	if type(message) ~= "table" then
+		Log.Warn(SCOPE, `SendMessage({userId}) dropped — message must be a table`)
+		return false
+	end
+	local ok, result = pcall(function()
+		return store:MessageAsync(tostring(userId), message)
+	end)
+	if not ok then
+		Log.Warn(SCOPE, `SendMessage({userId}) FAILED — {result}`)
+		return false
+	end
+	if result ~= true then
+		-- ProfileStore returns false only when the server is closing; it retries
+		-- DataStore errors internally. Either way the caller must not assume the
+		-- message landed.
+		Log.Warn(SCOPE, `SendMessage({userId}) did not commit (server closing?) — message NOT queued`)
+		return false
+	end
+	return true
 end
 
 --API
