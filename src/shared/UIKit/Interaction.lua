@@ -23,8 +23,9 @@
 	  `onActivated` through a ref, so nothing reconnects on the HUD's bite-rate
 	  re-renders. Feel constants live in `Theme.Feel`.
 	- Desktop gets hover + press; touch gets press via InputBegan/Ended (no
-	  hover). Activation flows through MouseButton1Click, which Roblox also fires
-	  for touch taps — same contract the kit's buttons already used.
+	  hover). Activation flows through GuiButton.Activated, Roblox's shared
+	  mouse/touch/gamepad event. Gamepad/keyboard activation adds its cue and
+	  analytics at activation because it has no pointer-down edge here.
 
 	SQUASH (the squishy theme's motion signature) — opt in with `config.squash`:
 
@@ -72,10 +73,10 @@
 	wiring: a control gets counted because it exists, not because someone
 	remembered to instrument it.
 
-	`"dead"` is a press on a button that is currently DISABLED — the player
+	`"dead"` is a pointer press on a button that is currently DISABLED — the player
 	tried and the game did not answer. It rides `InputBegan`, which fires for
 	inputs over a GuiObject regardless of `Active` (unlike `Activated` /
-	`MouseButton1Click`, which a disabled button suppresses — which is the
+	`Activated`, which a disabled button suppresses — which is the
 	whole point: the press is real, the response is not). No `Active` value
 	is changed to get it, so a disabled button still sinks exactly what it
 	sank before.
@@ -304,7 +305,7 @@ function Interaction.usePressable(config)
 			-- A DISABLED button still reports that it was pressed. `InputBegan`
 			-- fires for inputs over a GuiObject whatever its `Active` value, so
 			-- this needs no property change and sinks nothing extra — while
-			-- `Activated`/`MouseButton1Click` stay correctly suppressed, which
+			-- `Activated` stays correctly suppressed, which
 			-- is exactly the event being recorded: a press with no answer.
 			return {
 				[React.Event.InputBegan] = function(rbx, input)
@@ -411,7 +412,18 @@ function Interaction.usePressable(config)
 					updatePress(was, input, rbx)
 				end
 			end,
-			[React.Event.MouseButton1Click] = function()
+			[React.Event.Activated] = function(rbx, input)
+				-- Mouse/touch already cue + count on their aggregate pointer-down
+				-- edge. Controller A/cross and keyboard UI activation have no such
+				-- edge in this pointer state machine, so record them exactly once here.
+				if
+					input ~= nil
+					and input.UserInputType ~= Enum.UserInputType.MouseButton1
+					and input.UserInputType ~= Enum.UserInputType.Touch
+				then
+					cue("press")
+					track("press", analyticsRef.current or deriveId(rbx))
+				end
 				if activatedRef.current then
 					activatedRef.current()
 				end

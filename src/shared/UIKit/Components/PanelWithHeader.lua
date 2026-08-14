@@ -1,3 +1,10 @@
+--[[
+	PanelWithHeader -- compose PanelShell, Header and caller-owned body children.
+
+	All props are presentation/callback inputs; this component owns no feature
+	state and only forwards compatible panel/header/close style variants.
+]]
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local React = require(ReplicatedStorage.Packages.React)
 local PanelShell = require(script.Parent.PanelShell)
@@ -22,6 +29,7 @@ local function PanelWithHeader(props)
 		zIndex = props.headerZIndex or 10,
 		size = props.headerSize,
 		style = props.headerStyle,
+		closeStyle = props.closeStyle,
 	})
 
 	return React.createElement(PanelShell, {

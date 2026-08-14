@@ -3,7 +3,7 @@
 	nominal grid, with press + hover feedback from the shared `Interaction`
 	primitive.
 
-	Props: { style?, text?, textXAlignment?, enabled?, onActivated?,
+	Props: { style?, text?, iconName?, textXAlignment?, enabled?, onActivated?,
 	         name?, anchorPoint?, position?, size?, zIndex?, pulse? }
 
 	`pulse = true` runs a looping ATTENTION breathe — for a button the game
@@ -45,6 +45,7 @@ local function Button(props)
 	local STYLE = props.style or Theme.Button
 	local zIndex = props.zIndex or 1
 	local enabled = props.enabled ~= false
+	local iconName = props.iconName or STYLE.IconName
 
 	local scaleRef, handlers = Interaction.usePressable({
 		enabled = enabled,
@@ -130,6 +131,19 @@ local function Button(props)
 				zIndex + 2,
 				STYLE.FaceGradient
 			),
+			Icon = if iconName ~= nil and STYLE.IconPosition ~= nil and STYLE.IconSize ~= nil
+				then React.createElement("ImageLabel", {
+					Name = "Icon",
+					Position = UDim2.fromScale(STYLE.IconPosition.X, STYLE.IconPosition.Y),
+					Size = UDim2.fromScale(STYLE.IconSize.X, STYLE.IconSize.Y),
+					BackgroundTransparency = 1,
+					BorderSizePixel = 0,
+					Image = Theme.Icon(iconName),
+					ImageColor3 = STYLE.IconColor or Theme.Colors.PanelLight,
+					ScaleType = Enum.ScaleType.Fit,
+					ZIndex = zIndex + 3,
+				})
+				else nil,
 			Label = React.createElement(OutlinedText, {
 				text = props.text or "Button",
 				position = UDim2.fromScale(STYLE.TextPosition.X, STYLE.TextPosition.Y),

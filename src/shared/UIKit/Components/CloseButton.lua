@@ -1,9 +1,15 @@
+--[[
+	CloseButton -- shared pressable X control for panel headers.
+
+	Renders the standard layered Exit recipe and accepts an optional compatible
+	`style`; interaction behavior and geometry stay shared across color variants.
+]]
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local React = require(ReplicatedStorage.Packages.React)
 
 local Theme = require(script.Parent.Parent.Theme)
 local Interaction = require(script.Parent.Parent.Interaction)
-local STYLE = Theme.Exit
 
 local function roundedFrame(name, position, size, corner, zIndex, gradient, color)
 	local children = {
@@ -28,7 +34,7 @@ local function roundedFrame(name, position, size, corner, zIndex, gradient, colo
 	}, children)
 end
 
-local function arm(name, rotation, size, color, zIndex, gradient, gradientRotation)
+local function arm(name, rotation, size, color, zIndex, gradient, gradientRotation, style)
 	local children = {
 		Corner = React.createElement("UICorner", {
 			CornerRadius = UDim.new(1, 0),
@@ -44,7 +50,7 @@ local function arm(name, rotation, size, color, zIndex, gradient, gradientRotati
 	return React.createElement("Frame", {
 		Name = name,
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(STYLE.XCenter.X, STYLE.XCenter.Y),
+		Position = UDim2.fromScale(style.XCenter.X, style.XCenter.Y),
 		Size = size,
 		Rotation = rotation,
 		BackgroundColor3 = gradient and Color3.new(1, 1, 1) or color,
@@ -56,10 +62,12 @@ end
 local function CloseButton(props)
 	local zIndex = props.zIndex or 1
 	local enabled = props.enabled ~= false
+	local style = props.style or Theme.Exit
 
 	local scaleRef, handlers = Interaction.usePressable({
 		enabled = enabled,
 		onActivated = props.onActivated,
+		analyticsId = props.analyticsId or props.name,
 	})
 
 	return React.createElement("TextButton", Interaction.merge({
@@ -76,7 +84,7 @@ local function CloseButton(props)
 		ZIndex = zIndex,
 	}, handlers), {
 		Aspect = React.createElement("UIAspectRatioConstraint", {
-			AspectRatio = STYLE.AspectRatio,
+			AspectRatio = style.AspectRatio,
 			DominantAxis = Enum.DominantAxis.Height,
 		}),
 		Content = Interaction.pressLayer(scaleRef, zIndex, {
@@ -84,38 +92,74 @@ local function CloseButton(props)
 				"Outer",
 				UDim2.fromScale(0, 0),
 				UDim2.fromScale(1, 1),
-				STYLE.OuterCorner,
+				style.OuterCorner,
 				zIndex,
-				STYLE.OuterGradient
+				style.OuterGradient
 			),
 			Rim = roundedFrame(
 				"Rim",
-				UDim2.fromScale(STYLE.RimPosition.X, STYLE.RimPosition.Y),
-				UDim2.fromScale(STYLE.RimSize.X, STYLE.RimSize.Y),
-				STYLE.RimCorner,
+				UDim2.fromScale(style.RimPosition.X, style.RimPosition.Y),
+				UDim2.fromScale(style.RimSize.X, style.RimSize.Y),
+				style.RimCorner,
 				zIndex + 1,
-				STYLE.RimGradient
+				style.RimGradient
 			),
 			InnerRim = roundedFrame(
 				"InnerRim",
-				UDim2.fromScale(STYLE.InnerRimPosition.X, STYLE.InnerRimPosition.Y),
-				UDim2.fromScale(STYLE.InnerRimSize.X, STYLE.InnerRimSize.Y),
-				STYLE.InnerRimCorner,
+				UDim2.fromScale(style.InnerRimPosition.X, style.InnerRimPosition.Y),
+				UDim2.fromScale(style.InnerRimSize.X, style.InnerRimSize.Y),
+				style.InnerRimCorner,
 				zIndex + 2,
-				STYLE.InnerRimGradient
+				style.InnerRimGradient
 			),
 			Face = roundedFrame(
 				"Face",
-				UDim2.fromScale(STYLE.FacePosition.X, STYLE.FacePosition.Y),
-				UDim2.fromScale(STYLE.FaceSize.X, STYLE.FaceSize.Y),
-				STYLE.FaceCorner,
+				UDim2.fromScale(style.FacePosition.X, style.FacePosition.Y),
+				UDim2.fromScale(style.FaceSize.X, style.FaceSize.Y),
+				style.FaceCorner,
 				zIndex + 3,
-				STYLE.FaceGradient
+				style.FaceGradient
 			),
-			XOutlineA = arm("XOutlineA", 45, UDim2.fromScale(STYLE.XOutlineSize.X, STYLE.XOutlineSize.Y), STYLE.XOutline, zIndex + 4),
-			XOutlineB = arm("XOutlineB", -45, UDim2.fromScale(STYLE.XOutlineSize.X, STYLE.XOutlineSize.Y), STYLE.XOutline, zIndex + 4),
-			XFillA = arm("XFillA", 45, UDim2.fromScale(STYLE.XFillSize.X, STYLE.XFillSize.Y), Color3.new(1, 1, 1), zIndex + 5, STYLE.XGradient, 45),
-			XFillB = arm("XFillB", -45, UDim2.fromScale(STYLE.XFillSize.X, STYLE.XFillSize.Y), Color3.new(1, 1, 1), zIndex + 5, STYLE.XGradient, 135),
+			XOutlineA = arm(
+				"XOutlineA",
+				45,
+				UDim2.fromScale(style.XOutlineSize.X, style.XOutlineSize.Y),
+				style.XOutline,
+				zIndex + 4,
+				nil,
+				nil,
+				style
+			),
+			XOutlineB = arm(
+				"XOutlineB",
+				-45,
+				UDim2.fromScale(style.XOutlineSize.X, style.XOutlineSize.Y),
+				style.XOutline,
+				zIndex + 4,
+				nil,
+				nil,
+				style
+			),
+			XFillA = arm(
+				"XFillA",
+				45,
+				UDim2.fromScale(style.XFillSize.X, style.XFillSize.Y),
+				Color3.new(1, 1, 1),
+				zIndex + 5,
+				style.XGradient,
+				45,
+				style
+			),
+			XFillB = arm(
+				"XFillB",
+				-45,
+				UDim2.fromScale(style.XFillSize.X, style.XFillSize.Y),
+				Color3.new(1, 1, 1),
+				zIndex + 5,
+				style.XGradient,
+				135,
+				style
+			),
 		}),
 	})
 end

@@ -37,6 +37,10 @@ local function labelProps(props, position, color, zIndex)
 		Text = props.text,
 		TextColor3 = color,
 		TextScaled = true,
+		-- Leaving this property UNSET preserves Roblox's established TextScaled
+		-- behavior for every existing single-line label. Explicit false makes those
+		-- labels stick near the default TextSize in Studio; only opt-in blocks wrap.
+		TextWrapped = if props.textWrapped == true then true else nil,
 		TextTransparency = props.transparency or 0,
 		TextXAlignment = props.textXAlignment or Enum.TextXAlignment.Left,
 		TextYAlignment = Enum.TextYAlignment.Center,

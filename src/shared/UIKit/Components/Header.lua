@@ -1,3 +1,10 @@
+--[[
+	Header -- layered panel title bar with an optional shared CloseButton.
+
+	`style` owns header geometry/colors; `closeStyle` is forwarded independently
+	so a screen may quiet the close hue without forking the header construction.
+]]
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local React = require(ReplicatedStorage.Packages.React)
 local Theme = require(script.Parent.Parent.Theme)
@@ -79,6 +86,7 @@ local function Header(props)
 			anchorPoint = Vector2.new(0.5, 0.5),
 			position = UDim2.fromScale(style.CloseCenter.X, style.CloseCenter.Y),
 			size = UDim2.fromScale(style.CloseSize.X, style.CloseSize.Y),
+			style = props.closeStyle,
 			zIndex = zIndex + 10,
 			enabled = props.closeEnabled ~= false,
 			onActivated = props.onClose,

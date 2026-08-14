@@ -225,4 +225,53 @@ Icons.TutorialSlide2 = "rbxassetid://88501692577908"
 Icons.TutorialSlide3 = "rbxassetid://135307023473908"
 Icons.TutorialSlide4 = "rbxassetid://99839198517910"
 
+-- Food confetti (features/food-burst.md). 33 hand-picked 64x64 food glyphs in
+-- the same thick-dark-outline cut as the Sq* squishies, uploaded 2026-08-13.
+-- They are never chrome: the ONLY consumer is the celebration burst, which
+-- fires a whole GROUP of them across the screen. Membership of a group lives
+-- in `JuiceConfig.foodBurstGroups` (by NAME, so a typo warns through
+-- Theme.Icon instead of silently rendering the fallback glyph) — this table
+-- stays a flat name -> id registry.
+Icons.FoodApple =        "rbxassetid://96149455570813"
+Icons.FoodAvocado =      "rbxassetid://72977627110789"
+Icons.FoodBanana =       "rbxassetid://139888985478511"
+Icons.FoodBlueberry =    "rbxassetid://129126728714996"
+Icons.FoodCake =         "rbxassetid://132682545295900"
+Icons.FoodCandyBlue =    "rbxassetid://123204401723582"
+Icons.FoodCandyFloss =   "rbxassetid://74947063210451"
+Icons.FoodCandyPink =    "rbxassetid://121952568386019"
+Icons.FoodCandyYellow =  "rbxassetid://89979164123775"
+Icons.FoodCheesecake =   "rbxassetid://99969392378321"
+Icons.FoodCherry =       "rbxassetid://119476115031252"
+Icons.FoodChocolate =    "rbxassetid://123059372158141"
+Icons.FoodDoughnut =     "rbxassetid://93892540875859"
+Icons.FoodGummyGreen =   "rbxassetid://108846496680372"
+Icons.FoodGummyRed =     "rbxassetid://134050486416285"
+Icons.FoodGummyYellow =  "rbxassetid://117163565106566"
+Icons.FoodIceCream =     "rbxassetid://126184880744920"
+Icons.FoodKiwi =         "rbxassetid://80294277497540"
+Icons.FoodLemon =        "rbxassetid://99123369279569"
+Icons.FoodLollipop =     "rbxassetid://70818868017186"
+Icons.FoodMango =        "rbxassetid://114149981207445"
+Icons.FoodOrange =       "rbxassetid://94483956992566"
+Icons.FoodPancakes =     "rbxassetid://127983031169701"
+Icons.FoodPeach =        "rbxassetid://100536196252911"
+Icons.FoodPear =         "rbxassetid://129357376333719"
+Icons.FoodPie =          "rbxassetid://111507189025775"
+Icons.FoodPineapple =    "rbxassetid://126941840561248"
+Icons.FoodPopsicle =     "rbxassetid://131071337561320"
+Icons.FoodRaspberry =    "rbxassetid://133328221098588"
+Icons.FoodStrawberry =   "rbxassetid://132446829912009"
+Icons.FoodWaffle =       "rbxassetid://73794402497113"
+Icons.FoodWatermelon =   "rbxassetid://115631327813320"
+Icons.FoodYogurt =       "rbxassetid://83559342666509"
+
+-- Selectable cake art (features/cake-select.md). These are PRODUCT ART, not
+-- chrome glyphs: each is the cake itself, rendered big inside a CakeCard's art
+-- window, so the player picks by picture rather than by reading a name. The
+-- catalogue names them by KEY (CakeSelectConfig.cakes[id].iconName) — never by
+-- id, so re-skinning a cake is one line here.
+Icons.CakeClassic =    "rbxassetid://116652893791245"
+Icons.CakeRainbow =    "rbxassetid://94925525153721"
+
 return Icons

@@ -334,6 +334,45 @@ Theme.Feel.Squish = {
 }
 table.freeze(Theme.Feel.Squish)
 
+-- ===== Safe area: where Roblox's OWN GUI sits, and how far to stay off it =====
+-- The root ScreenGui is FULL-BLEED on purpose (UiRoot) so that modal SCRIMS
+-- cover the topbar strip. That is only HALF a contract: a surface may cover the
+-- whole screen, but anything that PLACES A CONTROL still has to keep off
+-- Roblox's CoreGui furniture, which is drawn above every player GUI and cannot
+-- be moved, resized or switched off.
+--
+-- MEASURED live (Studio play, viewport 1375x1031, 2026-08-09):
+--   GuiService:GetGuiInset().Y = 58            -- the strip's height
+--   GuiService.TopbarInset     = Rect(208, 0, 1375, 58)
+--                                 Max.Y = the strip's BOTTOM edge;
+--                                 Min.X = where Roblox's own left chip ENDS
+--   unibar chip (left)  x  16..204   y  10..58   (logo / nine-dot / chat / mic)
+--   touch JUMP button   x 1205..1325 y 821..941  (120 px; 50 right, 90 bottom)
+--   touch thumbstick    x   58..206  y 845..993
+--
+-- ⚠ `GetGuiInset()` is the LEGACY value and can under-report the modern unibar,
+-- so the resolver in AppRoot takes the MAX of it and `TopbarInset.Max.Y`.
+Theme.SafeArea = {
+	-- Extra clearance below the strip. The HUD's own top margin is a viewport
+	-- FRACTION of the region left under the bar, so it SHRINKS as the window
+	-- does (23 px at 1080p, ~8 px on a phone) while the bar stays a fixed pixel
+	-- height — this pad is what stops a phone parking the calories pill on the
+	-- unibar's rounded corner.
+	TopPadPx = 10,
+	-- Sanity clamp: a client reporting a nonsense TopbarInset must not be able
+	-- to push the whole HUD off the screen.
+	MaxTopInsetPx = 140,
+	-- Roblox sizes its touch JUMP button min(0.20 * shorterAxis, 120) and hangs
+	-- it off the bottom-right corner. 1.75x the button covers button + margin
+	-- (measured: 210 px of 1031 at the reference above), and the pad keeps our
+	-- own control from touching it.
+	TouchButtonFraction = 0.20,
+	TouchButtonMaxPx = 120,
+	TouchButtonReserveMult = 1.75,
+	TouchCornerPadPx = 16,
+}
+table.freeze(Theme.SafeArea)
+
 -- ===== Wide (landscape) panel family. Nominal grids: panel 1000x600, header 1000x120. =====
 
 Theme.PanelWide = {
@@ -441,6 +480,20 @@ Theme.Scrollbar = {
 	}),
 	ThumbFaceInset = Vector2.new(3 / 22, 0.02),
 	MinThumbFraction = 0.12,
+}
+
+-- Horizontal carousel scrollbar. It shares the quiet slate/cyan colour family
+-- with the vertical bar, but its insets are cut for a nominal 904x30 bottom
+-- track. Do not rotate this style: every gradient remains screen-vertical, so
+-- the kit's top-light / bottom-dark material language stays intact.
+Theme.HorizontalScrollbar = {
+	TrackOuterGradient = Theme.Scrollbar.TrackOuterGradient,
+	GrooveGradient = Theme.Scrollbar.GrooveGradient,
+	GrooveInset = Vector2.new(4 / 904, 4 / 30),
+	ThumbOuterGradient = Theme.Scrollbar.ThumbOuterGradient,
+	ThumbFaceGradient = Theme.Scrollbar.ThumbFaceGradient,
+	ThumbFaceInset = Vector2.new(4 / 904, 3 / 30),
+	MinThumbFraction = Theme.Scrollbar.MinThumbFraction,
 }
 
 -- Rarity accents: Button keypoint structure and lightness curve, hue-shifted.
@@ -677,7 +730,9 @@ Theme.PetCard = {
 	CheckColor = Color3.new(1, 1, 1),
 }
 
--- Selection accent for a pet card: gold Outer/Rim swap (geometry unchanged).
+-- Selection accent: gold Outer/Rim swap (geometry unchanged). Compact controls
+-- may also use SelectFaceGradient when a thin ring would disappear at a squint;
+-- large image cards keep their neutral face and use only the shared trim.
 Theme.PetCard.SelectOuterGradient = ColorSequence.new({
 	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 208, 64)),
 	ColorSequenceKeypoint.new(0.10, Color3.fromRGB(238, 178, 28)),
@@ -689,6 +744,13 @@ Theme.PetCard.SelectRingGradient = ColorSequence.new({
 	ColorSequenceKeypoint.new(0.05, Color3.fromRGB(255, 246, 196)),
 	ColorSequenceKeypoint.new(0.72, Color3.fromRGB(255, 232, 140)),
 	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 214, 84)),
+})
+Theme.PetCard.SelectFaceGradient = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(232, 176, 52)),
+	ColorSequenceKeypoint.new(0.50, Color3.fromRGB(214, 152, 38)),
+	ColorSequenceKeypoint.new(0.93, Color3.fromRGB(198, 138, 30)),
+	ColorSequenceKeypoint.new(0.96, Color3.fromRGB(162, 102, 16)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(176, 114, 24)),
 })
 
 -- Inspector sidebar (pet details). Nominal 278x427.
@@ -801,40 +863,326 @@ Theme.MatchChoice = {
 	DisabledTransparency = 0.32,
 }
 
+-- Large match-mode card. Nominal 526x118, one per row in the scrollable
+-- primary column. This is a CARD, not a stretched button: even body outline,
+-- neutral body, and an internal accent art window. Only the whole card's hit
+-- target is pressable; the reward chip is a passive information tag.
+-- Horizontal: 14 art(94) 16 text(250) 12 reward(126) 14 = 526 ✓
+-- Vertical: art y12..106; title y18..54; detail y60..86; reward y31..87.
+Theme.MatchModeCard = {
+	AspectRatio = 526 / 118,
+	OuterCorner = 0.12,
+	FacePosition = Vector2.new(6 / 526, 6 / 118),
+	FaceSize = Vector2.new(514 / 526, 104 / 118),
+	FaceCorner = 0.105,
+	ArtPosition = Vector2.new(14 / 526, 12 / 118),
+	ArtSize = Vector2.new(94 / 526, 94 / 118),
+	ArtCorner = 0.16,
+	ArtFacePosition = Vector2.new(18 / 526, 16 / 118),
+	ArtFaceSize = Vector2.new(86 / 526, 86 / 118),
+	ArtFaceCorner = 0.15,
+	IconPosition = Vector2.new(27 / 526, 25 / 118),
+	IconSize = Vector2.new(68 / 526, 68 / 118),
+	IconColor = Color3.new(1, 1, 1),
+	TitlePosition = Vector2.new(124 / 526, 18 / 118),
+	TitleSize = Vector2.new(250 / 526, 36 / 118),
+	DescriptionPosition = Vector2.new(124 / 526, 60 / 118),
+	DescriptionSize = Vector2.new(250 / 526, 26 / 118),
+	RewardPosition = Vector2.new(386 / 526, 31 / 118),
+	RewardSize = Vector2.new(126 / 526, 56 / 118),
+	RewardOuterCorner = 0.24,
+	RewardFacePosition = Vector2.new(3 / 126, 3 / 56),
+	RewardFaceSize = Vector2.new(120 / 126, 46 / 56),
+	RewardFaceCorner = 0.22,
+	RewardIconPosition = Vector2.new(10 / 126, 11 / 56),
+	RewardIconSize = Vector2.new(34 / 126, 34 / 56),
+	RewardTextPosition = Vector2.new(50 / 126, 13 / 56),
+	RewardTextSize = Vector2.new(66 / 126, 30 / 56),
+	RewardIconName = "BadgeLightning",
+	RewardIconColor = Color3.new(1, 1, 1),
+	BadgeCenter = Vector2.new(98 / 526, 20 / 118),
+	BadgeSize = Vector2.new(30 / 526, 30 / 118),
+	SelectedIconName = "UiCheck",
+	OutlineColor = Color3.fromRGB(8, 26, 48),
+	OuterGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 62, 98)),
+		ColorSequenceKeypoint.new(0.06, Color3.fromRGB(8, 36, 62)),
+		ColorSequenceKeypoint.new(0.85, Color3.fromRGB(6, 30, 54)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 42, 70)),
+	}),
+	FaceGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(96, 130, 180)),
+		ColorSequenceKeypoint.new(0.05, Color3.fromRGB(78, 110, 158)),
+		ColorSequenceKeypoint.new(0.55, Color3.fromRGB(62, 90, 136)),
+		ColorSequenceKeypoint.new(0.93, Color3.fromRGB(50, 74, 116)),
+		ColorSequenceKeypoint.new(0.96, Color3.fromRGB(32, 50, 84)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(42, 62, 100)),
+	}),
+	TitleGradient = Theme.PetCard.NameGradient,
+	DescriptionGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(188, 210, 238)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(158, 184, 218)),
+	}),
+	RewardOuterGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(46, 66, 98)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(40, 58, 88)),
+	}),
+	RewardFaceGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(46, 66, 98)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(40, 58, 88)),
+	}),
+	RewardTextGradient = Theme.PetCard.NameGradient,
+	SelectedOuterGradient = Theme.PetCard.SelectOuterGradient,
+	DisabledTransparency = 0.32,
+}
+
+-- The art-window accents carry difficulty at a glance. Their keypoint curves
+-- are existing kit accents; only the hue family changes. The card BODY stays
+-- neutral so three modes do not become three equally loud color fields.
+Theme.MatchModeAccents = {
+	easy = {
+		OutlineColor = Theme.Rarity.Rare.Outline,
+		OuterGradient = Theme.Rarity.Rare.Outer,
+		FaceGradient = Theme.Rarity.Rare.Face,
+		TextGradient = Theme.Rarity.Rare.Text,
+	},
+	medium = {
+		OutlineColor = Theme.Rarity.Legendary.Outline,
+		OuterGradient = Theme.Rarity.Legendary.Outer,
+		FaceGradient = Theme.Rarity.Legendary.Face,
+		TextGradient = Theme.Rarity.Legendary.Text,
+	},
+	hard = {
+		OutlineColor = Theme.Exit.XOutline,
+		OuterGradient = Theme.Exit.OuterGradient,
+		FaceGradient = Theme.Exit.FaceGradient,
+		TextGradient = Theme.Exit.XGradient,
+	},
+}
+
+-- Difficulty uses three 142x112 portrait/icon-first tiles across the 452px
+-- setup column: 3*142 + 2*13 = 452. The prior 344x52 rows repeated a reward
+-- glyph/value on every line and made this child-facing selector read like a
+-- settings table. The config still carries reward copy; this compact surface
+-- deliberately omits it.
+Theme.MatchDifficultyChoice = {
+	AspectRatio = 142 / 112,
+	OuterCorner = 0.20,
+	RimPosition = Vector2.new(5 / 142, 5 / 112),
+	RimSize = Vector2.new(132 / 142, 94 / 112),
+	RimCorner = 0.18,
+	FacePosition = Vector2.new(8 / 142, 8 / 112),
+	FaceSize = Vector2.new(126 / 142, 85 / 112),
+	FaceCorner = 0.17,
+	IconPosition = Vector2.new(44 / 142, 10 / 112),
+	IconSize = Vector2.new(54 / 142, 54 / 112),
+	-- Keep the label and its down-left OutlinedText shadow inside the raised Face.
+	-- Horizontally it spans x9..133 (shadow starts at x8.63); vertically its
+	-- shadow ends at y92.4, before the Face bottom at y93.
+	LabelPosition = Vector2.new(9 / 142, 66 / 112),
+	LabelSize = Vector2.new(124 / 142, 24 / 112),
+	LabelTextXAlignment = Enum.TextXAlignment.Center,
+	ShowReward = false,
+	LayerColor = Color3.new(1, 1, 1),
+	OutlineColor = Theme.Button.OutlineColor,
+	OuterGradient = Theme.Button.OuterGradient,
+	RimGradient = Theme.Button.RimGradient,
+	FaceGradient = Theme.Button.FaceGradient,
+	TextGradient = Theme.Button.TextGradient,
+	SelectedOuterGradient = Theme.PetCard.SelectOuterGradient,
+	SelectedRimGradient = Theme.PetCard.SelectRingGradient,
+	-- Setup remains secondary: selection is a gold perimeter around the same
+	-- familiar blue pressable face.
+	SelectedFaceGradient = Theme.Button.FaceGradient,
+	DisabledTransparency = 0.32,
+}
+
+-- Party Size uses four 101x84 horizontal controls across 452px:
+-- 4*101 + 3*16 = 452. The large numeral on the LEFT and friend glyph on the
+-- RIGHT make the two pieces readable without stacking either onto the lip.
+Theme.MatchPartyChoice = {
+	AspectRatio = 101 / 84,
+	OuterCorner = 0.20,
+	RimPosition = Vector2.new(5 / 101, 5 / 84),
+	RimSize = Vector2.new(91 / 101, 71 / 84),
+	RimCorner = 0.18,
+	FacePosition = Vector2.new(7 / 101, 7 / 84),
+	FaceSize = Vector2.new(87 / 101, 65 / 84),
+	FaceCorner = 0.17,
+	IconPosition = Vector2.new(51 / 101, 16 / 84),
+	IconSize = Vector2.new(42 / 101, 42 / 84),
+	-- Face is x7..94, y7..72. With the main 0.08*42 stroke, the count is
+	-- x7.64..50.36/y10.64..59.36; its offset shadow plus 0.06*42 stroke is
+	-- x8.37..49.41/y15.68..62.72. The icon ends at x93/y58, so every visible
+	-- pixel remains inside the Face rather than spilling onto the lower lip.
+	CountPosition = Vector2.new(11 / 101, 14 / 84),
+	CountSize = Vector2.new(36 / 101, 42 / 84),
+	IconName = "UiFriend",
+	LayerColor = Color3.new(1, 1, 1),
+	OutlineColor = Theme.Button.OutlineColor,
+	OuterGradient = Theme.Button.OuterGradient,
+	RimGradient = Theme.Button.RimGradient,
+	FaceGradient = Theme.Button.FaceGradient,
+	TextGradient = Theme.Button.TextGradient,
+	SelectedOuterGradient = Theme.PetCard.SelectOuterGradient,
+	-- On this compact tile a second gold band occupied too much of the surface
+	-- and competed with the cake hero. One gold perimeter is enough selection;
+	-- its interior keeps the ordinary blue button value family.
+	SelectedRimGradient = Theme.Button.RimGradient,
+	-- Match difficulty's quiet selected language: a gold perimeter around the
+	-- same blue face as its siblings. A pale fill made this tiny tile compete
+	-- with the cake gallery under Tonal/Squint even though it is only setup.
+	SelectedFaceGradient = Theme.Button.FaceGradient,
+	DisabledTransparency = 0.32,
+}
+
+-- Matchmaking's compact cake list. Nominal 294x58, re-cut from CakeChoice for
+-- the narrow setup rail instead of horizontally squashing its 442px grid.
+Theme.MatchCakeChoice = {
+	AspectRatio = 294 / 58,
+	OuterCorner = 0.22,
+	RimPosition = Vector2.new(5 / 294, 4 / 58),
+	RimSize = Vector2.new(284 / 294, 47 / 58),
+	RimCorner = 0.20,
+	FacePosition = Vector2.new(8 / 294, 6 / 58),
+	FaceSize = Vector2.new(278 / 294, 43 / 58),
+	FaceCorner = 0.19,
+	ThumbPosition = Vector2.new(14 / 294, 10 / 58),
+	ThumbSize = Vector2.new(38 / 294, 38 / 58),
+	TextPosition = Vector2.new(60 / 294, 14 / 58),
+	TextSize = Vector2.new(184 / 294, 30 / 58),
+	BadgeCenter = Vector2.new(266 / 294, 29 / 58),
+	BadgeSize = Vector2.new(34 / 294, 34 / 58),
+	LayerColor = Color3.new(1, 1, 1),
+	OutlineColor = Theme.Button.OutlineColor,
+	OuterGradient = Theme.Button.OuterGradient,
+	RimGradient = Theme.Button.RimGradient,
+	FaceGradient = Theme.Button.FaceGradient,
+	TextGradient = Theme.Button.TextGradient,
+	SelectedOuterGradient = Theme.PetCard.SelectOuterGradient,
+	SelectedRimGradient = Theme.PetCard.SelectRingGradient,
+	SelectedFaceGradient = Theme.PetCard.SelectFaceGradient,
+	LockedArtTransparency = 0.4,
+	DisabledTransparency = 0.32,
+}
+
+-- Matchmaking keeps its escape hatch discoverable without letting the global
+-- red close affordance become the screen's strongest color island. Geometry
+-- remains the standard Exit recipe; only the hue is folded into the header.
+local matchmakingCloseButton = table.clone(Theme.Exit)
+matchmakingCloseButton.OuterGradient = Theme.Button.OuterGradient
+matchmakingCloseButton.RimGradient = Theme.Header.RimGradient
+matchmakingCloseButton.InnerRimGradient = Theme.Header.RimGradient
+matchmakingCloseButton.FaceGradient = Theme.Header.FaceGradient
+matchmakingCloseButton.XOutline = Theme.Colors.Outline
+matchmakingCloseButton.XGradient = Theme.PetCard.NameGradient
+Theme.MatchmakingCloseButton = matchmakingCloseButton
+
+-- Matchmaking uses the standard saturated landscape header. The prior pale
+-- slate override looked detached from the rest of the candy-style catalog.
+local matchmakingHeader = table.clone(Theme.HeaderWide)
+Theme.MatchmakingHeader = matchmakingHeader
+
 local matchmakingStartButton = table.clone(Theme.EquipGreen)
-matchmakingStartButton.AspectRatio = 360 / 68
+-- One centred 760x76 footer CTA completes both columns. Its own layer and
+-- content fractions keep the very wide shelf physical without stretching the
+-- 418x103 reference button's inset math.
+matchmakingStartButton.AspectRatio = 760 / 76
+matchmakingStartButton.RimPosition = Vector2.new(6 / 760, 5 / 76)
+matchmakingStartButton.RimSize = Vector2.new(748 / 760, 61 / 76)
+matchmakingStartButton.FacePosition = Vector2.new(9 / 760, 7 / 76)
+matchmakingStartButton.FaceSize = Vector2.new(742 / 760, 56 / 76)
+-- The CTA is the screen's only large, high-chroma green field, so a child can
+-- find the next action before reading. The selected cake is the second read.
+matchmakingStartButton.RimGradient = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(7, 99, 32)),
+	ColorSequenceKeypoint.new(0.05, Color3.fromRGB(55, 205, 98)),
+	ColorSequenceKeypoint.new(0.72, Color3.fromRGB(18, 153, 56)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(5, 90, 28)),
+})
+matchmakingStartButton.FaceGradient = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 192, 70)),
+	ColorSequenceKeypoint.new(0.50, Color3.fromRGB(8, 153, 42)),
+	ColorSequenceKeypoint.new(0.93, Color3.fromRGB(4, 126, 28)),
+	ColorSequenceKeypoint.new(0.96, Color3.fromRGB(1, 81, 16)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(3, 97, 22)),
+})
+matchmakingStartButton.IconName = "UiTeleport"
+matchmakingStartButton.IconPosition = Vector2.new(221 / 760, 12 / 76)
+matchmakingStartButton.IconSize = Vector2.new(52 / 760, 52 / 76)
+matchmakingStartButton.IconColor = Color3.new(1, 1, 1)
+matchmakingStartButton.TextPosition = Vector2.new(289 / 760, 14 / 76)
+matchmakingStartButton.TextSize = Vector2.new(250 / 760, 44 / 76)
 Theme.MatchmakingStartButton = matchmakingStartButton
 
--- Matchmaking selector: wide configurator archetype, nominal 1000x600.
--- Content is 904x420 at x48..952, y132..552.
--- Vertical: 40+8+68+24+40+8+68+20+44+20+68+12 = 420 ✓.
--- Difficulty: 3*288 + 2*20 = 904 ✓.
--- Players:    4*211 + 3*20 = 904 ✓.
+-- Matchmaking selector: calm setup + narrow three-card cake rail, nominal
+-- 1000x600. Content is 904x432 at x48..952, y132..564.
+--
+-- ⚠ THE FLOOR IS 573, NOT 600. Theme.PanelWide's visible BODY FILL is
+-- y 96..573 (FillPosition 96/600 + FillSize 477/600); below that is the dark
+-- border ring (86..583), which content draws OVER at zIndex 5. Budgeting against
+-- the 600 nominal is the trap: it silently buys px that are not body, and the
+-- first cut of the cake band did exactly that (content to 576, so START's bottom
+-- 3 nominal px sat on the ring — ~5 real px at 1080p). 564 is the floor every
+-- peer wide layout already respects (Rewards footer 564, Shop pane 564).
+--
+-- Horizontal: setup 452 + empty gutter 32 + cake carousel 420 = 904 exactly.
+-- Upper configuration: 340px. Left is 28 + 12 + 112 + 48 + 28 + 12 + 84
+-- + 16 = 340; Right is 28 + 12 + 300 = 340.
+-- Footer: 340 + 8 + START 76 + 8 = 432. There is no separate status row.
+-- Difficulty: 3*142 + 2*13 = 452. Party: 4*101 + 3*16 = 452.
+-- Cakes: 8 + 3*264 + 2*16 + 8 = 840 = 2*420 canvas width. At offset
+-- zero Classic is fully visible (x8..272) and Rainbow is exactly half visible
+-- (x288..420 of x288..552). Rainbow centers at offset 210.
+--
 Theme.MatchmakingLayout = {
 	PanelAspect = 1000 / 600,
 	PanelMaxViewportFraction = 0.9,
+	-- If the ordinary 90%-of-screen fit overlaps Roblox's topbar, it may use
+	-- nearly all of the remaining safe region. This preserves useful touch-target
+	-- size on short landscape phones while retaining a small breathing margin.
+	SafeRegionMaxFraction = 0.98,
 	HeaderHeight = 120 / 600,
 	ContentZIndex = 5,
 	ContentPosition = Vector2.new(48 / 1000, 132 / 600),
-	ContentSize = Vector2.new(904 / 1000, 420 / 600),
+	ContentSize = Vector2.new(904 / 1000, 432 / 600),
+	CakeTitlePosition = Vector2.new(484 / 904, 0),
+	CakeTitleSize = Vector2.new(420 / 904, 28 / 432),
+	CakePanePosition = Vector2.new(484 / 904, 40 / 432),
+	CakePaneSize = Vector2.new(420 / 904, 300 / 432),
+	CakeOrientation = "horizontal",
+	CakeColumns = 1,
+	CakePaneWidthPx = 420,
+	CakePaneHeightPx = 300,
+	CakeCardWidthPx = 264,
+	CakeCardHeightPx = 292,
+	CakeCardGapPx = 16,
+	CakeCanvasPaddingPx = 8,
+	CakeCanvasCrossPaddingPx = 4,
+	CakeIncompleteRowAlignment = "left",
+	CakeCardAspectRatio = 264 / 292,
+	-- Unlock requirements belong to the locked cake card. The default panel has
+	-- no separate status row; busy/error feedback is carried by START itself.
+	CakeNoticeUsesStatus = false,
 	DifficultyTitlePosition = Vector2.new(0, 0),
-	DifficultyTitleSize = Vector2.new(904 / 904, 40 / 420),
-	DifficultyRowPosition = Vector2.new(0, 48 / 420),
-	DifficultyRowSize = Vector2.new(904 / 904, 68 / 420),
-	DifficultyChoiceWidth = 288 / 904,
-	DifficultyChoiceGap = 20 / 904,
-	DifficultyChoiceAspectRatio = 288 / 68,
-	PlayersTitlePosition = Vector2.new(0, 140 / 420),
-	PlayersTitleSize = Vector2.new(904 / 904, 40 / 420),
-	PlayersRowPosition = Vector2.new(0, 188 / 420),
-	PlayersRowSize = Vector2.new(904 / 904, 68 / 420),
-	PlayerChoiceWidth = 211 / 904,
-	PlayerChoiceGap = 20 / 904,
-	PlayerChoiceAspectRatio = 211 / 68,
-	StatusPosition = Vector2.new(0, 276 / 420),
-	StatusSize = Vector2.new(904 / 904, 44 / 420),
-	StartPosition = Vector2.new(272 / 904, 340 / 420),
-	StartSize = Vector2.new(360 / 904, 68 / 420),
+	DifficultyTitleSize = Vector2.new(452 / 904, 28 / 432),
+	DifficultyListPosition = Vector2.new(0, 40 / 432),
+	DifficultyListSize = Vector2.new(452 / 904, 112 / 432),
+	DifficultyOrientation = "horizontal",
+	DifficultyChoiceWidth = 142 / 452,
+	DifficultyChoiceGap = 13 / 452,
+	DifficultyChoiceAspectRatio = 142 / 112,
+	PartyTitlePosition = Vector2.new(0, 200 / 432),
+	PartyTitleSize = Vector2.new(452 / 904, 28 / 432),
+	PartyRowPosition = Vector2.new(0, 240 / 432),
+	PartyRowSize = Vector2.new(452 / 904, 84 / 432),
+	PartyChoiceWidth = 101 / 452,
+	PartyChoiceGap = 16 / 452,
+	PartyChoiceAspectRatio = 101 / 84,
+	StatusPosition = Vector2.new(0, 316 / 432),
+	StatusSize = Vector2.new(904 / 904, 24 / 432),
+	StartPosition = Vector2.new(72 / 904, 348 / 432),
+	StartSize = Vector2.new(760 / 904, 76 / 432),
 	-- START breathes while it can be pressed, and its dim-when-disabled CanvasGroup
 	-- CLIPS to its own bounds — a pulse inside a group sized exactly to the button
 	-- would have its peak sliced off on all four sides. So the group is grown by
@@ -843,9 +1191,29 @@ Theme.MatchmakingLayout = {
 	-- Must stay > Theme.Feel.Pulse.Scale (1.10) with a little margin for the
 	-- press/hover bounce (1.05) riding the same button.
 	StartPulseHeadroom = 1.18,
-	HeadingGradient = Theme.Header.TitleGradient,
-	StatusGradient = Theme.Button.TextGradient,
+	-- All three configuration headings share one visual language; Cake is a
+	-- sibling group, not a separate state or callout.
+	CakeHeadingGradient = Theme.PetCard.NameGradient,
+	CakeHeadingOutlineColor = Theme.Colors.TextOutline,
+	CakeNoticeGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(176, 210, 232)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(148, 188, 216)),
+	}),
+	CakeNoticeOutlineColor = Color3.fromRGB(122, 164, 196),
+	SetupHeadingGradient = Theme.PetCard.NameGradient,
+	ShowStatus = false,
+	ShowReadyStatus = false,
+	ShowBusyStatus = false,
+	-- The polished footer is transient system state only; setup guidance belongs
+	-- to the visible choice groups. Legacy/custom layouts keep guidance by default.
+	ShowSelectionStatus = false,
+	StatusGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(176, 210, 232)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(148, 188, 216)),
+	}),
+	StatusOutlineColor = Color3.fromRGB(122, 164, 196),
 	ErrorGradient = Theme.Exit.XGradient,
+	ErrorOutlineColor = Theme.Exit.XOutline,
 	TextOutlineColor = Theme.Colors.TextOutline,
 	StartDisabledTransparency = 0.38,
 }
@@ -1265,13 +1633,7 @@ Theme.ShopTabStates = {
 		-- L* band, so in grayscale the SELECTED tab was the least visible tab
 		-- (tonal audit 2026-08-01, tools/tonal-hierarchy). The anchor the
 		-- active state needs is VALUE, not more brightness.
-		FaceGradient = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(232, 176, 52)),
-			ColorSequenceKeypoint.new(0.50, Color3.fromRGB(214, 152, 38)),
-			ColorSequenceKeypoint.new(0.93, Color3.fromRGB(198, 138, 30)),
-			ColorSequenceKeypoint.new(0.96, Color3.fromRGB(162, 102, 16)),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(176, 114, 24)),
-		}),
+		FaceGradient = Theme.PetCard.SelectFaceGradient,
 		TextGradient = Theme.Rarity.Legendary.Text,
 	},
 	-- Idle: a LIGHT SKY-BLUE BUTTON — quieter than selected in both value and
@@ -2231,43 +2593,10 @@ Theme.ComboBadge = {
 	PulseTime = 0.18,
 }
 
--- Boss PRIZE card (HUD top-right, boss phase only). The stake of the fight: the
--- squishy this player is playing for, decided server-side when the boss opens
--- (features/cake-cycle.md). The finale used to be a blind tap race — you could
--- not see what you were fighting for until it was already yours.
--- ARCHETYPE: not a window — a HUD "reward on offer" strip, the plate-left /
--- text-column-right shape ShopTile uses, ratio-transferred to HUD height. It
--- wears the PRIZE'S OWN rarity accent (Theme.Rarity), so a Legendary on offer
--- reads across the room without reading the label.
--- Nominal 300x92.
--- Horizontal: 12 plate(68) 10 column(198) 12 = 300 ✓
--- Vertical plate:  12 plate(68) 12 = 92 ✓
--- Vertical column: 14 caption(24) 2 name(38) 14 = 92 ✓
--- Layers on H=92 (style-rules §2: ~6% top, ~2x that at the bottom):
---   outer top 5 (5.4%) / bottom 10 (10.9%);  rim ring 4 top / 4 bottom
-Theme.BossPrize = {
-	AspectRatio = 300 / 92,
-	OuterCorner = 0.16,
-	RimPosition = Vector2.new(7 / 300, 5 / 92),
-	RimSize = Vector2.new(286 / 300, 77 / 92),
-	RimCorner = 0.15,
-	FacePosition = Vector2.new(11 / 300, 9 / 92),
-	FaceSize = Vector2.new(278 / 300, 69 / 92),
-	FaceCorner = 0.14,
-	PlatePosition = Vector2.new(12 / 300, 12 / 92),
-	PlateSize = Vector2.new(68 / 300, 68 / 92),
-	IconInset = 0.06, -- the squishy nearly fills the plate (ShopTile's value)
-	CaptionPosition = Vector2.new(90 / 300, 14 / 92),
-	CaptionSize = Vector2.new(198 / 300, 24 / 92),
-	NamePosition = Vector2.new(90 / 300, 40 / 92),
-	NameSize = Vector2.new(198 / 300, 38 / 92),
-	PlateGradient = Theme.PetCard.PlateGradient,
-	PlateTransparency = Theme.PetCard.PlateTransparency,
-	-- The caption is the quiet line, the NAME is the prize: neutral card text for
-	-- the label, the rarity's own text colour for the name (Theme.Rarity carries
-	-- `Text`, so this needs no new palette — iron rule 7).
-	CaptionGradient = Theme.PetCard.NameGradient,
-}
+-- ⚠ Theme.BossPrize (the "FIGHTING FOR <squishy>" card) was REMOVED
+-- 2026-08-07 together with the prize preview itself — what a cleared cake
+-- pays out is a surprise again (features/cake-cycle.md). Its HUD slot
+-- (AppHud.BossPrizePosition/Height) went with it.
 
 -- Announce banner (HUD top-center, under the cake bar). One OutlinedText
 -- line, gold, auto-hides (duration seconds).
@@ -2276,6 +2605,71 @@ Theme.AnnounceBanner = {
 	TextGradient = Theme.PetCard.SelectRingGradient,
 	OutlineColor = Theme.Colors.TextOutline,
 	Duration = 3,
+}
+
+-- CELEBRATION BANNER (features/food-burst.md) — the three beats that are a
+-- MOMENT rather than a notification: a layer cleared, a crumb monster down, and
+-- the Cake Monster down. It rides above the HUD in the middle of the food
+-- burst.
+--
+-- ⚠ **No plate.** It shipped for one commit as a gold card and was cut on
+-- 2026-08-13 (user request): a slab that size parks a big opaque rectangle over
+-- the cake for three seconds, and the kit's own §2c warns that a dark outer pill
+-- under a raised lighter face reads PRESSABLE — which on a non-interactive
+-- splash, for an audience of pre-readers, is an invitation to tap. What carries
+-- it instead is SIZE plus `OutlinedText`'s own thick stroke and shadow copy,
+-- the same contrast mechanism the plain AnnounceBanner already relies on, at
+-- ~2.7x the height.
+--
+-- Nominal 900x260, pure type.
+-- Vertical:   30 pad, cheer(140), 16 gap, sub(46), 28 pad = 260 ✓
+-- Cheer horiz: 20 cheer(860) 20 = 900 ✓
+-- Sub horiz:   70 sub(760)   70 = 900 ✓
+Theme.CelebrationBanner = {
+	AspectRatio = 900 / 260,
+	CheerPosition = Vector2.new(20 / 900, 30 / 260),
+	CheerSize = Vector2.new(860 / 900, 140 / 260),
+	SubPosition = Vector2.new(70 / 900, 186 / 260),
+	SubSize = Vector2.new(760 / 900, 46 / 260),
+
+	-- The cheer is the kit's celebration gold — the same gradient the announce
+	-- banner uses, so the two beats are visibly the same family at two sizes.
+	-- The subtitle is plain white so the hierarchy is unambiguous: gold shouts,
+	-- white informs.
+	CheerGradient = Theme.PetCard.SelectRingGradient,
+	CheerOutlineColor = Theme.Colors.TextOutline,
+	SubGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+		ColorSequenceKeypoint.new(0.55, Color3.fromRGB(246, 250, 255)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(222, 238, 255)),
+	}),
+	SubOutlineColor = Theme.Colors.TextOutline,
+
+	-- MOTION. Slam in, breathe and sway, launch out. With the plate gone the
+	-- animation IS the design, so the hold does two things at once rather than
+	-- just pulsing. Timeline must fit inside `Duration`, which is what the
+	-- caller holds the state for:
+	--   0.30 enter + 2.60 hold + 0.34 exit = 3.24 < 3.50 ✓
+	-- ⚠ Every property animated here is one React NEVER writes (the UIScale's
+	-- Scale, the CanvasGroup's GroupTransparency and Rotation) — ADR-0006. The
+	-- HUD re-renders ~14x/second, and a React-controlled property would be
+	-- snapped back to its prop value mid-tween on the next bite.
+	EnterScale = 0.35,
+	EnterTilt = -7, -- degrees; unwinds to 0 as it slams in
+	EnterTween = TweenInfo.new(0.30, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+	BreathScale = 1.045,
+	BreathTween = TweenInfo.new(0.70, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+	-- A slow sway across the breathe, so the words feel alive rather than
+	-- mechanically pulsing. Small on purpose: past ~2.5 degrees a long cheer
+	-- starts to read as crooked rather than bouncy.
+	WobbleDegrees = 1.6,
+	WobbleTween = TweenInfo.new(0.95, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+	-- ⚠ Raised 1.5 -> 2.6 on 2026-08-13: at the old timing the phrase was gone
+	-- before it had been read, which for a randomised line is the whole point.
+	HoldSeconds = 2.6,
+	ExitScale = 1.30,
+	ExitTween = TweenInfo.new(0.34, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+	Duration = 3.5,
 }
 
 -- Upgrade row (upgrades list archetype). Nominal 418x82, ShopRow family.
@@ -2445,9 +2839,12 @@ Theme.CheckpointButton = buttonStyleWithAspect(Theme.EquipGreen, 300 / 64) -- HU
 -- cake progress bar, combo badge, announce banner. Two pills stack at
 -- y 24..88 and 96..160; the menu (icon GRID) moves DOWN to clear them:
 -- at 2 columns its tallest sane form is 4 rows: 4*132 + 3*14 = 570 ->
--- y 172..742 on the 1080 reference ✓ (it holds up to 7 buttons today: the five
+-- y 172..742 on the 1080 reference ✓ (it holds up to 8 buttons today: the SIX
 -- meta panels plus Invite Friends and the community reward, each of the last two
--- shown only once its server push arrives).
+-- shown only once its server push arrives). ⚠ 8 is the CEILING of that 4-row
+-- budget, not headroom: a 9th entry wraps to a 5th row (5*132 + 4*14 = 716 ->
+-- y 172..888) straight into the checkpoint button's band at y 897. The roster
+-- itself is AppRoot's `menu` table — this comment only owns the arithmetic.
 Theme.AppHud.SecondPillPosition = Vector2.new(22 / 1920, 96 / 1080)
 Theme.AppHud.MenuPosition = Vector2.new(22 / 1920, 172 / 1080)
 Theme.AppHud.BellyPosition = Vector2.new(0.5, 0.955) -- anchor (0.5, 1)
@@ -2458,12 +2855,32 @@ Theme.AppHud.ComboPosition = Vector2.new(0.82, 0.40)
 Theme.AppHud.ComboHeight = 84 / 1080
 Theme.AppHud.AnnouncePosition = Vector2.new(0.5, 92 / 1080)
 Theme.AppHud.AnnounceHeight = 52 / 1080
+-- Celebration splash: centred, anchored at its MIDDLE (unlike the announce
+-- banner, which hangs from its top edge) because it scales about that point.
+-- ⚠ **`CelebrationHeight` is the lever that actually sizes it, not the width.**
+-- The component's UIAspectRatioConstraint leaves `AspectType` at the default
+-- `FitWithinMaxSize`, under which BOTH axes bound and the smaller one wins —
+-- `DominantAxis` applies only to `ScaleWithParentSize` (same trap already
+-- documented for Button above). At 16:9 the height binds: 0.2667x1080 = 288 px
+-- tall x 996.9 wide, and width would only take over below 0.5192. The 0.52
+-- here sits 1.5 px on the inert side ON PURPOSE — it is the ceiling that stops
+-- the splash spanning an ultrawide, not the size. To make it bigger, raise
+-- CelebrationHeight.
+-- ⚠ The splash and the confetti DO overlap: sprites top out at ~0.31 down the
+-- screen with their centres, and the cheer line spans ~0.13..0.27, so the
+-- tallest ones cross it. That is why the burst lives in its own ScreenGui one
+-- DisplayOrder BELOW UiRoot (FoodBurst.lua) — they pass BEHIND the words.
+-- Raising `launchApex` or `sizeRange` costs nothing here; there is no spatial
+-- margin to protect, only the layer split. It matters more now the plate is
+-- gone: the words' only ground is OutlinedText's stroke, so keep that stroke
+-- and never let a future variant drop it.
+Theme.AppHud.CelebrationPosition = Vector2.new(0.5, 250 / 1080)
+Theme.AppHud.CelebrationWidth = 0.52
+Theme.AppHud.CelebrationHeight = 288 / 1080
 --- Boss prize card: top-RIGHT, level with the calories pill on the left (same
 --- 22px reference margin, same 26px top). Anchor (1, 0). The only free corner
 --- during a boss fight — top-centre is the HP bar + announce banner, and
 --- bottom-right is the touch EAT button.
-Theme.AppHud.BossPrizePosition = Vector2.new(1 - 22 / 1920, 26 / 1080)
-Theme.AppHud.BossPrizeHeight = 76 / 1080 -- taller than a 64/1080 stat pill: it is a prize
 -- Return-to-checkpoint button: bottom-center, just ABOVE the belly bar (belly
 -- full -> burn is right here). Anchor (0.5, 1); height on the 1080 reference.
 Theme.AppHud.CheckpointPosition = Vector2.new(0.5, 897 / 1080)
@@ -2490,6 +2907,10 @@ Theme.AppHud.MenuIcons = {
 	Settings = Icons.UiSettings,
 	Upgrades = Icons.UiStrength,
 	Index = Icons.BadgeStats,
+	-- Cake selection (features/cake-select.md). The generic cake glyph, NOT one
+	-- of the two cake artworks: the button opens the chooser, so wearing either
+	-- product's art would read as "play this one".
+	Cakes = Icons.UiCake,
 	-- The two social offers. Distinct on purpose: `UiFriend` is a person (send an
 	-- invite), `UiHeart` is the LIKE the community reward asks for — the shop's
 	-- Free row already wears UiFriend for the group row, so the heart is what
@@ -2509,6 +2930,232 @@ Theme.AppHud.MenuIcons = {
 Theme.AppHud.PillIcons = {
 	Calories = "BadgeLightning",
 	Gems = "UiGem",
+}
+
+-- ===== CAKE SELECTION (features/cake-select.md) =============================
+--
+-- Archetype: the "teleport / worlds" window — a set of LARGE cards, each an art
+-- plate + a name + an unlock requirement, with unavailable cards dimmed under a
+-- badge. A BROWSABLE GALLERY: grid + the kit's custom scrollbar, because the
+-- catalogue grows (it already carries a "coming soon" slot whose whole job is to
+-- say so).
+--
+-- ⚠ REBUILT 2026-08-11 from two fixed centred cells. That version put 2 cards in
+-- a 904 box and left ~160px of dead margin around them, so the panel read as
+-- mostly empty chrome and the CAKES — the only thing on it worth looking at —
+-- were not the focus. Three columns filling 870 of the 904 fixes exactly that.
+--
+-- Panel 1000x600. Grid pane 904x396 at x48..952, y132..528 (bottom margin 72).
+-- Horizontal: window 870 + gap 12 + bar 22 = 904 ✓
+--             cells   3*282 + 2*12 = 870 ✓ exact (CellWidth shaved to 281.5 —
+--             an exact-fit grid can wrap its last cell on float rounding)
+-- Vertical:   cell 348 + gap 16 = 364 per row; window 396 shows one full row
+--             plus 32px of the next, which is what advertises the scroll.
+--             4 cakes -> 2 rows -> canvas 1.84x the window -> the bar appears.
+--
+-- ⚠ ScrollPane HIDES its track when the canvas provably fits (canvasHeightScale
+-- <= 1.001) — deliberate: a full-height thumb that cannot move advertises
+-- content that is not there. So with a single row of cakes there is no visible
+-- scrollbar, BY DESIGN, and it appears by itself at the 4th cake.
+--
+-- ⚠ The aspect is IDENTICAL to Theme.RewardsLayout, so AppRoot reuses its
+-- existing `wideScale` and no new scale state is needed. If this ever diverges,
+-- a `cakeScale` must be added in BOTH coupled sites in AppRoot: the useState
+-- initializer AND the `refit` body — miss the second and the panel stops
+-- resizing with the window.
+Theme.CakeSelectLayout = {
+	PanelAspect = 1000 / 600,
+	PanelMaxViewportFraction = 0.9,
+	HeaderHeight = 120 / 600,
+	ContentZIndex = 5,
+	GridPosition = Vector2.new(48 / 1000, 132 / 600),
+	GridSize = Vector2.new(904 / 1000, 396 / 600),
+	ScrollWindowFraction = 870 / 904,
+	ScrollBarWidth = 22 / 904,
+	Columns = 3,
+	CellWidth = 281.5 / 870,
+	CellPaddingX = 12 / 870,
+	CellHeightWithGap = 364 / 396,
+	-- The card occupies the top of its cell; the remaining 16/364 IS the row gap
+	-- (baked into the cell, per the kit's grid math — a UIGridLayout Y padding
+	-- would fight the deterministic canvas height).
+	CardHeightInCell = 348 / 364,
+}
+
+-- The cake card. Nominal 282x348 (0.810 — portrait, inside §2b's 0.78-0.85).
+--
+-- A CARD IS A FRAME, NOT A BUTTON (style-rules §2b): EVEN outline and internal
+-- ZONES, never the button recipe's 2x+ bottom lip. Ratio-transferred from
+-- Theme.ShopCard (282x338), minus the price shelf — a cake is chosen, not bought
+-- — and with the art window GROWN into the space the shelf freed, because the
+-- ART IS THE PRODUCT here and this audience may not read the name at all.
+-- Icon 180² = 33% of the cell, against the shop card's 22% on the same width.
+--
+-- CHROME  Outer 0..282 x 0..348 r 0.14
+--         Face  7..275 x 7..338 — outline 7 top/sides, 10 bottom (1.43x ✓, and
+--         nowhere near the 2x+ that says "press me")
+-- VERTICAL inside the face (331):
+--   11 · 210 art · 10 · 38 title · 4 · 32 status · 26 = 331 ✓
+--   art 18..228 · title 238..276 · status 280..312
+-- HORIZONTAL: one content column x 18..264 (246) shared by art, title and
+--   status — the shared left/right edge is most of why a card reads as tidy.
+--   ✓ 18 + 246 + 18 = 282
+-- ART WINDOW: ring 18..264 x 18..228, face inset an EVEN 5 all round (a window,
+--   not a bevel). Icon 180² centred on both the card and the window.
+Theme.CakeCard = {
+	AspectRatio = 282 / 348,
+	OuterCorner = 0.14,
+	FacePosition = Vector2.new(7 / 282, 7 / 348),
+	FaceSize = Vector2.new(268 / 282, 331 / 348),
+	FaceCorner = 0.123,
+	ArtPosition = Vector2.new(18 / 282, 18 / 348),
+	ArtSize = Vector2.new(246 / 282, 210 / 348),
+	ArtCorner = 0.13,
+	ArtFacePosition = Vector2.new(23 / 282, 23 / 348),
+	ArtFaceSize = Vector2.new(236 / 282, 200 / 348),
+	ArtFaceCorner = 0.12,
+	IconPosition = Vector2.new(51 / 282, 33 / 348),
+	IconSize = Vector2.new(180 / 282, 180 / 348),
+	TitlePosition = Vector2.new(18 / 282, 238 / 348),
+	TitleSize = Vector2.new(246 / 282, 38 / 348),
+	StatusPosition = Vector2.new(18 / 282, 280 / 348),
+	StatusSize = Vector2.new(246 / 282, 32 / 348),
+	BadgeCenter = Vector2.new(240 / 282, 40 / 348), -- art window's top-right
+	BadgeSize = Vector2.new(48 / 282, 48 / 348),
+	OutlineColor = Theme.ShopCardBody.OutlineColor,
+	OuterGradient = Theme.ShopCardBody.OuterGradient,
+	FaceGradient = Theme.ShopCardBody.FaceGradient,
+	TitleGradient = Theme.ShopCardBody.TitleGradient,
+	StatusGradient = Theme.ShopCardBody.PerkGradient,
+	-- SELECTED = the kit's existing gold selection accent as a gradient swap on
+	-- the Outer, exactly like PetCard and ShopCard's `premium`. Geometry never
+	-- changes with state, and there is NO external ring (it would clip).
+	SelectedOuterGradient = Theme.PetCard.SelectOuterGradient,
+	-- LOCKED. Grey is overloaded in this kit (locked / disabled / sold out /
+	-- can't-afford) and has misfired twice before, so the rule here is narrow:
+	-- ONLY the locked card goes grey. An unselected-but-UNLOCKED card keeps the
+	-- normal navy body — quieting it as well would make "not currently chosen"
+	-- and "you cannot have this" look identical.
+	-- The art is FADED, not tinted: a full-strength rainbow on a grey card would
+	-- become the loudest unselectable object on the panel. It must still read
+	-- clearly, because seeing what you have not unlocked yet is the entire point
+	-- of showing a locked card at all.
+	LockedArtTransparency = 0.4,
+	LockedOuterGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(56, 62, 72)),
+		ColorSequenceKeypoint.new(0.06, Color3.fromRGB(38, 43, 52)),
+		ColorSequenceKeypoint.new(0.85, Color3.fromRGB(34, 39, 47)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(42, 48, 58)),
+	}),
+	LockedFaceGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(124, 130, 142)),
+		ColorSequenceKeypoint.new(0.05, Color3.fromRGB(108, 114, 126)),
+		ColorSequenceKeypoint.new(0.55, Color3.fromRGB(92, 98, 110)),
+		ColorSequenceKeypoint.new(0.93, Color3.fromRGB(80, 86, 98)),
+		ColorSequenceKeypoint.new(0.96, Color3.fromRGB(58, 63, 74)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(68, 74, 86)),
+	}),
+	-- The locked card's art WINDOW also leaves the accent family. Keeping a
+	-- Legendary-gold window on a grey body would make the one thing the player
+	-- cannot pick the brightest object on the panel — the window still reads as
+	-- a window because it stays a value step LIGHTER than the body face.
+	LockedArtFaceGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(176, 183, 196)),
+		ColorSequenceKeypoint.new(0.55, Color3.fromRGB(150, 157, 170)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(128, 135, 148)),
+	}),
+	LockedTitleGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(226, 231, 240)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(190, 197, 210)),
+	}),
+	LockedStatusGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(214, 220, 230)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(180, 188, 202)),
+	}),
+}
+
+-- Matchmaking's child-first cake tile, nominal 264x292. It is the large card in
+-- a 420px horizontal peek carousel: one full card plus half of the next is the
+-- direct-manipulation cue. Free-standing 190px art leads; localized names and
+-- requirements keep distinct lower zones. Face inset is 6px on every side:
+-- even CARD outline, never a button lip.
+local matchCakeCard = table.clone(Theme.CakeCard)
+matchCakeCard.AspectRatio = 264 / 292
+matchCakeCard.OuterCorner = 0.14
+matchCakeCard.FacePosition = Vector2.new(6 / 264, 6 / 292)
+matchCakeCard.FaceSize = Vector2.new(252 / 264, 280 / 292)
+matchCakeCard.FaceCorner = 0.13
+matchCakeCard.ShowArtPlate = false
+matchCakeCard.ArtPosition = Vector2.new(32 / 264, 8 / 292)
+matchCakeCard.ArtSize = Vector2.new(200 / 264, 190 / 292)
+matchCakeCard.ArtCorner = 0.14
+matchCakeCard.ArtFacePosition = Vector2.new(37 / 264, 13 / 292)
+matchCakeCard.ArtFaceSize = Vector2.new(190 / 264, 180 / 292)
+matchCakeCard.ArtFaceCorner = 0.13
+matchCakeCard.IconPosition = Vector2.new(32 / 264, 8 / 292)
+matchCakeCard.IconSize = Vector2.new(200 / 264, 190 / 292)
+matchCakeCard.TitlePosition = Vector2.new(6 / 264, 198 / 292)
+matchCakeCard.TitleSize = Vector2.new(252 / 264, 44 / 292)
+matchCakeCard.StatusPosition = Vector2.new(12 / 264, 244 / 292)
+matchCakeCard.StatusSize = Vector2.new(240 / 264, 38 / 292)
+matchCakeCard.StatusTextWrapped = true
+matchCakeCard.BadgeCenter = Vector2.new(232 / 264, 30 / 292)
+matchCakeCard.BadgeSize = Vector2.new(44 / 264, 44 / 292)
+-- Gold already says SELECTED everywhere in the kit. Keep the broad Face in the
+-- kit's royal-navy card family: it replaces the unrelated flavour/rarity purple,
+-- contrasts the pale panel at a squint, and leaves setup's small blue buttons
+-- visually secondary.
+matchCakeCard.SelectedFaceGradient = Theme.ShopCardBody.FaceGradient
+matchCakeCard.DisabledOverlayColor = Color3.fromRGB(8, 20, 34)
+matchCakeCard.DisabledOverlayTransparency = 0.38
+Theme.MatchCakeCard = matchCakeCard
+
+-- The compact cake strip for the matchmaking window's third band. Nominal
+-- 442x60, ratio-transferred from Theme.MatchChoice (288x68) so it sits in the
+-- same row family as the difficulty and party tiles: a BUTTON recipe here, not
+-- the card recipe, because its siblings in that window are buttons.
+-- Face 12..430 x 6..51 — top 6 / bottom 9 (1.5x), matching MatchChoice's weight.
+-- Horizontal: thumb 22..62 · label 76..380 · lock badge centred at 404
+Theme.CakeChoice = {
+	AspectRatio = 442 / 60,
+	OuterCorner = 0.22,
+	RimPosition = Vector2.new(8 / 442, 4 / 60),
+	RimSize = Vector2.new(426 / 442, 49 / 60),
+	RimCorner = 0.20,
+	FacePosition = Vector2.new(12 / 442, 6 / 60),
+	FaceSize = Vector2.new(418 / 442, 45 / 60),
+	FaceCorner = 0.19,
+	ThumbPosition = Vector2.new(22 / 442, 10 / 60),
+	ThumbSize = Vector2.new(40 / 442, 40 / 60),
+	TextPosition = Vector2.new(76 / 442, 14 / 60),
+	TextSize = Vector2.new(304 / 442, 32 / 60),
+	BadgeCenter = Vector2.new(404 / 442, 30 / 60),
+	BadgeSize = Vector2.new(34 / 442, 34 / 60),
+	LayerColor = Color3.new(1, 1, 1),
+	OutlineColor = Theme.Button.OutlineColor,
+	OuterGradient = Theme.Button.OuterGradient,
+	RimGradient = Theme.Button.RimGradient,
+	FaceGradient = Theme.Button.FaceGradient,
+	TextGradient = Theme.Button.TextGradient,
+	SelectedOuterGradient = Theme.PetCard.SelectOuterGradient,
+	SelectedRimGradient = Theme.PetCard.SelectRingGradient,
+	LockedArtTransparency = 0.4,
+	DisabledTransparency = 0.32,
+}
+
+-- The lock mark. Same geometry as Theme.Badge, different hue on purpose: the
+-- default badge is GREEN, which in this kit means owned / claimed / available —
+-- precisely the opposite of what this one says.
+Theme.CakeLockBadge = {
+	AspectRatio = 1,
+	RingColor = Color3.fromRGB(24, 28, 36),
+	FillGradient = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(150, 158, 172)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(104, 112, 126)),
+	}),
+	FillPosition = Vector2.new(0.13, 0.13),
+	FillSize = Vector2.new(0.74, 0.74),
+	IconInset = 0.18,
 }
 
 -- ===== Upgrades HEX TREE (features/upgrades.md) =====
@@ -2861,13 +3508,22 @@ Theme.TutorialHint = {
 	-- CakeBar's bottom edge is inside the topbar-INSET Hud frame and so slides
 	-- DOWN as the window gets shorter. At 0.30 the two cleared by 7px at the
 	-- 1920x1080 reference and COLLIDED on every smaller window (at 800x450 the
-	-- card covered ~90% of the bar). 0.40 clears it on every size.
+	-- card covered ~90% of the bar).
+	-- ⚠ RE-SOLVED 2026-08-09 for the safe-area inset (Theme.SafeArea): the Hud
+	-- layer now starts at max(GetGuiInset().Y, TopbarInset.Max.Y) + TopPadPx
+	-- instead of GetGuiInset().Y, which pushed the CakeBar ~30px further down
+	-- while this card — a FULL-BLEED child — did not move, and 0.40 went from
+	-- clearing by 4px to covering the bar outright on a phone. The clearance is
+	--   P·H  -  cardH/2  ≥  topInset + 0.024·(H−topInset) + barH
+	-- worst at the SHORTEST viewport (the card is height-capped at 0.52·H, the
+	-- bar is a near-fixed pixel strip). Solved at 896x414 with topInset 68:
+	-- bar bottom 94.3, card half-height 97.7 → P ≥ 0.483. 0.50 keeps ~15px.
 	-- BELOW: the card's bottom must stay off the bottom-centre belly bar / TO
 	-- CHECKPOINT button and off the bottom-right touch EAT button, which on
-	-- phones is the control this very card is pointing at. At 16:9 the card
-	-- spans y 0.206..0.594 and x 0.24..0.76; the EAT button starts at x 0.76,
-	-- y 0.56 — adjacent, never overlapping.
-	Position = Vector2.new(0.5, 0.40), -- anchor (0.5, 0.5)
+	-- phones is the control this very card is pointing at. At 0.50 the card
+	-- bottom is 304.7 of 414 on a phone (belly bar starts 377.9) and 749 of 1080
+	-- at the reference — clear at both ends.
+	Position = Vector2.new(0.5, 0.50), -- anchor (0.5, 0.5)
 	OuterCorner = 0.14,
 	OutlineColor = Theme.ShopCardBody.OutlineColor,
 	OuterGradient = Theme.ShopCardBody.OuterGradient,
@@ -2981,6 +3637,48 @@ Theme.Feel.Pulse = {
 }
 table.freeze(Theme.Feel.Pulse)
 
+-- Staggered ENTRANCE for a fixed set of sibling cards (the onboarding comic).
+-- A child is HIDDEN until its turn, then pops from ClosedScale — otherwise every
+-- piece is already on screen (0.68 is fully opaque) and the board only *grows*
+-- in sequence instead of arriving one piece at a time. Each child owns its own
+-- effect, tween and cleanup, so a stagger cannot leave one piece behind; the
+-- tween is the ONLY writer of those UIScales, and React writes `Visible` exactly
+-- once with a constant (ADR-0006 — no `Scale` prop is ever passed).
+--
+-- ⚠ ClosedScale is bounded by the board's own gaps, not by taste. Back-out
+-- overshoots to ~1 + 0.10 * travel, and the growth lands HALF on each side:
+-- a comic panel is 440 of 900 nominal px with a 20 px gap to its neighbour, so
+-- two adjacent panels at peak may each grow at most 10 px.
+--   travel 1 - 0.68 = 0.32  ->  peak ~1.032  ->  440 * 0.032 / 2 = 7.0 px  ✓
+-- Lowering ClosedScale past ~0.60 makes neighbours touch at the peak.
+-- ⚠ StepSeconds > the tween's duration, ON PURPOSE (retuned 2026-08-09 after the
+-- first cut read as "they all appear at once"): at a 0.12 s step against a
+-- 0.36 s pop, four panels were mid-flight simultaneously and the eye saw one
+-- event, not four. A step LONGER than the pop means each piece has landed
+-- before the next one starts, which is what "one after another" has to mean.
+-- It also removes the overshoot coupling entirely — two neighbours can no
+-- longer peak at the same time.
+Theme.Feel.SlideIn = {
+	ClosedScale = 0.68,
+	Tween = TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+	-- Scrims fade on their OWN tween: Back's overshoot is the point on a scale
+	-- and a defect on a transparency, where it drives the value past the target
+	-- (a 0.24 dim dips to ~0.16, and anything under ~0.09 would clip at 0 and
+	-- flash fully opaque).
+	FadeTween = TweenInfo.new(0.36, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	-- A beat after the loading screen clears before anything moves, so the first
+	-- pop is not already underway on the player's first rendered frame.
+	LeadDelay = 2.0, -- the board title goes first
+	StepSeconds = 0.85, -- gap between consecutive children (> Tween's 0.32)
+	TailDelay = 0.30, -- extra beat before the trailing CTA
+	-- Resulting choreography, measured from the moment the session is ON SCREEN
+	-- (see the game.Loaded gate in TutorialSlides): title 0.25, panels at
+	-- 0.80 / 1.35 / 1.90 / 2.45, CTA at 3.20, everything landed by 3.52 s.
+	-- 0.12 then 0.38 were both still read as simultaneous by the author of the
+	-- request: the gap has to be long enough to be COUNTED, not merely measured.
+}
+table.freeze(Theme.Feel.SlideIn)
+
 table.freeze(Theme.Rarity.Uncommon)
 table.freeze(Theme.Rarity.Secret)
 table.freeze(Theme.BuyButton)
@@ -2993,6 +3691,7 @@ table.freeze(Theme.BellyBar)
 table.freeze(Theme.CakeBar)
 table.freeze(Theme.ComboBadge)
 table.freeze(Theme.AnnounceBanner)
+table.freeze(Theme.CelebrationBanner)
 table.freeze(Theme.UpgradeRow)
 table.freeze(Theme.UpgradesLayout)
 table.freeze(Theme.GymOverlay)
@@ -3002,6 +3701,16 @@ table.freeze(Theme.RebirthLayout.StatPositions)
 table.freeze(Theme.RebirthLayout)
 table.freeze(Theme.SocialLayout)
 table.freeze(Theme.MatchChoice)
+table.freeze(Theme.MatchModeCard)
+for _, accent in pairs(Theme.MatchModeAccents) do
+	table.freeze(accent)
+end
+table.freeze(Theme.MatchModeAccents)
+table.freeze(Theme.MatchDifficultyChoice)
+table.freeze(Theme.MatchPartyChoice)
+table.freeze(Theme.MatchCakeChoice)
+table.freeze(Theme.MatchmakingCloseButton)
+table.freeze(Theme.MatchmakingHeader)
 table.freeze(Theme.MatchmakingStartButton)
 table.freeze(Theme.MatchmakingLayout)
 table.freeze(Theme.HexTree.States.locked)
@@ -3041,6 +3750,7 @@ table.freeze(Theme.HeaderWide)
 table.freeze(Theme.IconButton)
 table.freeze(Theme.ActionButton)
 table.freeze(Theme.Scrollbar)
+table.freeze(Theme.HorizontalScrollbar)
 table.freeze(Theme.Rarity.Order)
 table.freeze(Theme.Rarity.Common)
 table.freeze(Theme.Rarity.Rare)
@@ -3100,6 +3810,11 @@ table.freeze(Theme.HudMenuButton)
 table.freeze(Theme.AppHud.MenuIcons)
 table.freeze(Theme.AppHud.PillIcons)
 table.freeze(Theme.AppHud)
+table.freeze(Theme.CakeSelectLayout)
+table.freeze(Theme.CakeCard)
+table.freeze(Theme.MatchCakeCard)
+table.freeze(Theme.CakeChoice)
+table.freeze(Theme.CakeLockBadge)
 
 Theme.Icons = table.freeze(Icons)
 
@@ -3147,6 +3862,24 @@ function Theme.ShopAccent(name: string?)
 			.. `Valid keys are the Theme.ShopCardAccents tiers; set it in ShopData.`
 	)
 	return Theme.ShopCardAccents[Theme.ShopCardAccentDefault]
+end
+
+--API
+-- Resolve match-mode presentation metadata to an art-window accent. Unknown
+-- names warn once and fall back to Easy green; a silent fallback would make a
+-- mistyped difficulty look intentionally wrong (R8).
+function Theme.MatchModeAccent(name: string?)
+	local accent = Theme.MatchModeAccents[name or "easy"]
+	if accent then
+		return accent
+	end
+	Log.Once(
+		"UIKit",
+		`match-mode-accent-{tostring(name)}`,
+		`unknown match mode accent '{tostring(name)}' — falling back to easy. `
+			.. `Valid keys are easy, medium, hard; set it in MatchConfig.`
+	)
+	return Theme.MatchModeAccents.easy
 end
 
 --API
