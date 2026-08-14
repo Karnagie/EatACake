@@ -42,11 +42,24 @@ exactly that one on a win (`features/cake-cycle.md`). Any reward that should be
 visible before it is earned uses the split; anything revealed at the moment of
 winning keeps using `Roll`.
 
+## Where the panel opens
+The lobby's meta menu, **and** the game HUD's own menu since 2026-08-13
+(`features/app-root.md`) — so a squishy can be equipped mid-run. This needed no
+new wiring: `PetSubs`, `PetsSubsClient`, `LocalPetsService` and the panel are all
+COMMON, and `PetsSubsClient` already owns the follower step in BOTH places. The
+equip round-trip is `EquipPet` → validate → `PetsUpdate` + the `EquippedPets`
+attribute, so the follower changes in the same push.
+⚠ `slots` is a GAMEPASS perk on a PUSHED snapshot — a VIP bought mid-run used to
+leave the panel showing "3 / 3" until the next place transition. It is re-pushed
+now (`features/shop.md`, Gamepasses).
+
 ## Flow
 - Cycle reward / `egg` grants → `PetRollUpdate {petId, rarity, copies,
   isNew, source}` (reveal UI) + `PetsUpdate {collection, slots}`.
-- Boss phase: `pendingPet {petId, rarity}` per player on `CakeCycleUpdate` →
-  `LocalPetsService.BuildPrize` → kit `BossPrizeCard`.
+- ⚠ Boss phase used to ADVERTISE the prize (`pendingPet` per player →
+  `BuildPrize` → `BossPrizeCard`). REMOVED 2026-08-07 by request — what a cleared
+  cake pays is a surprise again. `PetService.Preview`/`Grant` stay split (`Roll`
+  is built from them); there is simply no second caller.
 - `EquipPet` remote (petId, equip) → PetService validate → `PetsUpdate`.
 - Followers: server writes attribute `EquippedPets` = csv petIds; every
   client renders primitive followers locally (`PetFollowers`, R5 templates).

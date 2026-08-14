@@ -116,7 +116,25 @@ function AnalyticsSubsClient.Start(data, modules)
 	end)
 
 	-- ── panel watcher (polled — see the header) ──────────────────────────
+	-- ⚠ RE-OPEN DEBOUNCE (2026-08-13). Every panel used to be a lobby menu entry
+	-- or, for the upgrade tree, a ProximityPrompt you had to WALK to. The game
+	-- HUD now carries Upgrades / Shop / Squishies as icons that BADGE and BREATHE
+	-- when something is affordable, which is exactly the shape a child mashes.
+	-- One toggle costs three beats that do NOT coalesce (`panel` open + `panel`
+	-- close + the funnel step), so a mash burns the server's per-player admission
+	-- and takes that player's REAL beats down with it for the rest of the minute.
+	-- The first open of a panel always reports; a repeat inside
+	-- `client.panelReopenSeconds` reports nothing. `lastPanel` / `SetScreen` are
+	-- updated either way — the screen tag is not a beat and must stay truthful.
 	local lastPanel: string? = nil
+	-- Was `lastPanel`'s OPEN reported? A close is emitted only when its open was,
+	-- so opens and closes always pair — a dashboard reading closes without opens
+	-- would look like a data fault, which is worse than the beats we saved.
+	local lastPanelReported = false
+	-- Per panel, when its open was last REPORTED. Measuring the window from the
+	-- reported open (not from every open) is what stops a mash walking the
+	-- deadline forward one tap at a time.
+	local lastReportedOpenAt: { [string]: number } = {}
 	local function pollPanel()
 		if AppRoot == nil then
 			return
@@ -125,21 +143,29 @@ function AnalyticsSubsClient.Start(data, modules)
 		if current == lastPanel then
 			return
 		end
-		if lastPanel ~= nil then
+		if lastPanel ~= nil and lastPanelReported then
 			Analytics.Panel(lastPanel, false)
 		end
+		local reported = false
 		if current ~= nil then
-			Analytics.Panel(current, true)
-			if current == "Shop" then
-				-- A fresh shop VISIT, not another step on the last one; the
-				-- `shop` beat kind logs the count and the funnel step together.
-				Analytics.Track("shop", "open", "panel", { urgent = true })
-			elseif current == "Upgrades" then
-				Analytics.Funnel("upgrades", "open")
-				Analytics.Flow("upgrades-open")
+			local previous = lastReportedOpenAt[current]
+			local now = os.clock()
+			reported = previous == nil or (now - previous) >= clientConfig.panelReopenSeconds
+			if reported then
+				lastReportedOpenAt[current] = now
+				Analytics.Panel(current, true)
+				if current == "Shop" then
+					-- A fresh shop VISIT, not another step on the last one; the
+					-- `shop` beat kind logs the count and the funnel step together.
+					Analytics.Track("shop", "open", "panel", { urgent = true })
+				elseif current == "Upgrades" then
+					Analytics.Funnel("upgrades", "open")
+					Analytics.Flow("upgrades-open")
+				end
 			end
 		end
 		lastPanel = current
+		lastPanelReported = reported
 		Analytics.SetScreen(current)
 	end
 

@@ -2,15 +2,21 @@
 	UpgradesSubsClient — upgrade levels consumer + hex-tree open/close (R4):
 	  * UpgradesUpdate feeds LocalStatsService (bite prediction) + AppRoot's
 	    hex-tree; node buys flow back through the BuyUpgrade remote.
-	  * The tree is a full-screen MODAL overlay. Its ONE opener is the authored
-	    `UpgradeStation` ProximityPrompt on the game checkpoint's computer (built
-	    by MapService, enabled, HoldDuration 0) — there is no HUD button in either
-	    place (2026-07-30: you are stood at the checkpoint after every belly burn,
-	    so a button was a second door into the same room). Opening a menu is local
-	    UI, so it needs no server round-trip. E (or the Close button) closes it; a
-	    BlurEffect dims the world while open.
-	    `onToggleUpgrades` stays on the AppRoot callback table so a future opener
-	    (or a re-added menu entry) gets the modal wiring instead of bypassing it.
+	  * The tree is a full-screen MODAL overlay with TWO openers (2026-08-13):
+	    the authored `UpgradeStation` ProximityPrompt on the game checkpoint's
+	    computer (built by MapService, enabled, HoldDuration 0), and the GAME
+	    HUD's Upgrades button, which routes through `onToggleUpgrades` so it
+	    cannot bypass the modal wiring (features/app-root.md). Opening a menu is
+	    local UI, so it needs no server round-trip. E (or the Close button) closes
+	    it; a BlurEffect dims the world while open.
+	    ⚠ The HUD button is live on the first rendered frame, while `workspace.Map`
+	    is a server-side CLONE that replicates late (ADR-0007) — so
+	    `setCheckpointPromptsEnabled` can now genuinely run before there is a map
+	    to sweep. That used to be unreachable (the only opener lived inside the
+	    map), which is why it degrades with a bounded RE-CHECK rather than one
+	    warn: leaving the world prompts on means the E-to-close press also fires
+	    whatever prompt is in range — and one of them (`LayerEater`) opens a Robux
+	    dialog.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -44,6 +50,11 @@ function UpgradesSubsClient.Start(data, modules)
 	local closeActionName = upgradesConfig["close-action-name"]
 	local blurSize = upgradesConfig["blur-size"]
 	local blurTemplateName = upgradesConfig["blur-template-name"]
+	-- Tuning lives in the data module (R1). Defaulted rather than validated: a
+	-- missing cadence must not disable the whole tree, and both values only
+	-- affect how patiently the prompt sweep waits for a late map.
+	local PROMPT_SWEEP_INTERVAL = math.max(0.1, tonumber(upgradesConfig["prompt-sweep-seconds"]) or 0.5)
+	local PROMPT_SWEEP_TIMEOUT = math.max(PROMPT_SWEEP_INTERVAL, tonumber(upgradesConfig["prompt-sweep-timeout-seconds"]) or 15)
 	if type(promptName) ~= "string" or promptName == ""
 		or type(closeActionName) ~= "string" or closeActionName == ""
 		or type(blurSize) ~= "number"
@@ -138,21 +149,22 @@ function UpgradesSubsClient.Start(data, modules)
 
 	-- Disable EVERY world prompt under this place's active map while the tree is
 	-- open. The station and nearby prompts may share E — leaving one on lets the
-	-- E-to-close press trigger behind the overlay. Re-enabled on close.
-	local function setCheckpointPromptsEnabled(enabled: boolean)
+	-- E-to-close press trigger behind the overlay, and `LayerEaterPrompt` turns
+	-- that press into a Robux dialog (features/shop.md, hidden products).
+	-- Re-enabled on close. Returns whether a map was found, so the caller can
+	-- re-try while the tree is still open (the map replicates late — header).
+	local function setCheckpointPromptsEnabled(enabled: boolean): boolean
 		local disabledPrompts = upgradesState["disabled-prompts"]
 		if enabled then
 			for _, prompt in ipairs(disabledPrompts) do
 				prompt.Enabled = true
 			end
 			table.clear(disabledPrompts)
-			return
+			return true
 		end
 		local map = Workspace:FindFirstChild("LobbyMap") or Workspace:FindFirstChild("Map")
 		if map == nil then
-			-- R8: the E-to-close guard depends on these prompts being off.
-			Log.Once(SCOPE, "no-active-map", "workspace.LobbyMap/Map missing — world prompts not toggled while the tree is open")
-			return
+			return false
 		end
 		for _, d in ipairs(map:GetDescendants()) do
 			if d:IsA("ProximityPrompt") and d.Enabled then
@@ -160,6 +172,39 @@ function UpgradesSubsClient.Start(data, modules)
 				table.insert(disabledPrompts, d)
 			end
 		end
+		return true
+	end
+
+	-- The map can legitimately arrive AFTER the tree opens now that a HUD button
+	-- can open it on the first frame. Re-check on a slow tick for as long as the
+	-- tree is open, and only warn if it never shows up — R8's late-dependency
+	-- rule, non-blocking. A one-shot `Log.Once` here would both false-positive on
+	-- a normal late clone AND latch the key, permanently swallowing the real
+	-- failure later in the session.
+	local promptSweepGeneration = 0
+	local function armPromptSweep()
+		promptSweepGeneration += 1
+		local generation = promptSweepGeneration
+		task.spawn(function()
+			local waited = 0
+			while upgradesState["open"] == true and promptSweepGeneration == generation do
+				if setCheckpointPromptsEnabled(false) then
+					Log.Info(SCOPE, `world prompts disabled after the map replicated ({string.format("%.1f", waited)}s late)`)
+					return
+				end
+				if waited >= PROMPT_SWEEP_TIMEOUT then
+					Log.Once(
+						SCOPE,
+						"no-active-map",
+						"workspace.LobbyMap/Map never appeared — world prompts are NOT disabled while the "
+							.. "upgrade tree is open, so the E-to-close press also fires whatever prompt is in range"
+					)
+					return
+				end
+				waited += PROMPT_SWEEP_INTERVAL
+				task.wait(PROMPT_SWEEP_INTERVAL)
+			end
+		end)
 	end
 
 	setOpen = function(open: boolean)
@@ -173,7 +218,13 @@ function UpgradesSubsClient.Start(data, modules)
 			blur.Enabled = open
 			blur.Size = if open then blurSize else 0
 		end
-		setCheckpointPromptsEnabled(not open)
+		local swept = setCheckpointPromptsEnabled(not open)
+		if open and not swept then
+			-- No map yet (it replicates late, and the HUD button can beat it).
+			-- Keep trying while the tree is open — leaving the prompts live is
+			-- what turns the E-to-close press into a Robux dialog.
+			armPromptSweep()
+		end
 		setModal(open)
 		if open then
 			ContextActionService:BindAction(closeActionName, onCloseKey, false, Enum.KeyCode.E)

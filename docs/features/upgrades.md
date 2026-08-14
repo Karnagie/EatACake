@@ -31,19 +31,31 @@ reason a lobby purchase is worth anything), `progress.lifetime*`.
 ⚠ `progress.lifetimeCalories` is a DIFFERENT field from `economy.calories` (only
 the leaderboard reads it) and is never reset.
 
-## The ONLY entry point is the checkpoint prompt
-There is **no Upgrades button in the HUD, in either place** (removed 2026-07-30).
-The tree opens from the authored `UpgradeStation` **ProximityPrompt** on the
-checkpoint's computer — built by `MapService.buildCheckpoint` (`ActionText
-"Upgrades"`, `HoldDuration 0`, range `MapConfigData.checkpoint.upgradePromptRange`,
-enabled from creation) and handled by `UpgradesSubsClient`'s
-`ProximityPromptService.PromptTriggered`. You stand at the checkpoint after every
-belly burn, so that is already where the purchase decision happens; a HUD button
-is a second door into the same room.
-⚠ Do not re-read the pre-2026-07-30 claim that the tree "was reachable from
-NOWHERE" and needed a HUD button — the game checkpoint's prompt was live the whole
-time. `AppRoot`'s meta menu is `Visible = showLobby`, so that button only ever
-existed in the LOBBY, where a run-scoped tree has nothing to spend.
+## Two entry points, one callback (2026-08-13)
+1. The authored `UpgradeStation` **ProximityPrompt** on the checkpoint's computer
+   — built by `MapService.buildCheckpoint` (`ActionText "Upgrades"`,
+   `HoldDuration 0`, range `MapConfigData.checkpoint.upgradePromptRange`, enabled
+   from creation), handled by `UpgradesSubsClient`'s
+   `ProximityPromptService.PromptTriggered`.
+2. The **GAME HUD's Upgrades button** (`features/app-root.md`), user-requested.
+
+Both route through `AppRoot`'s `onToggleUpgrades`, which `UpgradesSubsClient`
+owns — so neither can open the overlay without the modal wiring (blur, camera
+freeze, movement lock, world prompts off). The HUD entry also carries the
+affordability BADGE + breathe, off `LocalUpgradeTree.AnyAffordable` — the same
+predicate as the world sign below.
+⚠ The button existed in the LOBBY until 2026-07-30 and was removed as useless
+there (the tree is run-scoped, so a lobby balance is always 0). The new one is
+GAME-only, which is the opposite case: it is a door into the tree *while you are
+still eating*, which is where the affordability cue wants to reach the player.
+⚠ **A HUD button can open the tree before `workspace.Map` exists.** The map is a
+server-side clone that replicates late (ADR-0007), and until this change the only
+opener lived *inside* it — so `setCheckpointPromptsEnabled`'s "no map" branch was
+unreachable. It now RE-CHECKS on `UpgradesUiData.config["prompt-sweep-seconds"]`
+for as long as the tree is open and warns only after
+`prompt-sweep-timeout-seconds`. Not cosmetic: leaving the world prompts enabled
+means the **E-to-close press also fires whatever prompt is in range**, and one of
+them (`LayerEaterPrompt`) opens a Robux dialog (`features/shop.md`).
 Service + subs + `UpgradesUiData` stay COMMON.
 
 ## The world sign: "N Available" (2026-08-05)
@@ -200,8 +212,9 @@ one tier). Costs recomputed client-side — only levels travel. **Remote contrac
 UNCHANGED** by the tier rework (still `BuyUpgrade(statId)`).
 
 ## Open/close + modal (UpgradesSubsClient — R4)
-The station `ProximityPrompt` ("UpgradeStation") — the sole opener — fires client-side →
-`ProximityPromptService.PromptTriggered` → `AppRoot.Open("Upgrades")`. Opening a
+Either opener (the station `ProximityPrompt` "UpgradeStation" firing client-side
+through `ProximityPromptService.PromptTriggered`, or the game HUD's Upgrades
+button) calls `onToggleUpgrades` → `AppRoot.Open("Upgrades")`. Opening a
 menu is LOCAL UI — no server round-trip. On open it becomes MODAL: the cloned
 `Shared.UIKit.Templates.UpgradeTreeBlur` dims the world, the camera is frozen
 (`CameraType = Scriptable`) and character
@@ -279,7 +292,8 @@ placement), `UIKit/Icons` (`UiPunch`/`UiHammer`/`UiShoe`/`UiBoom`/`UiHand`/
 `HexTreeOverlay`. Client: `LocalStatsService` (+`GymEfficiency`),
 `LocalUpgradeTree` (view-model + the shared affordability predicates
 `AffordableCount`/`AnyAffordable`/`CanAffordNext`),
-`AppRoot` (overlay + nav-stack; NO HUD button), `subscriptions/UpgradesSubsClient`
+`AppRoot` (overlay + nav-stack + the GAME HUD button and its affordability cue),
+`subscriptions/UpgradesSubsClient`
 (prompt open/close + buys), `subscriptions/UpgradeStationSubsClient` (the world
 "N Available" sign), common `data/UpgradesUiData` (modal config/state +
 `["station"]` world contract),

@@ -44,6 +44,22 @@ misconfiguration is a missing `priceGems`, reported on its own line), and
 `configured` means "nonzero dashboard id" for Robux and "nonzero price" for gems.
 The boosts' price and pacing rule live in `features/boosts.md`.
 
+## Where the window opens (2026-08-13: BOTH places)
+The lobby's meta menu, **and** the game HUD's own menu (`features/app-root.md`).
+The panel, `ShopSubsClient`, `LocalShopService`, `ShopSubs`, `PassOwnershipSubs`
+and every grant kind it sells were already COMMON — only the BUTTON was missing,
+so this needed no new wiring. The game place is the STRONGER half for delivery:
+`burn` and `eatlayer` are registered only there, so nothing a cell sells is
+undeliverable in a match (the lobby defers `burn` to a re-delivery).
+- The Shop icon **badges + breathes when a BOOST is affordable**, from
+  `LocalShopService.AffordableBoostCount(shop, gems)` — exactly the set the boost
+  cells resolve to `buy`, so the icon can never advertise a refused purchase.
+  Boosts only: every Robux card is always "affordable", so a badge over those
+  would be lit all session. Rationale + the place gating: `features/app-root.md`.
+- **A pass bought mid-run applies immediately, all three ways it can reach the
+  player** — see Gamepasses below; the `slots` and `capacity` snapshots used to
+  stay stale until the next place transition.
+
 ## HIDDEN products (sold by the WORLD, not by a cell)
 `hidden = true` keeps a product out of `ShopUpdate` entirely, so it draws no shop
 cell — it is still a full catalogue entry (`RequestPurchase` and
@@ -163,9 +179,29 @@ mid-fetch). It lives in `ShopData.passOwnership`. Game code reads perks via
 `PetSlots`), which reads the cache DIRECTLY (StatsService cannot call
 ShopService — R3); the client reads the `AutoEat`/`AutoGym` player attributes.
 **A pass bought mid-session applies immediately**: `PromptGamePassPurchaseFinished`
-calls `PassOwnershipSubs.ApplyPerkAttributes`, without which the cell flipped to
-OWNED while the attribute the client gates on stayed false until the next place
-transition. No grants on passes — they are permanent flags, not loot.
+calls `PassOwnershipSubs.ApplyPerkAttributes`. No grants on passes — they are
+permanent flags, not loot.
+⚠ **A perk reaches the player THREE ways, and only one of them is an attribute**
+(2026-08-13 — buying a pass mid-run became routine when the shop got a game-HUD
+button):
+| how | which | needs re-running? |
+|---|---|---|
+| READ per use | `CaloriesMult`, `GemsMult`, `EatRate`, `Capacity` | no — read at the moment they are needed |
+| PUSHED once | `slots` (PetsUpdate), `capacity` (StomachUpdate) | **yes** — they are snapshots; nothing re-sends them |
+| APPLIED once | `WalkSpeed` on the Humanoid | **yes** |
+So `ApplyPerkAttributes` re-pushes the pets payload and hands the
+pushed/applied family to `BoostSubs.Apply` (which exists to re-derive exactly
+that set for a timed boost, and is documented idempotent). Before this, a VIP
+buyer saw "3 / 3" squishy slots and an un-doubled belly bar until the next place
+transition. The same routine runs on JOIN, where the ordering hazard is identical:
+`PassOwnershipSubs.PushInitialState` YIELDS on its first `UserOwnsGamePassAsync`,
+so every other hook has already run against an EMPTY ownership cache.
+⚠ **The join fetch never downgrades a runtime `true` to `false`.** It yields for
+up to ~4.5 s per throttled pass and then writes every key; a purchase completing
+inside that window is not visible to `UserOwnsGamePassAsync` yet (eventually
+consistent), so a blind write turned the paid perk OFF for the rest of the
+session. Nothing legitimately revokes a pass mid-session, which is what makes the
+asymmetry safe.
 
 ## Payloads
 `ShopUpdate` = `{ products = ARRAY {key,label,desc,icon,accent,premium,bundle,

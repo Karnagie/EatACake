@@ -67,6 +67,12 @@ end
 --API
 -- Re-applies every value a live boost feeds. Idempotent and safe to call at any
 -- time; callers do not need to know whether anything actually changed.
+-- ⚠ SECOND CALLER since 2026-08-13: `PassOwnershipSubs` runs this after a
+-- gamepass purchase and after the join ownership fetch. Boosts are not the only
+-- thing that moves capacity and walk speed — `capacity2`/`vip` double the belly
+-- too — and this is the one routine that re-derives the PUSHED/APPLIED family
+-- (bite mirror, RefreshBody, SendStomach). Keep it caller-agnostic: it must not
+-- start assuming the trigger was a boost.
 function BoostSubs.Apply(player: Player)
 	if services_ == nil then
 		-- Before Start, or Start aborted on a missing dependency (below).

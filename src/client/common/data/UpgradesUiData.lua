@@ -24,6 +24,16 @@ local UpgradesUiData = {
 		["close-action-name"] = "CloseUpgradeTree",
 		["blur-size"] = 18,
 		["blur-template-name"] = "UpgradeTreeBlur",
+		-- While the tree is open, EVERY world ProximityPrompt under the active
+		-- map is disabled, or the E-to-close press also fires whatever prompt is
+		-- in range (one of them sells a Robux layer clear). The HUD button can
+		-- open the tree on the first frame, before `workspace.Map` — a server-side
+		-- clone (ADR-0007) — has replicated, so the sweep RE-CHECKS on this
+		-- cadence for as long as the tree is open and warns only after the
+		-- timeout (R8's late-dependency rule: a deferred re-check, never a
+		-- blocking wait and never a one-shot warn on a normal late clone).
+		["prompt-sweep-seconds"] = 0.5,
+		["prompt-sweep-timeout-seconds"] = 15,
 	},
 	-- The "N Available" sign over the checkpoint computer (2026-08-05, user
 	-- request). PLACE-AUTHORED content (ADR-0007) — none of it is in the repo;

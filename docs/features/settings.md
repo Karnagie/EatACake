@@ -15,13 +15,16 @@ persist.
 
 ## Where it opens from
 - **Lobby**: the meta menu's Settings button (the 5-button grid, `app-root.md`).
-- **Game**: its own bare icon button in the HUD's top-left column, directly under
-  the two stat pills (`AppRoot.GameSettingsBtn`, at `Theme.AppHud.MenuPosition` —
-  the slot the lobby menu occupies). Added 2026-08-04: everything else about this
-  feature was already COMMON and the panel was already rendered in both places,
-  so only the BUTTON was missing and a player in a match had no way to mute the
-  music. It is NOT part of the meta-menu frame — that frame is `Visible =
-  showLobby` because its other handlers are lobby subs.
+- **Game**: the LAST cell of the game HUD's own menu (`AppRoot.GameMenu`, at
+  `Theme.AppHud.MenuPosition` — the slot the lobby menu occupies). Added
+  2026-08-04 as a lone `GameSettingsBtn`: everything else about this feature was
+  already COMMON and the panel was already rendered in both places, so only the
+  BUTTON was missing and a player in a match had no way to mute the music.
+  ⚠ On 2026-08-13 that frame became a four-entry menu (Upgrades / Shop /
+  Squishies / **Settings**) and Settings **moved from the first cell to the
+  last** — it is the one entry a player never needs mid-run
+  (`features/app-root.md`). It is still NOT part of the meta-menu frame, which is
+  `Visible = showLobby` because its other handlers are lobby subs.
 
 ## Flow
 Join: `SettingsSubs.SendSettings` → `SettingsUpdate { settings = map }` →

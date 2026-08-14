@@ -15,6 +15,11 @@
 	decision (R1) — a key -> colour lookup table in this module would be config
 	living in a service.
 
+	It also owns the shop's AFFORDABILITY predicate (`AffordableBoostCount`) —
+	the same "can they buy it right now?" test the boost cells resolve to `buy`,
+	exported so the HUD Shop button can badge/pulse on it without a second copy
+	of the rule (docs/features/app-root.md).
+
 	Row ids keep the prefix routing ShopSubsClient expects:
 	"product:<key>" / "pass:<key>" / "group".
 	The ROBUX/GEM split is not carried on the cell: ShopPanel hands the click
@@ -116,6 +121,51 @@ end
 
 function LocalShopService.Init(data)
 	locale = data.LocaleData
+end
+
+--API
+-- How many BOOST cards the player could pay for RIGHT NOW, from the same
+-- ShopUpdate snapshot the cells are built from. Drives the HUD Shop button's
+-- badge + attention pulse (docs/features/app-root.md): "there is something in
+-- there you can afford", said in a channel a non-reader gets for free.
+--
+-- ONE predicate, shared with the cell: this is exactly the set `priceState`
+-- resolves to `buy` inside the Boosts tab, so the icon can never advertise a
+-- purchase the card then refuses — the same one-way guarantee
+-- LocalUpgradeTree.AffordableCount gives the upgrade station's sign.
+-- ⚠ Deliberately NOT "any affordable product": gem PACKS are bought with Robux
+-- and every Robux card is always "affordable", so a badge over those would be
+-- lit for the whole session and mean nothing. Boosts are the only cards whose
+-- state actually flips with a balance the player earns by playing.
+-- A boost is not `oneTime` and a second purchase EXTENDS the timer
+-- (StatsService.GrantBoost), so a running boost is still a valid buy and is not
+-- excluded here.
+function LocalShopService.AffordableBoostCount(shop, gems: number?): number
+	if type(shop) ~= "table" then
+		return 0 -- before the first ShopUpdate; nothing to advertise yet
+	end
+	local balance = if type(gems) == "number" then gems else 0
+	local count = 0
+	for _, product in ipairs(shop.products or {}) do
+		-- The payload crosses a RemoteEvent, so every field is checked rather
+		-- than trusted: `configured == false` is the server saying "not sellable"
+		-- and the price guard covers a malformed row that slipped past it — a
+		-- badge that fires on a priceless card would send the player to a shelf
+		-- that does nothing.
+		local price = tonumber(type(product) == "table" and product.priceGems or nil) or 0
+		if
+			type(product) == "table"
+			and product.section == "boosts"
+			and product.currency == "gems"
+			and product.configured ~= false
+			and product.owned ~= true
+			and price > 0
+			and balance >= price
+		then
+			count += 1
+		end
+	end
+	return count
 end
 
 --API

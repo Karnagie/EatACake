@@ -15,8 +15,14 @@
 	• A receipt whose grant kind is registered only by the GAME partition
 	  (`burn`) is deferred with NotProcessedYet in the lobby and granted when
 	  Roblox re-delivers it in a game server. Self-healing, but not instant.
-	• The shop UI is still opened from the lobby only; this sub answering in the
-	  game place is about DELIVERY, not about showing the window there.
+	• The shop WINDOW opens in BOTH places since 2026-08-13 (the game HUD grew a
+	  Shop button — features/app-root.md), which makes this sub's presence here
+	  load-bearing for the purchase itself and not only for delivery. It already
+	  was: a receipt can surface in a game server whatever opened it.
+	  ⚠ The game place is the STRONGER half for delivery — `burn` and `eatlayer`
+	  are registered only here — so nothing sold in the window is undeliverable
+	  in a match. `hidden` products stay hidden for the opposite reason
+	  (features/shop.md).
 
 	Wires:
 	• RequestPurchase (key): validate key -> PromptProductPurchase. A oneTime
