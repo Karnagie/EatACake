@@ -10,9 +10,20 @@
 	Hold is wired through the shared Interaction press primitive's
 	onPressStart/onPressEnd (also gives the squish/spring feedback for free).
 
+	⚠ SAFE AREA. This button shares the bottom-right corner with Roblox's own
+	touch JUMP button, which is drawn ABOVE every player GUI and sized off the
+	SHORTER viewport axis — while `style.Position` is a viewport FRACTION tuned
+	at one aspect. The two therefore only cleared on a wide window (measured
+	2026-08-09: 22 px of daylight at 1375x1031, a corner overlap at phone
+	aspects). So the button is BOTTOM-anchored and its bottom edge is held
+	`bottomReservePx` off the bottom of its parent — which is AppRoot's `Hud`
+	layer, whose bottom edge IS the viewport's, so the offset is exact.
+	`style.Position.Y` is now only the fallback for a caller that passes no
+	reserve (0 = PC, where this button never renders anyway).
+
 	Props: {
 		name?: string, visible: boolean, style?: table (Theme.EatButton),
-		buttonText: string, zIndex?: number,
+		buttonText: string, zIndex?: number, bottomReservePx?: number,
 		onPressStart: (input: InputObject?) -> (),  -- start eating (finger down)
 		onPressEnd: (input: InputObject?) -> (),     -- stop eating (finger up)
 	}
@@ -57,10 +68,15 @@ local function EatButton(props)
 		onPressEnd = props.onPressEnd,
 	})
 
+	local reserve = tonumber(props.bottomReservePx) or 0
+	local position = if reserve > 0
+		then UDim2.new(style.Position.X, 0, 1, -reserve) -- bottom edge on the reserve line
+		else UDim2.fromScale(style.Position.X, style.Position.Y)
+
 	return React.createElement("TextButton", Interaction.merge({
 		Name = props.name or "EatButton",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(style.Position.X, style.Position.Y),
+		AnchorPoint = if reserve > 0 then Vector2.new(0.5, 1) else Vector2.new(0.5, 0.5),
+		Position = position,
 		Size = UDim2.fromScale(0.5, style.Height),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,

@@ -16,8 +16,16 @@
 	clock). The flag rides `node.pulse` from LocalUpgradeTree — deliberately a
 	narrower set than the gold `available` hexes, which are merely unlocked.
 
+	⚠ SAFE AREA. The overlay is FULL-BLEED (its scrim has to dim the topbar strip
+	too) but its edge CONTROLS are not allowed to be: `topInset01` pushes the
+	calories chip and the Close X below Roblox's topbar/unibar, and
+	`bottomReserve01` lifts the zoom stack off Roblox's touch jump button. Both
+	are viewport FRACTIONS, which is exact here because a full-bleed frame's
+	height IS the viewport's; AppRoot resolves the pixels (Theme.SafeArea).
+
 	props: { name, visible, zIndex, treeKey, nodes, nodeWidth, nodeHeight,
-		caloriesText, onNodeActivated(action), onClose }
+		caloriesText, topInset01?, bottomReserve01?,
+		onNodeActivated(action), onClose }
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -220,11 +228,15 @@ local function NotifierBadge(props)
 	})
 end
 
-local function zoomButton(text, center, onActivated, zIndex)
+-- `lift01` shifts the whole zoom stack up off Roblox's touch jump button. It is
+-- the SAME value for all three buttons so the stack keeps its spacing, and it is
+-- a viewport FRACTION because this overlay is full-bleed — its height IS the
+-- viewport's (see the safe-area block in the component below).
+local function zoomButton(text, center, onActivated, zIndex, lift01: number?)
 	return React.createElement("Frame", {
 		Name = "Zoom_" .. text,
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(center.X, center.Y),
+		Position = UDim2.fromScale(center.X, center.Y - (lift01 or 0)),
 		Size = UDim2.fromScale(0.15, Theme.HexTree.ZoomButtonHeight),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
@@ -247,6 +259,24 @@ local function HexTreeOverlay(props)
 	local visible = props.visible == true
 	local hx = Theme.HexTree
 	local nodes = props.nodes or {}
+
+	-- ── safe area (Theme.SafeArea; resolved and measured in AppRoot) ─────────
+	-- This overlay is FULL-BLEED on purpose: its Scrim/InputSurface/Clip must
+	-- cover the whole screen including the topbar strip. Its CONTROLS must not.
+	--   * the calories chip sat at y 30/1080 and the Close X at centre 74/1080 —
+	--     both inside Roblox's topbar strip, and the chip's whole x-range is the
+	--     unibar's, so on 2026-08-09 the chip was measured half-buried under the
+	--     Roblox logo/chat/mic buttons. Both now start below `topInset01`.
+	--   * the zoom stack hugs the right edge low down, which is exactly where
+	--     Roblox parks the touch jump button (measured overlap: 43 x 56 px at
+	--     1375x1031). The whole stack lifts by the amount the LOWEST button
+	--     intrudes, so the three keep their spacing.
+	--   * the detail card's pin band shrinks at both ends for the same reason.
+	-- Fractions, not pixels: a full-bleed frame's height IS the viewport's.
+	local topInset01 = math.max(props.topInset01 or 0, 0)
+	local reserve01 = math.max(props.bottomReserve01 or 0, 0)
+	local resetBottom01 = hx.ResetCenter.Y + hx.ZoomButtonHeight / 2
+	local zoomLift01 = math.max(0, reserve01 - (1 - resetBottom01))
 
 	local focusedKey, setFocusedKey = React.useState(nil :: string?)
 	local focus, setFocus = React.useState(nil) -- { x, y, onRight } screen frac of the card
@@ -368,7 +398,12 @@ local function HexTreeOverlay(props)
 				local gap = props.nodeWidth * zv * vp.AbsoluteSize.X / overlay.AbsoluteSize.X * 0.55 + 0.01
 				setFocus({
 					x = math.clamp(ofx + (if onRight then gap else -gap), 0.02, 0.98),
-					y = math.clamp(ofy, 0.16, 0.84),
+					-- The pin band shrinks by the safe area at BOTH ends: at 0.16
+					-- of a 414-tall phone the card's title zone lands inside the
+					-- topbar strip, and at 0.84 its foot reaches the jump button.
+					-- `math.min` on the low bound so a pathological inset can
+					-- never invert the clamp.
+					y = math.clamp(ofy, math.min(0.16 + topInset01, 0.5), math.max(0.84 - reserve01, 0.5)),
 					onRight = onRight,
 				})
 			end
@@ -599,7 +634,7 @@ local function HexTreeOverlay(props)
 		}),
 		Currency = React.createElement("Frame", {
 			Name = "Currency",
-			Position = UDim2.fromScale(hx.CurrencyPosition.X, hx.CurrencyPosition.Y),
+			Position = UDim2.fromScale(hx.CurrencyPosition.X, hx.CurrencyPosition.Y + topInset01),
 			Size = UDim2.fromScale(0.5, hx.CurrencyHeight),
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
@@ -609,7 +644,11 @@ local function HexTreeOverlay(props)
 			Aspect = React.createElement("UIAspectRatioConstraint", { AspectRatio = Theme.Hud.PillAspect }),
 			Pill = React.createElement(StatPill, {
 				value = props.caloriesText or "0",
-				icon = "bolt",
+				-- Registry art, NOT StatPill's legacy hand-vectored `bolt`: this
+				-- chip and the HUD's calories pill show the same balance, and
+				-- Theme.AppHud.PillIcons exists so one currency can never wear two
+				-- glyphs (features/app-root.md).
+				iconImage = Theme.Icon(Theme.AppHud.PillIcons.Calories),
 				valueGradient = Theme.Hud.EnergyTextGradient,
 				valueOutline = Theme.Hud.EnergyTextOutline,
 				zIndex = z + 8,
@@ -618,7 +657,7 @@ local function HexTreeOverlay(props)
 		Close = React.createElement("Frame", {
 			Name = "Close",
 			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(hx.CloseCenter.X, hx.CloseCenter.Y),
+			Position = UDim2.fromScale(hx.CloseCenter.X, hx.CloseCenter.Y + topInset01),
 			Size = UDim2.fromScale(0.2, hx.CloseHeight),
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
@@ -635,14 +674,14 @@ local function HexTreeOverlay(props)
 		}),
 		ZoomIn = zoomButton("+", hx.ZoomInCenter, function()
 			zoomAround(zoom:getValue() * hx.ZoomStep, 0.5, 0.5)
-		end, z + 8),
+		end, z + 8, zoomLift01),
 		ZoomOut = zoomButton("-", hx.ZoomOutCenter, function()
 			zoomAround(zoom:getValue() / hx.ZoomStep, 0.5, 0.5)
-		end, z + 8),
+		end, z + 8, zoomLift01),
 		Reset = zoomButton("1x", hx.ResetCenter, function()
 			setZoom(1)
 			setPan(Vector2.new(0, 0))
-		end, z + 8),
+		end, z + 8, zoomLift01),
 	}
 	if focusedDetail and focus then
 		overlayChildren.DetailCard = detailCard(focusedDetail, function()

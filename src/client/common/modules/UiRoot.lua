@@ -39,10 +39,20 @@ function UiRoot.Init()
 		-- A modal that does not cover the screen is not modal. DeviceSafeInsets
 		-- still respects notches/rounded corners; only the CoreUI topbar is
 		-- ignored, which is exactly the inset that was in the way.
-		-- ⚠ Anything that must NOT slide under the topbar (the HUD) insets itself
-		-- by GuiService:GetGuiInset() — AppRoot's `Hud` layer does this, which
-		-- reproduces this gui's former coordinate space exactly, so no HUD element
-		-- moved. Input math that mixed the two spaces was fixed with this change
+		-- ⚠ Full-bleed is only HALF a contract, and the other half is NOT here:
+		-- a surface may cover the topbar strip (scrims must), but anything that
+		-- PLACES A CONTROL still has to keep off Roblox's CoreGui furniture.
+		-- `AppRoot` resolves that safe area once from `Theme.SafeArea` and applies
+		-- it to its own `Hud` layer and to every full-bleed overlay that positions
+		-- edge controls — see `docs/features/app-root.md`.
+		-- ⚠ Do NOT read `GuiService:GetGuiInset()` for this: it is the LEGACY
+		-- inset and can under-report the modern unibar (2026-08-09 — that is how
+		-- the hex tree's calories chip ended up half-buried under it). The
+		-- resolver takes the taller of it and `GuiService.TopbarInset.Max.Y` and
+		-- adds a pixel pad, so the `Hud` layer is NO LONGER the identity
+		-- transform on this gui's former coordinate space that it was in
+		-- 2026-07-30: every HUD element sits at least `SafeArea.TopPadPx` lower.
+		-- Input math that mixed the two spaces was fixed with this change
 		-- (see ScrollPane's scrollbar drag).
 		screenGui.IgnoreGuiInset = true
 		screenGui.ScreenInsets = Enum.ScreenInsets.DeviceSafeInsets

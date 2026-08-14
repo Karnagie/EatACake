@@ -8,7 +8,9 @@
 	between pushes. The rest of the screen stays interactive (the root frame is
 	NOT Active) so the player can walk away — which stops the session.
 	Props: { active: boolean, remain01: number?, fatText: string,
-		buttonText: string, onTap: () -> (), zIndex: number?, style: table? }.
+		buttonText: string, onTap: () -> (), zIndex: number?, style: table?,
+		bottomReserve01: number? — viewport fraction Roblox's touch jump button
+		owns at the bottom (AppRoot resolves it from Theme.SafeArea) }.
 	Style: Theme.GymOverlay (override via props.style). Defaults to zIndex 40.
 ]]
 
@@ -58,7 +60,7 @@ local function TapButton(props)
 	return React.createElement("TextButton", Interaction.merge({
 		Name = "TapButton",
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(style.ButtonPosition.X, style.ButtonPosition.Y),
+		Position = UDim2.fromScale(style.ButtonPosition.X, style.ButtonPosition.Y - (props.lift01 or 0)),
 		Size = UDim2.fromScale(0.5, style.ButtonHeight),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
@@ -111,11 +113,11 @@ local function TapButton(props)
 end
 
 -- Remaining-fat bar: a groove whose Fill width tracks `fillSize` (binding).
-local function fatBar(style, fillSize, zIndex)
+local function fatBar(style, fillSize, zIndex, lift01)
 	return React.createElement("Frame", {
 		Name = "FatBar",
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(style.BarPosition.X, style.BarPosition.Y),
+		Position = UDim2.fromScale(style.BarPosition.X, style.BarPosition.Y - (lift01 or 0)),
 		Size = UDim2.fromScale(0.5, style.BarHeight),
 		BackgroundColor3 = Color3.new(1, 1, 1),
 		BorderSizePixel = 0,
@@ -213,6 +215,17 @@ local function GymOverlay(props)
 		return UDim2.fromScale(math.clamp(fraction, 0, 1), 1)
 	end)
 
+	-- SAFE AREA. This overlay is full-bleed (the rest of the screen must stay
+	-- usable), and its thumb button sits in the SAME bottom-right corner as
+	-- Roblox's touch jump button — measured overlapping it by 37x15 px at
+	-- 1375x1031 on 2026-08-09. `bottomReserve01` is how much of the bottom the
+	-- jump button owns, as a viewport fraction (exact here: a full-bleed frame's
+	-- height IS the viewport's). The whole cluster — button, bar, counter — lifts
+	-- by the amount the BUTTON intrudes, so the composition is preserved.
+	local reserve01 = math.max(tonumber(props.bottomReserve01) or 0, 0)
+	local buttonBottom01 = style.ButtonPosition.Y + style.ButtonHeight / 2
+	local lift01 = math.max(0, reserve01 - (1 - buttonBottom01))
+
 	return React.createElement("Frame", {
 		Name = props.name or "GymOverlay",
 		Size = UDim2.fromScale(1, 1),
@@ -227,12 +240,13 @@ local function GymOverlay(props)
 			buttonText = props.buttonText,
 			onTap = props.onTap,
 			zIndex = zIndex + 1,
+			lift01 = lift01,
 		}),
-		FatBar = fatBar(style, fillSize, zIndex + 1),
+		FatBar = fatBar(style, fillSize, zIndex + 1, lift01),
 		Counter = React.createElement("Frame", {
 			Name = "Counter",
 			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(style.CounterPosition.X, style.CounterPosition.Y),
+			Position = UDim2.fromScale(style.CounterPosition.X, style.CounterPosition.Y - lift01),
 			Size = UDim2.fromScale(0.5, style.CounterHeight),
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,

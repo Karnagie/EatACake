@@ -18,10 +18,34 @@
 	  "path"     the guidance BEAM (a clone of the authored HintBeam) runs from
 	             the player to the checkpoint plate, and the TO CHECKPOINT
 	             button breathes. Ends on ARRIVAL at the plate.
-	  "upgrades" the world arrow points at the upgrade computer. Ends when the
-	             UpgradeStation prompt fires — which is also the end of the
-	             tutorial, so `TutorialComplete` goes to the server here.
+	  "upgrades" the world arrow points at the upgrade computer. It KEEPS
+	             pointing while the tree is opened and browsed; the step (and the
+	             tutorial) ends only when the player actually BUYS a tier, which
+	             is when `TutorialComplete` goes to the server.
 	Steps 2-5 are skipped entirely for an account whose profile says `done`.
+
+	OPENING THE TREE FROM THE HUD DOES NOT BREAK ANY OF THIS (2026-08-13, user
+	request). The game HUD grew an Upgrades button beside the station prompt
+	(features/app-root.md). The flow needed one thing to already be true and one
+	thing to be added:
+	  * TRUE ALREADY — completion tests the STATE ("owns a tier") off
+	    `UpgradesUpdate` from ANY live guided step, never a prompt transition, so a
+	    tier bought through the HUD ends onboarding exactly like one bought at the
+	    computer. Nothing about the exit was ever prompt-shaped.
+	  * ADDED — the TUTORIAL funnel's `upgrades` step (with its dwell), which used
+	    to ride the prompt alone. The player-flow `upgrades-open` step did not:
+	    AnalyticsSubsClient polls the open PANEL and always reported it.
+	The HUD open moves NO step, deliberately — see the two-openers block below.
+
+	WHY THE LAST STEP ENDS ON A PURCHASE (2026-08-09, user request): opening the
+	computer is not learning the loop — eat, burn, SPEND is. The prompt used to
+	end the flow, so a player who pressed E, looked at the honeycomb and walked
+	away had "completed" onboarding without ever buying anything, and the arrow
+	that would have brought them back was already gone. The prompt now only moves
+	the step (and fires the `upgrades-open` beat, which still means exactly what
+	its name says); the purchase ends it. The two are separate events in the
+	analytics catalog already — `upgrades-open` then `first-upgrade` — so the gap
+	the change is meant to close is measured for free.
 
 	WHY THE THRESHOLD IS LATCHED: the belly falls again the moment a gym drain
 	starts (BodySubs resyncs ~8 Hz), so an un-latched test would blink the beam
@@ -115,7 +139,7 @@ function TutorialSubsClient.Start(data, modules)
 	local upgradesUi = data.UpgradesUiData
 	local promptName = upgradesUi and upgradesUi["config"] and upgradesUi["config"]["prompt-name"]
 	if promptName == nil then
-		Log.Warn(SCOPE, "UpgradesUiData config['prompt-name'] missing -- step 4 can never complete; tutorial will stay on the arrow")
+		Log.Warn(SCOPE, "UpgradesUiData config['prompt-name'] missing -- the last step can never be ENTERED (and UpgradesSubsClient cannot open the tree either, so nothing can be bought): the tutorial will never finish")
 	end
 
 	-- ── state ───────────────────────────────────────────────────────────
@@ -127,18 +151,26 @@ function TutorialSubsClient.Start(data, modules)
 	local wantSteps = false
 	local completeSent = false
 
+	-- The two world-facing steps, i.e. the ones the beam is drawn for.
+	local function isBeamStep(value: string?): boolean
+		return value == "path" or value == "upgrades"
+	end
+
 	local function push()
 		AppRoot.Set({
 			tutorial = {
 				slides = step == "slides",
 				hint = if step == "eat" then "eat" else nil,
-				arrow = if step == "upgrades" then "upgrades" else nil,
 				pulseCheckpoint = step == "path",
 			},
 		})
 	end
 
-	-- ── world guidance: the beam (step "path") ──────────────────────────
+	-- ── world guidance: the beam (steps "path" AND "upgrades") ──────────
+	-- ONE mechanism for both world-facing steps (user request, 2026-08-09): the
+	-- flow used to switch to a screen-space HintArrow for the last step, so the
+	-- player was taught to follow a line and then asked to follow something else.
+	-- Only the DESTINATION changes — plate, then computer.
 	local beam: Beam? = nil
 	local beamPlayerAttachment: Attachment? = nil
 	local beamTargetAttachment: Attachment? = nil
@@ -173,26 +205,42 @@ function TutorialSubsClient.Start(data, modules)
 		end
 	end
 
-	-- Rebuilt (not repositioned) whenever a piece goes away: the HumanoidRootPart
-	-- dies on every respawn and the plate is re-cloned with the map, so holding
-	-- references across those events is the bug, not the fix.
+	-- Which authored piece the beam points at, for the step we are on. Resolved
+	-- LAZILY every tick (place content replicates late) and never cached.
+	local function beamTarget(): (BasePart?, string, string, number)
+		if step == "upgrades" then
+			return asBasePart(checkpointChild(world.upgradeStationName)),
+				world.upgradeStationName,
+				"upgrade computer",
+				TutorialConfig.beam.stationExtraHeight or 0
+		end
+		return asBasePart(checkpointChild(world.plateName)), world.plateName, "checkpoint plate", 0
+	end
+
+	-- Rebuilt (not repositioned) whenever a piece goes away OR the step changes
+	-- its destination: the HumanoidRootPart dies on every respawn and the
+	-- checkpoint is re-cloned with the map, so holding references across those
+	-- events is the bug, not the fix.
 	local function ensureBeam()
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
-		local plate = asBasePart(checkpointChild(world.plateName))
-		if root == nil or plate == nil then
+		local target, targetName, targetLabel, extraHeight = beamTarget()
+		if root == nil or target == nil then
 			clearBeam()
-			if plate == nil then
-				Log.GraceOnce(SCOPE, "tutorial-no-plate", TutorialConfig.resolveGraceSeconds, function()
-					return asBasePart(checkpointChild(world.plateName)) == nil
-				end, `workspace.{world.mapFolder}.{world.checkpointFolder}.{world.plateName} missing — the tutorial beam cannot point anywhere (step 3 degrades to the pulsing button alone)`)
+			if target == nil then
+				-- R8: without this the step shows NOTHING and says nothing. The
+				-- key is per-target so a missing plate and a missing computer are
+				-- reported separately.
+				Log.GraceOnce(SCOPE, `tutorial-no-target-{targetName}`, TutorialConfig.resolveGraceSeconds, function()
+					return (select(1, beamTarget())) == nil
+				end, `workspace.{world.mapFolder}.{world.checkpointFolder}.{targetName} missing — the tutorial beam cannot point at the {targetLabel} (that step shows no guidance at all)`)
 			end
 			return
 		end
 		-- Still wired to the same live parts? Then nothing to do.
 		if beam ~= nil
 			and beamPlayerAttachment ~= nil and beamPlayerAttachment.Parent == root
-			and beamTargetAttachment ~= nil and beamTargetAttachment.Parent == plate
+			and beamTargetAttachment ~= nil and beamTargetAttachment.Parent == target
 		then
 			return
 		end
@@ -202,28 +250,27 @@ function TutorialSubsClient.Start(data, modules)
 		if template == nil then
 			Log.GraceOnce(SCOPE, "tutorial-no-beam-template", TutorialConfig.resolveGraceSeconds, function()
 				return beamTemplate() == nil
-			end, `ReplicatedStorage.Assets.{world.beamFolder}.{world.beamName} missing — no guidance beam (step 3 degrades to the pulsing button alone). It is PLACE content, not in the repo.`)
+			end, `ReplicatedStorage.Assets.{world.beamFolder}.{world.beamName} missing — no guidance beam at all (steps 4 and 5 degrade to the pulsing button alone). It is PLACE content, not in the repo.`)
 			return
 		end
 
+		local beamCfg = TutorialConfig.beam
 		local from = Instance.new("Attachment")
 		from.Name = world.clientFolderName .. "From"
-		from.Position = TutorialConfig.beam.playerAttachmentOffset
+		from.Position = beamCfg.playerAttachmentOffset
 		from.Parent = root
 
 		local to = Instance.new("Attachment")
 		to.Name = world.clientFolderName .. "To"
-		-- Above the plate's TOP face, not its centre — the plate is a slab and
-		-- the beam should ride over the surface the player walks onto.
-		to.Position = Vector3.new(0, plate.Size.Y / 2, 0) + TutorialConfig.beam.targetAttachmentOffset
-		to.Parent = plate
+		-- Above the target's TOP face, not its centre: the plate is a slab the
+		-- player walks onto, and the computer is a prop they stand beside.
+		to.Position = Vector3.new(0, target.Size.Y / 2 + extraHeight, 0) + beamCfg.targetAttachmentOffset
+		to.Parent = target
 
-		local beamCfg = TutorialConfig.beam
 		local clone = template:Clone()
 		clone.Attachment0 = from
 		clone.Attachment1 = to
-		-- Bow the line upward so it reads as an aimed arc rather than a wall
-		-- clipping through the loaf.
+		-- STRAIGHT: curveSize 0 draws the direct line the player should walk.
 		clone.CurveSize0 = beamCfg.curveSize
 		clone.CurveSize1 = beamCfg.curveSize
 		-- Legibility overrides on the CLONE (the template stays as authored).
@@ -239,15 +286,28 @@ function TutorialSubsClient.Start(data, modules)
 		clone.Parent = from
 
 		beam, beamPlayerAttachment, beamTargetAttachment = clone, from, to
-		Log.Info(SCOPE, "guidance beam attached (player -> checkpoint plate)")
+		Log.Info(SCOPE, `guidance beam attached (player -> {targetLabel})`)
 	end
 
 	-- ── step transitions ────────────────────────────────────────────────
+	-- Called on the FIRST upgrade purchase (see the UpgradesUpdate watch below).
+	-- No client beat: the tutorial funnel's `done` step and the `tutorial-done`
+	-- flow step are both fired SERVER-side off `TutorialComplete` (TutorialSubs),
+	-- and Ingest refuses a client asserting a step the server owns.
 	local function finish()
 		if step == nil then
 			return
 		end
-		beat("upgrades", "upgrades-open")
+		-- WHICH step it ended on is worth a line (R8). Completion has always been
+		-- allowed from any live guided step, but until 2026-08-13 the only way to
+		-- reach the tree was a prompt at the station, so it was ALWAYS `upgrades`
+		-- in practice. The HUD button removed that coupling, and one cohort can now
+		-- finish without ever standing on the plate: an Auto-Gym / VIP owner banks
+		-- calories anywhere on the cake (BodySubs' auto burn), so they can buy from
+		-- step `belly`. Their funnel legitimately shows no `checkpoint` step — the
+		-- beats are NOT back-filled, because asserting "reached the checkpoint" for
+		-- a player who never did would corrupt the one thing the funnel measures.
+		local endedOn = step
 		step = nil
 		clearBeam()
 		push()
@@ -256,7 +316,15 @@ function TutorialSubsClient.Start(data, modules)
 		end
 		completeSent = true
 		rComplete:FireServer()
-		Log.Sum(SCOPE, "onboarding COMPLETE — TutorialComplete sent")
+		Log.Sum(SCOPE, `onboarding COMPLETE (first upgrade bought, from step '{endedOn}') — TutorialComplete sent`)
+		if endedOn ~= "upgrades" then
+			Log.Info(
+				SCOPE,
+				`onboarding ended from '{endedOn}', not '{"upgrades"}' — the tree was opened from the HUD before the `
+					.. "checkpoint was reached (expected for Auto-Gym/VIP owners, who bank calories without a gym trip). "
+					.. "The `checkpoint`/`arrived` beats are deliberately NOT reported: they were not earned."
+			)
+		end
 	end
 
 	local function setStep(next: string?)
@@ -264,9 +332,11 @@ function TutorialSubsClient.Start(data, modules)
 			return
 		end
 		step = next
-		if next ~= "path" then
-			clearBeam()
-		end
+		-- Leaving the beam steps tears the line down; MOVING BETWEEN them (path
+		-- -> upgrades) also clears it, because the destination attachment has to
+		-- be re-parented to the new target — `ensureBeam` rebuilds on the next
+		-- tick against whatever `beamTarget()` now returns.
+		clearBeam()
 		push()
 		-- One beat per state ENTERED, so the tutorial funnel mirrors the state
 		-- machine exactly instead of being sprinkled across its callers.
@@ -383,16 +453,9 @@ function TutorialSubsClient.Start(data, modules)
 				setStep("belly")
 			end
 		end,
-		-- Read every frame by HintArrow (never through React state — see its
-		-- header). Returns nil until the station replicates, which the arrow
-		-- renders as "hidden", not as a marker stuck at the origin.
-		onTutorialArrowTarget = function(): Vector3?
-			local station = asBasePart(checkpointChild(world.upgradeStationName))
-			if station == nil then
-				return nil
-			end
-			return station.Position + TutorialConfig.arrow.targetOffset
-		end,
+		-- ⚠ `onTutorialArrowTarget` was removed on 2026-08-09 together with the
+		-- screen-space HintArrow: the last step draws the same world BEAM as the
+		-- one before it, so there is no per-frame target callback any more.
 	})
 
 	-- Belly watch (steps "eat" -> "belly" -> "path"). Both payload shapes carry
@@ -420,26 +483,133 @@ function TutorialSubsClient.Start(data, modules)
 		evaluateBurnPrompt()
 	end)
 
-	-- The tutorial's goal is the upgrade tree OPENING, so honour the prompt from
-	-- any live step — not just from step 4.
+	-- ── the tree opened, and the tree was BOUGHT from ───────────────────
+	-- Opening moves the step; only a purchase ends the flow.
 	-- ⚠ The two zones do not coincide: the station's prompt is a 10-stud sphere
 	-- with no line-of-sight requirement and sits ~3.5 studs from the loaf edge,
 	-- so it lights up several studs back ONTO the cake — while `checkpointFar`
-	-- stays true anywhere on the loaf by design (BodySubsClient). Gating on
-	-- step == "upgrades" therefore dropped the completion of every player who
-	-- pressed E on the way in, and their tutorial replayed forever.
-	ProximityPromptService.PromptTriggered:Connect(function(prompt)
-		if step ~= nil and promptName ~= nil and prompt.Name == promptName then
-			finish()
+	-- stays true anywhere on the loaf by design (BodySubsClient). So the prompt
+	-- is honoured from ANY live step: a player who presses E on the way in must
+	-- still get the arrow (and, before this change, still got their completion —
+	-- gating that on step == "upgrades" once made the tutorial replay forever).
+	-- ⚠ "any LIVE step" means any GUIDED step — never "slides". The comic plays
+	-- for everyone, including accounts that finished onboarding years ago, and
+	-- the station prompt is a keyboard press the comic does not swallow. Without
+	-- this test a veteran who taps E while the comic is up would be handed a
+	-- first-session arrow, and a purchase would dismiss the comic under them.
+	local function guidedStepRunning(): boolean
+		return step ~= nil and step ~= "slides"
+	end
+
+	-- ⚠ TWO OPENERS since 2026-08-13 (features/app-root.md): the station prompt
+	-- and the game HUD's Upgrades button. They are deliberately NOT equivalent to
+	-- onboarding, and that asymmetry is the whole point of this block:
+	--   * the PROMPT proves the player is AT the station, so it MOVES the step;
+	--   * the HUD BUTTON is reachable from anywhere — including step "eat" with an
+	--     empty balance — so it moves NOTHING. Advancing on it would tear down the
+	--     eat popup and run the beam to a computer across the cake for a player who
+	--     has not eaten yet, and whose calories are all still unbanked (they cannot
+	--     buy anything, which is exactly why the run-scoped tree does not break the
+	--     loop the button opens a second door into).
+	-- Both must still REPORT — but measure before believing which half was at
+	-- risk. Verified live 2026-08-13 by recording the `AnalyticsBeat` remote:
+	--   * the PLAYER-FLOW step `upgrades-open` and the `upgrades` funnel's `open`
+	--     step were ALREADY opener-agnostic. `AnalyticsSubsClient` polls
+	--     `AppRoot.GetOpenPanel()` and fires both when it turns "Upgrades",
+	--     whatever opened it. (`Flow` is `once`-deduped, so the call inside
+	--     `beat` below is a harmless no-op whenever that poll wins the race —
+	--     which it does. It stays as the belt to that sub's braces.)
+	--   * the TUTORIAL funnel's own `upgrades` step is the one that rode the
+	--     prompt alone, and it is the one that carries the DWELL — how long the
+	--     player stood at the station before opening anything. Without this a
+	--     player who buys through the HUD leaves a hole between `arrived` and
+	--     `done` in the onboarding funnel that reads as a drop-off.
+	-- Reported once, and only from the step the funnel expects it in, so an early
+	-- HUD open can never assert step 5 out of order.
+	local treeOpenedBeat = false
+	local function reportTreeOpened()
+		if treeOpenedBeat or step ~= "upgrades" then
+			return
 		end
+		treeOpenedBeat = true
+		beat("upgrades", "upgrades-open")
+	end
+
+	ProximityPromptService.PromptTriggered:Connect(function(prompt)
+		if not guidedStepRunning() or promptName == nil or prompt.Name ~= promptName then
+			return
+		end
+		-- setStep FIRST so the "arrived" beat cannot be reported after the
+		-- "opened the computer" one.
+		setStep("upgrades")
+		reportTreeOpened()
+	end)
+
+	-- The purchase watch. `UpgradesUpdate` is the ONLY channel that carries owned
+	-- tiers to the client and its payload is byte-identical for a join snapshot,
+	-- a successful buy and a refused-buy resync — so this tests the STATE ("owns
+	-- at least one tier"), not a transition. That is the robust reading here:
+	-- `RunResetSubs` zeroes every tier on each profile load (ADR-0013) and the
+	-- server sends every configured id zero-filled, so the first push of a run is
+	-- provably all-zeros for veterans and newcomers alike, and a player who
+	-- somehow already owns a tier should not be nagged by an arrow.
+	-- ⚠ Client subs Start alphabetically, so this handler runs one step AHEAD of
+	-- UpgradesSubsClient's on the same remote — hence reading the payload here
+	-- rather than LocalStatsService, which has not been fed yet.
+	local seenLevels = false
+	Net.Update("UpgradesUpdate").OnClientEvent:Connect(function(payload)
+		if type(payload) ~= "table" or type(payload.levels) ~= "table" then
+			-- R8: this remote is ANOTHER feature's contract (features/upgrades.md
+			-- owns it). If its shape ever changes, the tutorial's only exit stops
+			-- firing and the player keeps the arrow forever with nothing on the
+			-- console to say why. Warn once rather than returning silently.
+			Log.Once(
+				SCOPE,
+				"tutorial-upgrades-shape",
+				"UpgradesUpdate carried no `levels` table -- the tutorial can no longer see a purchase and will never finish"
+			)
+			return
+		end
+		local owned = false
+		for _, level in pairs(payload.levels) do
+			if type(level) == "number" and level >= 1 then
+				owned = true
+				break
+			end
+		end
+		local isFirstPush = not seenLevels
+		seenLevels = true
+		if not owned or not guidedStepRunning() then
+			return
+		end
+		if isFirstPush then
+			-- They already owned tiers before the flow could point at any. Normal
+			-- if `runCfg.resetOnLoad` is off (ADR-0013 is opt-out-able); a symptom
+			-- of a failed run reset if it is on. Either way suppressing is right —
+			-- but say WHICH completion this was, so the two are not confused.
+			Log.Info(SCOPE, "first UpgradesUpdate already reports owned tiers -- onboarding suppressed instead of pointing at a purchase already made")
+		else
+			-- BACKSTOP for the HUD opener: you cannot buy a tier without the tree
+			-- being open, so a real purchase proves the open even if the 0.5 s tick
+			-- never sampled it (open + buy + close inside one interval). No-ops when
+			-- the tick or the prompt already reported, and keeps `upgrades-open`
+			-- strictly before the server's `tutorial-done`.
+			reportTreeOpened()
+		end
+		finish()
 	end)
 
 	-- One throttled tick drives both world-facing steps. It is deliberately NOT
 	-- per-frame: the beam's endpoints follow their parent parts by themselves,
 	-- so this only has to notice pieces appearing, dying, or the player arriving.
+	-- BOTH beam steps tick here now (the last step draws a beam too, so it is no
+	-- longer a state with nothing to do). Still throttled, not per-frame: the
+	-- beam's endpoints follow their parent parts by themselves, so this only has
+	-- to notice pieces appearing, dying, the destination changing, or the player
+	-- arriving.
 	local accum = math.huge
 	RunService.RenderStepped:Connect(function(dt)
-		if step ~= "path" and step ~= "upgrades" then
+		if not isBeamStep(step) then
 			return
 		end
 		accum += dt
@@ -447,14 +617,22 @@ function TutorialSubsClient.Start(data, modules)
 			return
 		end
 		accum = 0
-		if step == "path" then
-			ensureBeam()
-			-- ARRIVAL. `checkpointFar` is BodySubsClient's plate-footprint test
-			-- (it Starts first, alphabetically); reading it keeps one definition
-			-- of "on the platform" instead of a second copy that could drift.
-			if AppRoot.Get("checkpointFar") == false then
-				setStep("upgrades")
-			end
+		ensureBeam()
+		-- ARRIVAL. `checkpointFar` is BodySubsClient's plate-footprint test
+		-- (it Starts first, alphabetically); reading it keeps one definition
+		-- of "on the platform" instead of a second copy that could drift.
+		if step == "path" and AppRoot.Get("checkpointFar") == false then
+			setStep("upgrades")
+		end
+		-- The tree may have been opened from the HUD button, which fires no
+		-- ProximityPrompt event. Reading AppRoot's own `openPanel` is how this sub
+		-- already learns a fact another sub owns (`checkpointFar`, one line up),
+		-- and for the same reason: ONE definition of "the tree is open", not a
+		-- second copy that can drift from UpgradesSubsClient's modal state.
+		-- Checked AFTER the arrival test so a player who opened the tree while
+		-- walking is reported the instant they land, not one tick later.
+		if AppRoot.GetOpenPanel() == "Upgrades" then
+			reportTreeOpened()
 		end
 	end)
 end

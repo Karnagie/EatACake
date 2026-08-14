@@ -58,7 +58,9 @@ TutorialConfig.bellyThreshold01 = 0.90
 TutorialConfig.world = {
 	mapFolder = "Map",
 	checkpointFolder = "Checkpoint",
-	-- Step 3's beam destination and step 4's arrow target.
+	-- The beam's two destinations: the checkpoint plate for step 4 ("go burn it
+	-- off"), the upgrade computer for step 5 ("now spend it"). Since 2026-08-09
+	-- BOTH steps draw the same beam — there is no arrow in the flow any more.
 	plateName = "CheckpointPlate",
 	upgradeStationName = "UpgradeStationBody",
 	-- Authored Beam cloned for the guidance line (R5: clone, never create).
@@ -72,24 +74,24 @@ TutorialConfig.world = {
 -- Beam geometry + legibility overrides, applied to the CLONE only — the
 -- authored template in ReplicatedStorage is never modified (R5).
 --
--- ⚠ `width` and `color` exist because the authored beam is a 3-stud WHITE line,
--- and this game's guidance run is 80+ studs across a pastel sky over a
--- near-white loaf: measured in Studio, the authored settings render as a
--- hairline that is not findable on screen at all. Width 7 + the candy-magenta
--- the EAT button already uses (the one hue in the palette that no part of the
--- scene shares) is what makes it read. Set either to nil to defer to whatever
--- the template is authored with.
+-- STRAIGHT and WHITE (user request, 2026-08-09): `curveSize = 0` makes the beam
+-- a direct line from the player to the target instead of the lobbed arc it used
+-- to draw, and the colour is plain white.
+--
+-- ⚠ `width` stays overridden. The authored template is a 3-stud line, and this
+-- game's guidance run is 80+ studs across a pastel sky over a near-white loaf:
+-- measured in Studio, 3 studs renders as a hairline that is not findable on
+-- screen at all. Width is the only lever left now that the hue is white, so do
+-- not drop it too. Set any of the three to nil to defer to the template.
 TutorialConfig.beam = {
 	playerAttachmentOffset = Vector3.new(0, 1.5, 0), -- on the HumanoidRootPart
-	targetAttachmentOffset = Vector3.new(0, 4.0, 0), -- above the plate's top face
-	curveSize = 12,
+	-- Above the destination's top face. The upgrade computer is taller than the
+	-- plate, so step 5 adds `stationExtraHeight` on top of this.
+	targetAttachmentOffset = Vector3.new(0, 4.0, 0),
+	stationExtraHeight = 2.0,
+	curveSize = 0,
 	width = 7,
-	color = Color3.fromRGB(255, 60, 200),
-}
-
--- Step 4's arrow sits above the upgrade computer, not inside it.
-TutorialConfig.arrow = {
-	targetOffset = Vector3.new(0, 5.0, 0),
+	color = Color3.new(1, 1, 1),
 }
 
 -- Retry cadence for authored instances that replicate LATE (R8: never a
