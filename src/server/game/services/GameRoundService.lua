@@ -10,6 +10,7 @@
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local Log = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Log"))
 
@@ -18,11 +19,16 @@ local SCOPE = "GameRound"
 local GameRoundService = {}
 
 local roundState -- RoundStateData
+local cakeConfig -- CakeConfigData.cake
 
 function GameRoundService.Init(data)
 	roundState = data.RoundStateData
+	cakeConfig = data.CakeConfigData and data.CakeConfigData.cake
 	if roundState == nil then
 		Log.Warn(SCOPE, "RoundStateData missing -- round validation disabled")
+	end
+	if cakeConfig == nil or type(cakeConfig.variants) ~= "table" then
+		Log.Warn(SCOPE, "CakeConfigData.cake.variants missing -- all round arrivals will be rejected")
 	end
 end
 
@@ -80,6 +86,44 @@ local function validateExpectedRoster(rawRoster, player: Player): ({ number }?, 
 	return roster, nil
 end
 
+local function validateCakeId(rawCakeId): (string?, string?)
+	if cakeConfig == nil or type(cakeConfig.variants) ~= "table" then
+		return nil, "CakeConfigData.cake.variants is unavailable"
+	end
+	if type(rawCakeId) ~= "string" or rawCakeId == "" or cakeConfig.variants[rawCakeId] == nil then
+		return nil, "cakeId is not a configured cake variant"
+	end
+	return rawCakeId, nil
+end
+
+local function directJoinCakeId(): (string?, string?)
+	local defaultId = cakeConfig and cakeConfig.defaultVariantId
+	local studioId = if RunService:IsStudio() and cakeConfig then cakeConfig.studioVariantId else nil
+	if type(studioId) == "string" and studioId ~= "" then
+		local validated, studioError = validateCakeId(studioId)
+		if validated ~= nil then
+			Log.Once(
+				SCOPE,
+				"studio-variant-override",
+				`Studio direct join override active -- using '{validated}' (CakeConfig.studioVariantId)`
+			)
+			return validated, nil
+		end
+		Log.Once(
+			SCOPE,
+			"invalid-studio-variant-override",
+			`CakeConfig.studioVariantId '{studioId}' is invalid ({tostring(studioError)}) -- production default used`
+		)
+	elseif studioId ~= nil then
+		Log.Once(
+			SCOPE,
+			"malformed-studio-variant-override",
+			"CakeConfig.studioVariantId must be a non-empty string or nil -- production default used"
+		)
+	end
+	return validateCakeId(defaultId)
+end
+
 local function validateLobbyJoin(joinData, player: Player): (any?, string?)
 	local matchConfig = roundState["match-config"]
 	local placeConfig = roundState["place-config"]
@@ -105,6 +149,10 @@ local function validateLobbyJoin(joinData, player: Player): (any?, string?)
 	then
 		return nil, "difficulty is unknown"
 	end
+	local cakeId, cakeError = validateCakeId(teleportData.cakeId)
+	if cakeId == nil then
+		return nil, cakeError
+	end
 
 	local roster, rosterError = validateExpectedRoster(teleportData.expectedUserIds, player)
 	if roster == nil then
@@ -119,6 +167,7 @@ local function validateLobbyJoin(joinData, player: Player): (any?, string?)
 	return {
 		roundId = teleportData.roundId,
 		difficulty = teleportData.difficulty,
+		cakeId = cakeId,
 		expectedUserIds = roster,
 		expectedCount = #roster,
 		directJoin = false,
@@ -140,9 +189,14 @@ function GameRoundService.CandidateFor(player: Player): (any?, string?)
 		if matchConfig.difficulties[difficulty] == nil then
 			return nil, `direct-join difficulty '{tostring(difficulty)}' is not configured`
 		end
+		local cakeId, cakeError = directJoinCakeId()
+		if cakeId == nil then
+			return nil, `direct-join cake is not configured: {cakeError}`
+		end
 		return {
 			roundId = `direct-{HttpService:GenerateGUID(false)}`,
 			difficulty = difficulty,
+			cakeId = cakeId,
 			expectedUserIds = { player.UserId },
 			expectedCount = 1,
 			directJoin = true,
@@ -156,6 +210,7 @@ function GameRoundService.Matches(candidate): boolean
 	if not roundState["established"]
 		or candidate.roundId ~= roundState["round-id"]
 		or candidate.difficulty ~= roundState["difficulty"]
+		or candidate.cakeId ~= roundState["cake-id"]
 		or candidate.expectedCount ~= roundState["expected-count"]
 	then
 		return false
@@ -178,6 +233,7 @@ function GameRoundService.Establish(player: Player, candidate)
 	roundState["direct-join"] = candidate.directJoin
 	roundState["round-id"] = candidate.roundId
 	roundState["difficulty"] = candidate.difficulty
+	roundState["cake-id"] = candidate.cakeId
 	roundState["expected-user-ids"] = candidate.expectedUserIds
 	roundState["expected-user-set"] = expectedSet
 	roundState["expected-count"] = candidate.expectedCount

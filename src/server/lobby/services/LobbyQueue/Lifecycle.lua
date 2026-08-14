@@ -94,6 +94,7 @@ function Lifecycle.Advance(now: number): { any }
 					table.insert(launches, {
 						queueId = queue.id,
 						launchToken = queue["launch-token"],
+						leaderUserId = queue["leader-user-id"],
 						players = snapshot,
 						difficulty = queue.difficulty,
 					})

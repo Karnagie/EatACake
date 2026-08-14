@@ -146,7 +146,7 @@ function LobbyQueueSubs.Start(data, services, subscriptions)
 	lobbyQueueData["update-remote"] = Net.Update("LobbyQueueUpdate")
 	lobbyQueueData["last-scan-at"] = os.clock()
 	Protocol.Init(lobbyQueueData, lobbyQueueService, analyticsSubs)
-	Launch.Init(lobbyQueueData, lobbyQueueService, teleportSubs, Protocol, analyticsSubs)
+	Launch.Init(lobbyQueueData, lobbyQueueService, teleportSubs, Protocol, analyticsSubs, data.PlayerProfileData)
 	Occupancy.Init(lobbyQueueData, lobbyQueueService, Protocol, Launch)
 
 	table.insert(lobbyQueueData.connections, lobbyQueueData["request-remote"].OnServerEvent:Connect(Protocol.OnQueueRequest))

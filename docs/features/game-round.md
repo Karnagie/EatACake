@@ -4,10 +4,14 @@
 
 One reserved game server owns one finite match. `GameRoundService` validates
 `Player:GetJoinData()` before admission: source universe/place, protocol,
-non-empty round id, known difficulty, 1–4 contiguous unique positive user ids,
-matching expected count, and the arriving player in that roster. The first valid
-arrival establishes the round; every later arrival must match it exactly or is
-kicked. A no-source/no-TeleportData direct join becomes an easy solo fallback.
+non-empty round id, known difficulty, playable `cakeId`, 1–4 contiguous unique
+positive user ids, matching expected count, and the arriving player in that
+roster. The first valid arrival establishes the round; every later arrival must
+match the round id, difficulty, cake and roster exactly or is kicked. A
+no-source/no-TeleportData direct join becomes an easy solo fallback using
+`CakeConfig.defaultVariantId` (`cake-classic`) in production. In Studio only,
+non-empty `CakeConfig.studioVariantId` replaces that direct-join cake after the
+same playable-variant validation; real TeleportData remains authoritative.
 
 The match starts when all expected members arrive **and every present profile is
 loaded**, or after 10 seconds with at least one loaded participant. At that
@@ -23,13 +27,16 @@ require a started match and a present roster participant.
 
 | Mode | Cake WORK | Calorie payout | Boss HP | Boss time | Solo clear |
 |---|---:|---:|---:|---:|---:|
-| `easy` | 1.08× | 1.00× | 0.75× | 1.50× | **35.3 min** (measured 2026-08-05) |
+| `easy` | 1.08× | 1.00× | 0.75× | 1.50× | **34.9 min** (measured 2026-08-11) |
 | `medium` | 1.27× | 1.25× | 1.00× | 1.20× | ~41 min (extrapolated) |
 | `hard` | 1.49× | 1.55× | 1.25× | 1.00× | ~44 min (extrapolated) |
 
-Work buys more LAYERS and smaller scoops, never a taller cake; payout rises
-faster than work, so hard mode is the efficient farm. Party size multiplies work
-by `1 + 0.5(n−1)` and payout per head by `1 + 0.62(n−1)`.
+Difficulty work buys more LAYERS and smaller scoops; it never changes the chosen
+variant's silhouette. Selectable variants may set their own height and duration;
+the current rainbow contract and measurements live in `features/cake-cycle.md`.
+Calorie payout rises faster than difficulty work, so hard mode is the efficient
+farm. Party size multiplies work by `1 + 0.5(n−1)` and payout per head by
+`1 + 0.62(n−1)`.
 ⚠ Every `workMultiplier` rose ×1.08 on 2026-07-30: the upgrade tree is RUN-scoped
 and re-priced so it is fully owned by ~48% of the cake, which means the back half
 of a run is played at full power — the bump buys the 40-minute target back.
@@ -58,9 +65,11 @@ display it): `{version, kind = "match-result", result = "win"|"loss", roundId}`.
 
 ## State and files
 
-All runtime state is in `RoundStateData`: active/established/direct flags, fixed
-roster, participants, arrival deadline, two-phase start/result guards, and return
-window.
+All runtime state is in `RoundStateData`: active/established/direct flags,
+`cake-id`, fixed roster, participants, arrival deadline, two-phase start/result
+guards, and return window. `MatchConfig.protocolVersion` is **2**; v1 arrivals
+have no authoritative cake and are rejected, so lobby and game places must be
+published coherently.
 `MatchConfig` owns protocol/timing/tuning. `GameRoundSubs` owns arrival/removal
 events and cross-sub orchestration; `GameRound/Return` owns the bounded,
 profile-safe lobby return loop; `CakeCycleSubs` owns terminal cake behavior;

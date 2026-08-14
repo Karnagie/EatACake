@@ -22,6 +22,7 @@
 | `SetSetting` | `SettingsSubs` | `features/settings.md` |
 | `RequestTeleport` | `TeleportSubs` | ADR-0009 / `features/persistence.md` |
 | `LobbyQueueRequest` | `LobbyQueueSubs` | `features/lobby-matchmaking.md` |
+| `SelectCake` | `CakeSelectSubs` (lobby) | `features/cake-select.md` |
 | `TutorialComplete` | `TutorialSubs` (game) | `features/tutorial.md` |
 | `AnalyticsBeat` | `AnalyticsSubs` (common — both places) | `features/analytics.md` — batched telemetry; the client may only assert what the server cannot see |
 
@@ -32,7 +33,7 @@
 | `CurrencyUpdate` | `EconomySubs` / grant handlers | `features/economy.md` |
 | `CakeSnapshotUpdate` | `CakeSubs` / `CakeCycleSubs` | `features/cake-sim.md` |
 | `CakeDeltaUpdate` (Unreliable) | `CakeSimulationSubs` | `features/cake-sim.md` |
-| `CakeCycleUpdate` | `CakeCycleSubs` | `features/cake-cycle.md` — ⚠ payload is PER-RECIPIENT while a boss prize exists (`pendingPet`), not a broadcast |
+| `CakeCycleUpdate` | `CakeCycleSubs` | `features/cake-cycle.md` — one broadcast for everyone (the per-recipient `pendingPet` prize was removed 2026-08-07); carries `miniBoss` during a zone gate |
 | `StomachUpdate` | `CakeSubs` / `BodySubs` | `features/body-gym.md` |
 | `GymUpdate` | `BodySubs` | `features/body-gym.md` |
 | `UpgradesUpdate` | `UpgradeSubs` | `features/upgrades.md` |
@@ -46,6 +47,7 @@
 | `CodeResultUpdate` | `CodesSubs` | `features/promo-codes.md` |
 | `SettingsUpdate` | `SettingsSubs` | `features/settings.md` |
 | `LobbyQueueUpdate` | `LobbyQueueSubs` | `features/lobby-matchmaking.md` |
+| `CakeSelectUpdate` | `CakeSelectSubs` (lobby) | `features/cake-select.md` |
 | `TutorialUpdate` | `TutorialSubs` (game) | `features/tutorial.md` |
 
 ## Player attributes (server-written, client-read)

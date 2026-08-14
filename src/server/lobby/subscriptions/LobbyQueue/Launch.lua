@@ -5,7 +5,11 @@
 
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Log = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Log"))
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Log = require(Shared:WaitForChild("Log"))
+local config = Shared:WaitForChild("config")
+local CakeConfig = require(config:WaitForChild("CakeConfig"))
+local CakeSelectConfig = require(config:WaitForChild("CakeSelectConfig"))
 
 local Launch = {}
 local queueData
@@ -13,18 +17,79 @@ local queueService
 local teleportSubs
 local Protocol
 local analytics -- optional; features/analytics.md
+local playerProfileData
 
-function Launch.Init(data, service, teleport, protocol, analyticsSubs)
+function Launch.Init(data, service, teleport, protocol, analyticsSubs, profiles)
 	queueData = data
 	queueService = service
 	teleportSubs = teleport
 	Protocol = protocol
 	analytics = analyticsSubs
+	playerProfileData = profiles
+	if playerProfileData == nil or type(playerProfileData.Get) ~= "function" then
+		Log.Warn(
+			"LobbyQueueSubs",
+			`PlayerProfileData.Get missing -- launches will fall back to CakeSelectConfig.defaultId '{tostring(CakeSelectConfig.defaultId)}'`
+		)
+	end
 end
 
 local function fail(launch, message: string)
 	Log.Warn("LobbyQueueSubs", `queue {launch.queueId} launch failed: {message}`)
 	Protocol.EmitEffect(queueService.FailLaunch(launch.queueId, launch.launchToken))
+end
+
+local function fallbackCakeId(launch, reason: string): string?
+	local defaultId = CakeSelectConfig.defaultId
+	local catalogue = CakeSelectConfig.cakes
+	if type(defaultId) ~= "string"
+		or defaultId == ""
+		or type(catalogue) ~= "table"
+		or catalogue[defaultId] == nil
+		or type(CakeConfig.variants) ~= "table"
+		or CakeConfig.variants[defaultId] == nil
+	then
+		Log.Warn(
+			"LobbyQueueSubs",
+			`queue {launch.queueId} cannot fall back after {reason}: default cake '{tostring(defaultId)}' is not a playable CakeConfig variant`
+		)
+		return nil
+	end
+	Log.Warn(
+		"LobbyQueueSubs",
+		`queue {launch.queueId} {reason} -- falling back to cake '{defaultId}'`
+	)
+	return defaultId
+end
+
+local function resolveCakeId(launch): string?
+	local leaderUserId = launch.leaderUserId
+	if type(leaderUserId) ~= "number" or leaderUserId <= 0 or leaderUserId % 1 ~= 0 then
+		return fallbackCakeId(launch, `has invalid leaderUserId '{tostring(leaderUserId)}'`)
+	end
+	if playerProfileData == nil or type(playerProfileData.Get) ~= "function" then
+		return fallbackCakeId(launch, `cannot read leader {leaderUserId}'s profile`)
+	end
+
+	local profile = playerProfileData.Get(leaderUserId)
+	if type(profile) ~= "table" then
+		return fallbackCakeId(launch, `leader {leaderUserId}'s profile is not loaded`)
+	end
+	local cakes = profile.cakes
+	local selected = if type(cakes) == "table" then cakes.selected else nil
+	if type(selected) ~= "string"
+		or selected == ""
+		or type(CakeSelectConfig.cakes) ~= "table"
+		or CakeSelectConfig.cakes[selected] == nil
+		or type(CakeConfig.variants) ~= "table"
+		or CakeConfig.variants[selected] == nil
+	then
+		return fallbackCakeId(
+			launch,
+			`leader {leaderUserId} has invalid profile.cakes.selected '{tostring(selected)}'`
+		)
+	end
+	return selected
 end
 
 function Launch.Perform(launch)
@@ -39,6 +104,11 @@ function Launch.Perform(launch)
 		fail(launch, "TeleportSubs.SendGroup is unavailable")
 		return
 	end
+	local cakeId = resolveCakeId(launch)
+	if cakeId == nil then
+		fail(launch, "no valid cake id is available")
+		return
+	end
 
 	local expectedUserIds = {}
 	for _, player in ipairs(launch.players) do
@@ -51,6 +121,7 @@ function Launch.Perform(launch)
 			version = matchConfig.protocolVersion,
 			roundId = HttpService:GenerateGUID(false),
 			difficulty = launch.difficulty,
+			cakeId = cakeId,
 			expectedUserIds = expectedUserIds,
 			expectedCount = #launch.players,
 			sourcePlaceId = game.PlaceId,

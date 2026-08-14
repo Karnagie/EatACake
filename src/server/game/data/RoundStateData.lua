@@ -11,6 +11,7 @@
 	  direct-join        whether the match used the easy-solo direct-join fallback
 	  round-id           non-empty lobby round id (or a generated direct-join id)
 	  difficulty         current MatchConfig difficulty id
+	  cake-id            current CakeConfig variant id
 	  expected-user-ids  fixed numeric roster array
 	  expected-user-set  fixed roster membership set, keyed by user id
 	  expected-count     fixed population used to scale the cake and boss
@@ -33,6 +34,7 @@ RoundStateData["established"] = false
 RoundStateData["direct-join"] = false
 RoundStateData["round-id"] = nil :: string?
 RoundStateData["difficulty"] = nil :: string?
+RoundStateData["cake-id"] = nil :: string?
 RoundStateData["expected-user-ids"] = {} :: { number }
 RoundStateData["expected-user-set"] = {} :: { [number]: boolean }
 RoundStateData["expected-count"] = 0
@@ -58,6 +60,7 @@ function RoundStateData.Init()
 	RoundStateData["direct-join"] = false
 	RoundStateData["round-id"] = nil
 	RoundStateData["difficulty"] = MatchConfig.round.directJoinDifficulty
+	RoundStateData["cake-id"] = nil
 	RoundStateData["expected-user-ids"] = {}
 	RoundStateData["expected-user-set"] = {}
 	RoundStateData["expected-count"] = 0
