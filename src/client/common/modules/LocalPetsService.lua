@@ -208,25 +208,6 @@ function LocalPetsService.BuildReveal(roll)
 end
 
 --API
--- Pending boss prize ({ petId, rarity } from CakeCycleUpdate) -> props for
--- UIKit.BossPrizeCard: { petName, rarity (Theme.Rarity style key), iconName }.
--- nil when there is nothing on offer. Same id->name/icon/rarity mapping as
--- BuildReveal, without the copies/NEW line: the boss card advertises WHAT is at
--- stake, not what you already own.
-function LocalPetsService.BuildPrize(pending)
-	if type(pending) ~= "table" or type(pending.petId) ~= "string" then
-		return nil
-	end
-	local def = petsById[pending.petId]
-	local rarityId = if def ~= nil then def.rarity else pending.rarity
-	return {
-		petName = petDisplayName(def, pending.petId),
-		rarity = RARITY_STYLE[rarityId] or "Common",
-		iconName = if def ~= nil then def.icon else nil,
-	}
-end
-
---API
 -- One-line base egg odds string computed from PetConfig.rarities weights
 -- (player-facing odds disclosure), e.g. "Common 60% · Uncommon 25% · ...".
 -- Zero-weight rarities are skipped.

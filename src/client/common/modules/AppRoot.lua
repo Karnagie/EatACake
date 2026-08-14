@@ -4,18 +4,31 @@
 	over HUD zIndex 1, hidden panels stay MOUNTED with visible = false).
 
 	Eat the Cake composition:
-	  HUD: calories + gems StatPills; LOBBY meta menu (up to 7 icon+label buttons,
-	       no bg — the two social offers appear only once their server push lands) / GAME single SETTINGS button in the same slot (there is NO
-	       Upgrades button in either place since 2026-07-30 — the tree opens from
-	       the checkpoint prompt, features/upgrades.md);
-	       CakeBar (top center), BellyBar (bottom center), ComboBadge,
-	       AnnounceBanner, BossPrizeCard (boss phase)
+	  HUD: calories + gems StatPills; two icon+label menus in the SAME top-left
+	       slot, one per place, both built by `menuBlock` from Theme.AppHud's grid
+	       numbers — LOBBY meta menu (up to 8 entries; the two social offers appear
+	       only once their server push lands) and GAME menu (UPGRADES / SHOP /
+	       SQUISHIES / SETTINGS, 2026-08-13). An entry BADGES + BREATHES when there
+	       is something behind it the player can afford right now (Upgrades from
+	       LocalUpgradeTree.AnyAffordable, Shop from
+	       LocalShopService.AffordableBoostCount — the shared predicates their own
+	       windows use, so an icon can never advertise a refused purchase);
+	       CakeBar (top center — doubles as the boss / zone-gate mini-boss HP
+	       bar), BellyBar (bottom center), ComboBadge, AnnounceBanner
 	  Panels (zIndex 50): Pets (inspect), Shop, DailyRewards, Codes,
-	       Settings, Matchmaking, InviteFriends + GroupReward (the two
-	       SocialPanel offers — lobby only, each gated on its server push)
-	  Overlays: HintArrow (45), GymOverlay (40), Upgrades hex-tree (60, lobby
-	       UpgradeStation opener pending — no HUD button), TutorialHint (70),
-	       PetRevealOverlay (90), TutorialSlides (95)
+	       Settings, Matchmaking, Cakes (the cake chooser — lobby only, but
+	       NOT push-gated: cake #1 always exists), InviteFriends + GroupReward
+	       (the two SocialPanel offers — lobby only, each gated on its server push)
+	  Celebration (30): CelebrationBanner — the layer-clear / Cake Monster
+	       splash, a full-bleed SIBLING of Hud in the free 4-39 band
+	       (features/food-burst.md). Its food confetti is NOT in this tree: it
+	       is FoodBurst's own ScreenGui at DisplayOrder 99, one below UiRoot.
+	  Overlays: GymOverlay (40), Upgrades hex-tree (60 — opened by the game HUD's
+	       Upgrades button OR the checkpoint's UpgradeStation prompt, both through
+	       `onToggleUpgrades` so the modal wiring cannot be bypassed),
+	       TutorialHint (70), PetRevealOverlay (90), TutorialSlides (95).
+	       Onboarding's world guidance is a BEAM owned by TutorialSubsClient, not
+	       a GUI layer.
 
 	Data flows IN through AppRoot.Set(patch) (called by subscriptions when
 	remoteUpdates arrive); user actions flow OUT through callbacks registered
@@ -23,17 +36,24 @@
 	work before AND after mount.
 
 	State fields: openPanel, calories, gems, settings, daily, shop,
-	group, codesStatus, cake, stomach, gym, upgrades, pets, petReveal,
-	petRevealCount, combo, announceKey, matchmaking, checkpointFar, tutorial,
-	referral, inviteStatus, groupClaim.
+	group, codesStatus, cake, cakes, stomach, gym, upgrades, pets, petReveal,
+	petRevealCount, combo, announceKey, celebration, matchmaking, checkpointFar,
+	tutorial, referral, inviteStatus, groupClaim.
+	⚠ `announceKey` and `celebration` are the SAME beat at two sizes and are
+	mutually exclusive — CakeSubsClient writes one or the other off one shared
+	sequence number (features/food-burst.md).
+	⚠ `cake` and `cakes` are DIFFERENT things and both are live: `cake` is the
+	in-run cycle snapshot that drives the CakeBar, `cakes` is the lobby's cake
+	SELECTION ({ selected, unlocked }, features/cake-select.md).
 	Callbacks: onClaimDaily(day), onToggleSetting(id, v),
 	onShopActivated(rowId), onRedeem(code), onBuyUpgrade(id),
 	onInviteFriends(), onClaimGroupReward(),
 	onEquipPet(petId, equip), onToggleUpgrades(), onGymTap(),
 	onDismissReveal(), onEatDown(input), onEatUp(input), onReturnCheckpoint(),
+	onSelectCake(cakeId),
 	onConfigureMatch(difficulty, maxPlayers), onCancelMatch(),
 	onMatchDifficultyPick(difficulty, isDefault), onMatchPartyPick(n, isDefault),
-	onTutorialSkip(), onTutorialHintDismiss(), onTutorialArrowTarget() -> Vector3?,
+	onTutorialSkip(), onTutorialHintDismiss(),
 	onPanelChanged(panel|nil) — fired whenever `openPanel` changes (never on
 	mount); AudioSubsClient turns it into the open/close whoosh.
 ]]
@@ -49,9 +69,11 @@ local GuiService = game:GetService("GuiService")
 local IS_TOUCH = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
 local React = require(ReplicatedStorage.Packages.React)
+local Log = require(ReplicatedStorage.Shared.Log)
 local UIKit = require(ReplicatedStorage.Shared.UIKit)
 local CakeConfig = require(ReplicatedStorage.Shared.config.CakeConfig)
 local MatchConfig = require(ReplicatedStorage.Shared.config.MatchConfig)
+local CakeSelectConfig = require(ReplicatedStorage.Shared.config.CakeSelectConfig)
 local TutorialConfig = require(ReplicatedStorage.Shared.config.TutorialConfig)
 local LocalRewardsService = require(script.Parent.LocalRewardsService)
 local LocalSettingsService = require(script.Parent.LocalSettingsService)
@@ -93,7 +115,24 @@ local current = {
 	petRevealCount = 0,
 	combo = nil,
 	announceKey = false,
+	-- CELEBRATION SPLASH (features/food-burst.md). `{ cheerKey, subKey?, seq }`
+	-- for the two beats that are a moment rather than a notification — a layer
+	-- cleared and the Cake Monster down. It carries KEYS, not resolved text, so
+	-- the rolled phrase survives the ~14 re-renders/second the HUD does while it
+	-- is on screen, plus the locale-ready repaint, without ever rerolling.
+	-- ⚠ Mutually exclusive with `announceKey` by construction: CakeSubsClient
+	-- pushes one or the other for a given beat, never both — two banners in one
+	-- frame stomp each other (the same rule the mini-boss announce already
+	-- follows, features/cake-cycle.md).
+	celebration = false,
 	matchmaking = false,
+	-- Cake selection (features/cake-select.md): { selected = cakeId,
+	-- unlocked = { [cakeId] = true } }, pushed by CakeSelectSubs and patched
+	-- optimistically on a tap by CakeSelectSubsClient. nil until that push lands
+	-- — the chooser still renders (cake #1 is always available), it just shows
+	-- the catalogue's default selection until the server confirms.
+	-- ⚠ NOT `cake`, which is the in-run cycle snapshot a few lines above.
+	cakes = nil,
 	-- Social offers (features/referrals.md, features/group-reward.md). `referral`
 	-- is the server snapshot ({ rewarded, rewardGems }) and doubles as the gate
 	-- for the Invite button — until it lands there is no reward figure to show.
@@ -184,6 +223,11 @@ function AppRoot.GetOpenPanel(): string?
 	return current.openPanel
 end
 
+local function currentMatchmakingBusy(): boolean
+	local matchmaking = current.matchmaking
+	return type(matchmaking) == "table" and matchmaking.busy == true
+end
+
 -- ── helpers ─────────────────────────────────────────────────────────────
 
 -- Simulator number formatting: exact with thousands separators below 10K, then
@@ -227,15 +271,92 @@ local function formatNumber(amount: number): string
 	return sign .. formatted
 end
 
--- Fit a panel aspect within maxFraction of the viewport on the limiting axis.
-local function calculateScale(panelAspect: number, maxFraction: number): Vector2
+-- Fit a panel aspect within maxFraction of the supplied surface (or the camera
+-- viewport). A surface override lets a full-bleed root keep panel chrome below
+-- Roblox's topbar while the modal scrim still covers the whole display.
+local function calculateScale(panelAspect: number, maxFraction: number, surface: Vector2?): Vector2
 	local camera = Workspace.CurrentCamera
-	local viewport = camera and camera.ViewportSize or Vector2.new(1920, 1080)
+	local viewport = surface or (camera and camera.ViewportSize) or Vector2.new(1920, 1080)
 	local viewportAspect = viewport.X / math.max(viewport.Y, 1)
 	if viewportAspect >= panelAspect then
 		return Vector2.new(maxFraction * panelAspect / viewportAspect, maxFraction)
 	end
 	return Vector2.new(maxFraction, maxFraction * viewportAspect / panelAspect)
+end
+
+-- ── Roblox's own GUI: the two reserved regions we must place around ──────────
+-- Numbers and the measurement that produced them live in `Theme.SafeArea`; this
+-- is the ONLY place that reads them off the engine (R1/R2 — Theme stays data).
+
+-- How far down Roblox's topbar reaches, plus the pad that keeps us off it.
+-- `GetGuiInset()` is the LEGACY inset (the pre-unibar 36 px bar) and can
+-- under-report the modern chip; `GuiService.TopbarInset` is a Rect whose Max.Y
+-- is the strip's real bottom edge. Take whichever is taller — a client that
+-- only answers one of the two still gets the right number — clamp against a
+-- nonsense report, then pad.
+local insetNoticeLogged = false
+local function resolveTopInset(): number
+	local legacy = GuiService:GetGuiInset().Y
+	local reserved = 0
+	local bar = GuiService.TopbarInset
+	if typeof(bar) == "Rect" then
+		reserved = bar.Max.Y
+	end
+	if reserved > legacy and not insetNoticeLogged then
+		-- Info, NOT Log.Once (which warns): this is the expected modern case and
+		-- the resolver has already absorbed it. R8 reserves Warn for "needs
+		-- attention", and a yellow line on every healthy boot is how a console
+		-- stops being read. Latched because the resolver runs on every sync.
+		insetNoticeLogged = true
+		Log.Info(
+			"AppRoot",
+			`Roblox topbar reaches {reserved}px but GetGuiInset() reports {legacy}px — HUD placement follows the taller one`
+		)
+	end
+	local top = math.clamp(math.max(legacy, reserved), 0, Theme.SafeArea.MaxTopInsetPx)
+	return top + Theme.SafeArea.TopPadPx
+end
+
+-- Height of the bottom-right corner Roblox's touch JUMP button occupies, in px
+-- (0 when there are no touch controls). Roblox scales that button with the
+-- SHORTER viewport axis while our controls are placed by viewport FRACTION, so
+-- a control that clears it on a desktop window lands on top of it on a phone —
+-- callers keep their own bottom edge this far off the bottom instead.
+local function resolveTouchReserve(size: Vector2): number
+	-- ⚠ `TouchEnabled`, NOT `IS_TOUCH`. Those answer different questions:
+	-- IS_TOUCH is `touch and no keyboard` and exists to decide whether to RENDER
+	-- the EAT button, while this one asks whether ROBLOX may be drawing its
+	-- controls. An iPad with a Magic Keyboard or a touchscreen laptop reports
+	-- both, so IS_TOUCH is false there — and Roblox still shows a jump button
+	-- the moment the player taps the screen. Reserving a corner that stays empty
+	-- costs a little layout; not reserving it puts our control under Roblox's.
+	if not UserInputService.TouchEnabled then
+		return 0
+	end
+	-- `> 1`, not `> 0`: a session's first frames report a DEGENERATE (1,1)
+	-- surface, and sizing a reserve off that is nonsense. The refit effect
+	-- re-runs this the moment a real one lands.
+	if size == nil or size.X <= 1 or size.Y <= 1 then
+		return 0
+	end
+	local safe = Theme.SafeArea
+	local button = math.min(math.min(size.X, size.Y) * safe.TouchButtonFraction, safe.TouchButtonMaxPx)
+	return button * safe.TouchButtonReserveMult + safe.TouchCornerPadPx
+end
+
+-- Height of the full-bleed root in px, so the two safe-area numbers above can
+-- also be handed to FULL-BLEED overlays as FRACTIONS of it (a full-bleed frame's
+-- height IS this, so a fraction is exact there; inside the shortened `Hud` layer
+-- only pixels are, which is why the two prop families differ by suffix).
+-- The live value comes off the `App` frame's own AbsoluteSize — the surface we
+-- are actually placing into, and the only source that stays honest when
+-- `Camera.ViewportSize` does not (it reports a degenerate (1,1) for the first
+-- frames of a session, and in a Studio session driven over MCP it can stay
+-- there). The camera is only the seed for the very first render.
+local function resolveViewportSize(): Vector2
+	local camera = Workspace.CurrentCamera
+	local viewport = camera and camera.ViewportSize
+	return if viewport ~= nil then viewport else Vector2.new(1920, 1080)
 end
 
 -- Server messages may be locale keys or already-authored display strings.
@@ -276,6 +397,13 @@ local function cakeBarModel(cake)
 	if phase == "boss" then
 		local hp01 = if cake.boss then cake.boss.hp / math.max(1, cake.boss.maxHp) else 1
 		return hp01, locale.T("cake-boss", { timer = math.floor(cake.timer or 0) }), "boss"
+	elseif phase == "miniboss" then
+		-- The ZONE GATE (features/cake-cycle.md). Same red HP bar as the finale,
+		-- but NO timer in the label — a mini-boss is untimed on purpose, and a
+		-- counting-down "0s" would read as a fight you are losing.
+		local mini = cake.miniBoss
+		local hp01 = if mini then mini.hp / math.max(1, mini.maxHp) else 1
+		return hp01, locale.T("cake-miniboss"), "boss"
 	elseif phase == "reward" then
 		return 1, locale.T("cake-reward"), "eating"
 	elseif phase == "spawning" then
@@ -322,12 +450,6 @@ local function App()
 	local socialScale, setSocialScale = React.useState(function()
 		return calculateScale(Theme.SocialLayout.PanelAspect, Theme.SocialLayout.PanelMaxViewportFraction)
 	end)
-	local matchScale, setMatchScale = React.useState(function()
-		return calculateScale(
-			Theme.MatchmakingLayout.PanelAspect,
-			Theme.MatchmakingLayout.PanelMaxViewportFraction
-		)
-	end)
 	-- The shop is landscape now (grids per category), so it needs its own fit —
 	-- it used to borrow portraitScale.
 	local shopScale, setShopScale = React.useState(function()
@@ -342,11 +464,29 @@ local function App()
 	local hintScale, setHintScale = React.useState(function()
 		return calculateScale(Theme.TutorialHint.Aspect, Theme.TutorialHint.MaxViewportFraction)
 	end)
-	-- Topbar inset in px. The root gui is full-bleed (UiRoot), so the HUD layer
-	-- applies this itself. Not a constant: it is 0 in some contexts, and it
-	-- changes when the topbar shows/hides.
-	local topInset, setTopInset = React.useState(function()
-		return GuiService:GetGuiInset().Y
+	-- Topbar inset in px (see resolveTopInset). The root gui is full-bleed
+	-- (UiRoot), so the HUD layer applies this itself — and so does every
+	-- full-bleed overlay that PLACES a control near the top edge. Not a
+	-- constant: it is 0 in some contexts, and it changes when the topbar
+	-- shows/hides or the player rotates a phone.
+	local topInset, setTopInset = React.useState(resolveTopInset)
+	local appRef = React.useRef(nil)
+	-- Prefer the surface we are actually placing into over what the camera
+	-- claims; the two agree in a real client and only the first disagrees when
+	-- the camera has not settled.
+	local function rootSize(): Vector2
+		local app = appRef.current
+		if app ~= nil and app.AbsoluteSize.Y > 1 then
+			return app.AbsoluteSize
+		end
+		return resolveViewportSize()
+	end
+	-- Bottom-right corner reserved for Roblox's touch jump button, px (0 on PC).
+	local touchReserve, setTouchReserve = React.useState(function()
+		return resolveTouchReserve(resolveViewportSize())
+	end)
+	local viewportY, setViewportY = React.useState(function()
+		return math.max(resolveViewportSize().Y, 1)
 	end)
 	local codeInput, setCodeInput = React.useState("")
 	local selectedPetId, setSelectedPetId = React.useState(nil :: string?)
@@ -390,16 +530,50 @@ local function App()
 	end, { openPanelDep })
 
 	-- Topbar inset tracking for the HUD layer. Separate effect from the viewport
-	-- refit below: the inset changes on its own signal (the topbar can hide), and
-	-- the refit's per-panel scales do not depend on it.
+	-- refit below: the inset changes on its own signal (the topbar can hide).
+	-- Matchmaking's safe-area fit derives from this state during render.
 	React.useEffect(function()
+		local alive = true
 		local function syncInset()
-			setTopInset(GuiService:GetGuiInset().Y)
+			if not alive then
+				return
+			end
+			setTopInset(resolveTopInset())
 		end
 		syncInset()
-		local connection = GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(syncInset)
+		local connections = {
+			GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(syncInset),
+			-- The strip's height also moves when the Roblox menu opens/closes,
+			-- and both APIs can still answer 0 for a beat after the client boots
+			-- — one late re-read costs nothing and is the difference between a
+			-- HUD parked under the bar for the session and a correct one.
+			GuiService:GetPropertyChangedSignal("MenuIsOpen"):Connect(syncInset),
+		}
+		task.delay(1, syncInset)
+		-- The root's own laid-out height is what the safe-area FRACTIONS are
+		-- relative to, and it is correct even when the camera's ViewportSize is
+		-- not. Own signal, because a gui can be re-laid-out (device safe area,
+		-- rotation) without the camera changing.
+		local app = appRef.current
+		if app ~= nil then
+			local function syncHeight()
+				if not alive then
+					return
+				end
+				local size = rootSize()
+				setViewportY(math.max(size.Y, 1))
+				setTouchReserve(resolveTouchReserve(size))
+			end
+			syncHeight()
+			table.insert(connections, app:GetPropertyChangedSignal("AbsoluteSize"):Connect(syncHeight))
+		else
+			Log.Once("AppRoot", "no-app-ref", "App frame ref never populated — safe-area fractions fall back to the camera viewport")
+		end
 		return function()
-			connection:Disconnect()
+			alive = false
+			for _, connection in ipairs(connections) do
+				connection:Disconnect()
+			end
 		end
 	end, {})
 
@@ -407,16 +581,17 @@ local function App()
 	React.useEffect(function()
 		local viewportConnection, cameraConnection
 		local function refit()
-			setTopInset(GuiService:GetGuiInset().Y)
+			setTopInset(resolveTopInset())
+			-- Roblox scales its touch controls with the SHORTER viewport axis, so
+			-- this has to be recomputed with the viewport, not once at mount.
+			local size = rootSize()
+			setTouchReserve(resolveTouchReserve(size))
+			setViewportY(math.max(size.Y, 1))
 			setPortraitScale(calculateScale(Theme.Layout.PanelAspect, Theme.Layout.PanelMaxViewportFraction))
 			setWideScale(calculateScale(Theme.RewardsLayout.PanelAspect, Theme.RewardsLayout.PanelMaxViewportFraction))
 			setCodesScale(calculateScale(Theme.CodesLayout.PanelAspect, Theme.CodesLayout.PanelMaxViewportFraction))
 			setPetsScale(calculateScale(Theme.PetsInspectLayout.PanelAspect, Theme.PetsInspectLayout.PanelMaxViewportFraction))
 			setSocialScale(calculateScale(Theme.SocialLayout.PanelAspect, Theme.SocialLayout.PanelMaxViewportFraction))
-			setMatchScale(calculateScale(
-				Theme.MatchmakingLayout.PanelAspect,
-				Theme.MatchmakingLayout.PanelMaxViewportFraction
-			))
 			setShopScale(calculateScale(
 				Theme.ShopLayout.PanelAspect,
 				Theme.ShopLayout.PanelMaxViewportFraction
@@ -460,8 +635,24 @@ local function App()
 		then math.clamp(state.gym.remain01, 0, 1)
 		else 1
 
+	-- Is a modal already up? The scrim prevents POINTER access to the HUD, but
+	-- controller selection is a separate channel and must obey the same boundary.
+	-- Check both the synchronous mirror and this render: during either edge of a
+	-- React commit, one of them still owns the modal and a held HUD control must
+	-- not close/replace it.
+	local function modalBusy(): string?
+		return current.openPanel or state.openPanel
+	end
+
 	local function togglePanel(name: string)
-		AppRoot.Open(if state.openPanel == name then nil else name)
+		local blocking = modalBusy()
+		if blocking ~= nil then
+			-- R8: a dead press with nothing on the console used to be one button in
+			-- the lobby; the game HUD now has four, so say which modal ate it.
+			Log.Info("AppRoot", `HUD '{name}' press ignored — '{blocking}' is already open`)
+			return
+		end
+		AppRoot.Open(name)
 	end
 
 	-- ── view-model builds ────────────────────────────────────────────────
@@ -545,9 +736,17 @@ local function App()
 	-- path (X button, scrim tap-outside, future gestures) runs the same
 	-- contract — a blanket Open(nil) on the scrim skipped Matchmaking's
 	-- server-side cancel and Codes' status clear (adversarial review
-	-- 2026-08-01). `callbacks` is a module-level table read at call time,
-	-- so empty deps are safe (closeShop's precedent).
+	-- 2026-08-01). Launch-busy matchmaking cannot be closed: configure is
+	-- already ordered ahead of a leave, so hiding the panel would reject the
+	-- late leave while the countdown continued invisibly. `callbacks` remains a
+	-- module-level table, and `current.matchmaking` is also read at call time so
+	-- the guard changes synchronously before React commits the next render.
 	local closeMatchmaking = React.useCallback(function()
+		-- Read the module-level mirror patched synchronously by AppRoot.Set. A
+		-- render-captured value leaves one multitouch release window after START.
+		if current.openPanel ~= "Matchmaking" or currentMatchmakingBusy() then
+			return
+		end
 		if callbacks.onCancelMatch then
 			callbacks.onCancelMatch()
 		end
@@ -592,14 +791,24 @@ local function App()
 		for _, id in ipairs(MatchConfig.difficultyOrder) do
 			local difficulty = MatchConfig.difficulties[id]
 			if difficulty ~= nil then
+				local ui = if type(difficulty.ui) == "table" then difficulty.ui else {}
+				local descriptionKey = ui["description-key"]
 				table.insert(options, {
 					id = id,
 					label = locale.T(difficulty.labelKey),
+					description = if type(descriptionKey) == "string" then locale.T(descriptionKey) else "",
+					iconName = ui["icon-name"],
+					accent = ui["accent"] or id,
+					-- Icon-first passive reward tag. The value is config data, while
+					-- punctuation, suffix order, and the reward noun belong to locale.
+					rewardText = locale.T("match-reward-multiplier", {
+						n = difficulty.caloriesMultiplier or 1,
+					}),
 				})
 			end
 		end
 		return options
-	end, {})
+	end, { state.localeReady or false })
 	local playerCountOptions = React.useMemo(function()
 		local options = {}
 		for _, count in ipairs(MatchConfig.playerCounts) do
@@ -613,7 +822,72 @@ local function App()
 			end
 		end
 		return options
-	end, { matchmakingMaxPlayers })
+	end, { matchmakingMaxPlayers, state.localeReady or false })
+
+	-- ── cake selection (features/cake-select.md) ─────────────────────────
+	-- Built from the CATALOGUE, not gated on the server push. Unlike the two
+	-- social offers — which have nothing to show until their payload lands —
+	-- cake #1 is always available, so the chooser has to be usable on the first
+	-- frame. Until `CakeSelectUpdate` arrives this renders the catalogue default
+	-- as selected and every conditional cake as LOCKED, which is the
+	-- conservative reading; the push corrects it a moment later.
+	-- ⚠ Do not shortcut this with `leaderstats.Cakes` — that IntValue is written
+	-- on a 10 s heartbeat, so a player who just cleared their first cake would
+	-- watch the rainbow stay locked for up to ten seconds after earning it.
+	local cakeState = if type(state.cakes) == "table" then state.cakes else nil
+	local cakeSelectedId = if cakeState ~= nil and type(cakeState.selected) == "string"
+		then cakeState.selected
+		else CakeSelectConfig.defaultId
+	local cakeUnlocked = if cakeState ~= nil and type(cakeState.unlocked) == "table"
+		then cakeState.unlocked
+		else nil
+	-- Deps are written `x or false`: a nil in a jsdotlua dep array makes the
+	-- comparison skip, which freezes the memo at its first value forever.
+	local cakeOptions = React.useMemo(function()
+		local options = {}
+		for _, id in ipairs(CakeSelectConfig.order) do
+			local definition = CakeSelectConfig.cakes[id]
+			if definition ~= nil then
+				-- An "always" cake is never locked even before the push; anything
+				-- with a real rule stays locked until the server SAYS otherwise.
+				local locked = definition.unlockRule ~= "none"
+					and not (cakeUnlocked ~= nil and cakeUnlocked[id] == true)
+				-- A teaser slot is LOCKED like any other unearned cake — equally
+				-- unpickable — and differs only in the badge glyph and the copy,
+				-- so "you can earn this" and "this does not exist yet" stay
+				-- distinguishable without becoming two card types.
+				local comingSoon = definition.unlockRule == "coming-soon"
+				table.insert(options, {
+					id = id,
+					label = locale.T(definition.nameKey),
+					iconName = definition.iconName,
+					accent = definition.accent,
+					selected = cakeSelectedId == id,
+					locked = locked,
+					comingSoon = comingSoon,
+					-- The requirement is shown only while it is still a
+					-- requirement — an unlocked card has nothing to explain.
+					statusText = if locked and definition.unlockHintKey ~= nil
+						then locale.T(definition.unlockHintKey)
+						else nil,
+				})
+			end
+		end
+		return options
+	end, { cakeSelectedId, cakeUnlocked or false, state.localeReady or false })
+	local onSelectCake = React.useCallback(function(cakeId)
+		-- Same synchronous guard as closeMatchmaking: a held cake press releasing
+		-- after START or logical close must not persist a different account
+		-- preference. This handler is shared by exactly these two cake surfaces.
+		local openPanel = current.openPanel
+		if (openPanel ~= "Matchmaking" and openPanel ~= "Cakes") or currentMatchmakingBusy() then
+			return
+		end
+		if callbacks.onSelectCake then
+			callbacks.onSelectCake(cakeId)
+		end
+	end, {})
+
 	local matchStatusText = if matchmaking ~= nil
 		then localizeMessage(
 			matchmaking.statusText,
@@ -643,9 +917,10 @@ local function App()
 	local cakeFinds = state.cake and state.cake.finds
 	local cakeVisible = cakePhase ~= "eating"
 		or (type(cakeFinds) == "table" and (cakeFinds.total or 0) > 0)
-	-- Touch hold-to-eat button: shown only while there's cake to eat (eating /
-	-- boss phases), never while the gym overlay or a panel is up (you're not
-	-- eating then, and it would sit under/beside them). Touch devices only.
+	-- Touch hold-to-eat button: shown only while there's something to tap
+	-- (eating / boss / the zone-gate mini-boss, which takes the same tap), never
+	-- while the gym overlay or a panel is up (you're not eating then, and it
+	-- would sit under/beside them). Touch devices only.
 	-- ⚠ `tutorialSlidesUp` is checked separately from `openPanel`: the comic
 	-- board deliberately is NOT a panel (it must not fire the whoosh or arm the
 	-- scrim), so the openPanel test below does not cover it — and a pink EAT
@@ -656,7 +931,7 @@ local function App()
 		and state.tutorial.slides == true
 	local eatButtonVisible = showGame
 		and IS_TOUCH
-		and (cakePhase == "eating" or cakePhase == "boss")
+		and (cakePhase == "eating" or cakePhase == "boss" or cakePhase == "miniboss")
 		and not gymActive
 		and not tutorialSlidesUp
 		and state.openPanel == nil
@@ -710,40 +985,70 @@ local function App()
 	-- The eat hint's copy AND its glyph branch on the device, from the same
 	-- IS_TOUCH the touch EAT button uses — a phone is told to press the button
 	-- it can see, a desktop is told to click. (Hybrid laptops read as PC.)
-	local tutorialHint = tutorial ~= nil and tutorial.hint == "eat"
-	local tutorialArrow = tutorial ~= nil and tutorial.arrow == "upgrades"
+	-- ⚠ SUPPRESSED while any panel or overlay is up. The hint sits at zIndex 70,
+	-- i.e. ABOVE every panel (50) and the hex tree (60), so it floated over
+	-- whatever the player opened — reachable in the game place since the HUD grew
+	-- Upgrades/Shop/Squishies buttons (2026-08-13). Hiding it costs the step
+	-- nothing: its two exits are its own CTA and the first bite, and neither can
+	-- happen behind a modal (the scrim is a full-screen TextButton, so every PC
+	-- click is `gameProcessed` and the touch EAT button is already hidden while
+	-- `openPanel ~= nil`). It comes straight back when the panel closes.
+	local tutorialHint = tutorial ~= nil and tutorial.hint == "eat" and state.openPanel == nil
 
-	-- The squishy on offer for beating the boss. Server-decided and attached to
-	-- this player's cycle update while the fight is live (features/cake-cycle.md);
-	-- it clears on win/loss, so the card's lifetime is the fight's.
-	local bossPrize = React.useMemo(function()
-		local cake = state.cake
-		return if type(cake) == "table" then LocalPetsService.BuildPrize(cake.pendingPet) else nil
-	end, { (state.cake ~= nil and state.cake.pendingPet ~= nil and state.cake.pendingPet.petId) or false })
+	-- ── attention: what is buyable RIGHT NOW ─────────────────────────────
+	-- Two icons in the menu answer "is there something behind me you can afford?"
+	-- with a BADGE and the kit's attention breathe (Theme.Feel.Pulse), because the
+	-- audience is children who may not read the labels at all (squint-test skill):
+	-- a dot plus motion survives a squint, a number does not.
+	-- Both predicates are the SHARED ones their own windows use, so an icon can
+	-- never advertise a purchase the panel then refuses — the same one-way
+	-- guarantee the upgrade station's world sign has (features/upgrades.md).
+	-- Memoised on their inputs: the App re-renders at bite rate and neither
+	-- balance moves per bite (calories are BANKED at the gym, gems drop on a find).
+	local upgradesAffordable = React.useMemo(function()
+		return LocalUpgradeTree.AnyAffordable(state.upgrades, state.calories)
+	end, { state.upgrades or false, state.calories })
+	-- BOOSTS only — see LocalShopService.AffordableBoostCount for why the Robux
+	-- shelf is deliberately not counted.
+	local boostsAffordable = React.useMemo(function()
+		return LocalShopService.AffordableBoostCount(state.shop, state.gems) > 0
+	end, { state.shop or false, state.gems })
+	-- ⚠ Gated by PLACE, not just by affordability. BOTH rosters mount in both
+	-- places — only the parent Frame's `Visible` differs — and `Theme.Feel.Pulse`
+	-- repeats forever, so an ungated cue would leave TweenService driving 2-3
+	-- UIScales on invisible buttons for the whole session (and pop badges nobody
+	-- can see). The lobby also has nothing to say about `upgradesAffordable`: the
+	-- tree is RUN-scoped, so in the lobby it is always a tier-0 tree on a wiped
+	-- balance (ADR-0013).
+	local lobbyBoostCue = showLobby and boostsAffordable
+	local gameBoostCue = showGame and boostsAffordable
+	local gameUpgradeCue = showGame and upgradesAffordable
 
 	-- ── menu ─────────────────────────────────────────────────────────────
-	-- The META menu is LOBBY-only (its handlers are lobby subs). UPGRADES is NOT
-	-- in it any more (2026-07-30, by request): the tree is RUN-scoped (ADR-0013),
-	-- so there is nothing to spend in the lobby — a run starts at tier 0 with an
-	-- empty calorie balance and buys the whole tree back inside the cake. It gets
-	-- its own button in the GAME HUD below instead, which is also where it was
-	-- MISSING: this frame is `Visible = showLobby`, so before this change the tree
-	-- had a button in the one place it was useless and none in the one place the
-	-- pacing depends on it. The authored `UpgradeStation` prompt at the game
-	-- checkpoint still opens it too (features/upgrades.md).
-	-- 7 entries at 2 columns = 4 rows (570/1080 from y 172 -> 742 ✓, the tallest
-	-- form Theme.AppHud's grid arithmetic was cut for). The two social buttons sit
-	-- at the END: the meta menu's order is stable across sessions and shuffling the
-	-- established four would cost every returning player their muscle memory.
+	-- The META menu is LOBBY-only (its handlers are lobby subs); the GAME place
+	-- builds its own, shorter roster from the same helper below.
+	-- 8 entries at 2 columns = 4 rows (570/1080 from y 172 -> 742 ✓, the tallest
+	-- form Theme.AppHud's grid arithmetic was cut for — and 8 is still 4 rows, so
+	-- adding the Cakes button in 2026-08 did not change the block's height). The
+	-- two social buttons sit at the END: the meta menu's order is stable across
+	-- sessions and shuffling the established four would cost every returning
+	-- player their muscle memory.
 	-- `GroupReward` is hidden until the server says the community is CONFIGURED
 	-- (SocialData.groupId ~= 0) and `InviteFriends` until `ReferralUpdate` lands —
 	-- both resolved in the social view-model above.
 	local menu = {
 		{ name = "Pets", label = locale.T("menu-pets"), badge = false },
-		{ name = "Shop", label = locale.T("menu-shop"), badge = false },
+		{ name = "Shop", label = locale.T("menu-shop"), badge = lobbyBoostCue, pulse = lobbyBoostCue },
 		{ name = "DailyRewards", label = locale.T("menu-daily"), badge = dailyBadge },
 		{ name = "Codes", label = locale.T("menu-codes"), badge = false },
 		{ name = "Settings", label = locale.T("menu-settings"), badge = false },
+		-- Cake selection (features/cake-select.md). Appended AFTER the
+		-- established five so no returning player loses the position of a button
+		-- they already know, and BEFORE the two conditional social entries so it
+		-- keeps a fixed slot whether or not those are present. Total menu height
+		-- is unchanged in both cases: at 2 columns, 5 and 6 entries are both 3
+		-- rows, 7 and 8 are both 4.
+		{ name = "Cakes", label = locale.T("menu-cakes"), badge = false },
 	}
 	if referral ~= nil then
 		table.insert(menu, { name = "InviteFriends", label = locale.T("menu-invite"), badge = false })
@@ -758,56 +1063,194 @@ local function App()
 			badge = groupState.claimed ~= true,
 		})
 	end
-	local hud = Theme.AppHud
-	local menuCount = #menu
-	-- Icon GRID: buttons flow left-to-right, wrapping after MenuColumns, so the
-	-- buttons form a compact block (2 columns, currently 3 rows with the last
-	-- cell empty) instead of a column running to the bottom of the screen. Cell
-	-- size/padding are fractions of this frame, both derived from menuCount —
-	-- adding or removing an entry needs no constant here (which is what let the
-	-- two social buttons take it from 5 entries to 7, i.e. 3 rows to 4, with no
-	-- layout edit).
-	local menuColumns = math.max(hud.MenuColumns or 1, 1)
-	local menuRows = math.ceil(menuCount / menuColumns)
-	local menuTotalHeight = hud.MenuButtonHeight * menuRows + hud.MenuGap * (menuRows - 1)
-	local menuTotalWidth = hud.MenuButtonWidth * menuColumns + hud.MenuGapX * (menuColumns - 1)
-	local menuChildren = {
-		Layout = React.createElement("UIGridLayout", {
-			FillDirection = Enum.FillDirection.Horizontal,
-			FillDirectionMaxCells = menuColumns,
-			HorizontalAlignment = Enum.HorizontalAlignment.Left,
-			VerticalAlignment = Enum.VerticalAlignment.Top,
-			SortOrder = Enum.SortOrder.LayoutOrder,
-			CellSize = UDim2.fromScale(hud.MenuButtonWidth / menuTotalWidth, hud.MenuButtonHeight / menuTotalHeight),
-			CellPadding = UDim2.fromScale(hud.MenuGapX / menuTotalWidth, hud.MenuGap / menuTotalHeight),
-		}),
+
+	-- The GAME place's menu (2026-08-13, user request). Four entries at 2 columns
+	-- = 2 rows: 2*132 + 14 = 278 -> y 172..450 on the 1080 reference, clear of the
+	-- checkpoint button's band at y 897 with room to spare.
+	-- ⚠ `name` is THREE contracts at once: the React key, the rendered Instance
+	-- Name (which is the analytics control id the kit derives automatically) and
+	-- the `openPanel` value. So the squishies button stays named "Pets" — only its
+	-- LABEL says Squishies (the display-only rename, features/pets.md) — and both
+	-- places therefore report the same control id for the same window.
+	-- Every one of these already worked in the game place and only the DOOR was
+	-- missing: ShopSubs/PetSubs/PassOwnershipSubs and their client subs are all
+	-- COMMON, and the panels below are not place-gated.
+	-- Settings sits LAST on purpose: it was the game HUD's only button until now,
+	-- but it is the one entry a player never needs mid-run, and the three added
+	-- above it are the ones the pacing depends on.
+	local gameMenu = {
+		-- ⚠ Routed through `onToggleUpgrades`, NOT togglePanel — the hex tree is a
+		-- MODAL (world blur, frozen camera, movement lock, world prompts off) owned
+		-- by UpgradesSubsClient. See the dispatch in the builder below.
+		{ name = "Upgrades", label = locale.T("menu-upgrades"), badge = gameUpgradeCue, pulse = gameUpgradeCue },
+		{ name = "Shop", label = locale.T("menu-shop"), badge = gameBoostCue, pulse = gameBoostCue },
+		{ name = "Pets", label = locale.T("menu-pets"), badge = false },
+		{ name = "Settings", label = locale.T("menu-settings"), badge = false },
 	}
-	for index, item in ipairs(menu) do
-		-- Bare icon + label-below, no background (HudMenuButton). The button fills
-		-- its grid cell (biggest tap area); UIGridLayout controls cell size, so no
-		-- explicit size here.
-		menuChildren[item.name] = React.createElement(Components.HudMenuButton, {
-			name = item.name,
-			icon = hud.MenuIcons[item.name] or hud.MenuIconPlaceholder,
-			label = item.label,
-			badge = item.badge,
-			layoutOrder = index,
-			zIndex = 1,
-			onActivated = function()
-				-- DEAD BRANCH ON PURPOSE (a guard, not a live path): no menu entry is
-				-- named "Upgrades" any more — the tree opens only from the checkpoint
-				-- prompt. Kept because the hex tree is a MODAL overlay (world blur,
-				-- frozen camera, movement lock, world prompts off) owned by
-				-- UpgradesSubsClient, so anyone re-adding it to the menu MUST route
-				-- through onToggleUpgrades; falling through to togglePanel would open
-				-- the tree with none of that wiring.
-				if item.name == "Upgrades" and callbacks.onToggleUpgrades then
-					callbacks.onToggleUpgrades()
-				else
-					togglePanel(item.name)
-				end
-			end,
-		})
+	local hud = Theme.AppHud
+	-- CELEBRATION SPLASH (features/food-burst.md). `state.celebration` carries
+	-- KEYS; they are resolved here, once per state change rather than on every
+	-- one of the HUD's ~14 renders per second. `localeReady` is a dep because a
+	-- translator that lands while the splash is up must repaint it — and
+	-- resolving a KEY is what makes that repaint safe: rerolling the phrase
+	-- here would swap the words mid-animation.
+	local celebration = if showGame and type(state.celebration) == "table" then state.celebration else nil
+	local celebrationCheerKey = if celebration then celebration.cheerKey else nil
+	local celebrationSubKey = if celebration then celebration.subKey else nil
+	local celebrationSeq = if celebration then celebration.seq or 0 else 0
+	-- ⚠ ONE table, not two return values: useMemo hands back exactly what the
+	-- factory's FIRST result is, so `local a, b = useMemo(...)` silently drops b.
+	local celebrationText = React.useMemo(function()
+		if celebrationCheerKey == nil then
+			return nil
+		end
+		return {
+			cheer = locale.T(`announce-{celebrationCheerKey}`),
+			sub = if celebrationSubKey ~= nil then locale.T(`announce-{celebrationSubKey}`) else nil,
+		}
+	end, { celebrationCheerKey or false, celebrationSubKey or false, state.localeReady or false })
+	local celebrationCheer = if celebrationText then celebrationText.cheer else nil
+	local celebrationSub = if celebrationText then celebrationText.sub else nil
+	-- Safe area handed to the FULL-BLEED overlays as viewport fractions (see
+	-- rootSize): they are Size (1,1) of the root, so a fraction is exact.
+	-- ⚠ Both guards are load-bearing, and one of them was found the hard way.
+	-- `Camera.ViewportSize` is legitimately DEGENERATE for the first frames of a
+	-- session (measured (1,1) in a Studio playtest), and `inset / 1` is a
+	-- fraction of 58 — which parked the hex tree's calories chip 40,000 px down
+	-- the screen until the first refit. Below the threshold the safe area is
+	-- simply unknown, and 0 is the only honest answer; the cap bounds any future
+	-- surprise to something a player could still find.
+	local haveViewport = viewportY > 1
+	local safeTop01 = if haveViewport then math.min(topInset / viewportY, 0.5) else 0
+	local safeBottom01 = if haveViewport then math.min(touchReserve / viewportY, 0.5) else 0
+	-- The widest interactive panel keeps its title and close control below the
+	-- Roblox topbar. Preserve the ordinary full-screen fit when it already fits;
+	-- otherwise cap its height to the usable region and rebuild width from the
+	-- locked aspect. Only the panel is constrained; the scrim stays full-bleed.
+	local matchViewport = rootSize()
+	local matchViewportY = math.max(matchViewport.Y, 1)
+	local matchTopPx = math.clamp(topInset, 0, math.max(matchViewportY - 1, 0))
+	local matchUsableY = math.max(matchViewportY - matchTopPx, 1)
+	local matchBaseFit = calculateScale(
+		Theme.MatchmakingLayout.PanelAspect,
+		Theme.MatchmakingLayout.PanelMaxViewportFraction,
+		Vector2.new(math.max(matchViewport.X, 1), matchViewportY)
+	)
+	local matchHeightPx = math.min(
+		matchBaseFit.Y * matchViewportY,
+		matchUsableY * Theme.MatchmakingLayout.SafeRegionMaxFraction
+	)
+	local matchSize = Vector2.new(
+		matchHeightPx * Theme.MatchmakingLayout.PanelAspect / math.max(matchViewport.X, 1),
+		matchHeightPx / matchViewportY
+	)
+	local matchCenterY = (matchTopPx + matchUsableY / 2) / matchViewportY
+	-- Icon GRID: buttons flow left-to-right, wrapping after MenuColumns, so the
+	-- buttons form a compact block instead of a column running to the bottom of
+	-- the screen. Cell size/padding are fractions of the frame, all derived from
+	-- the ROSTER LENGTH — adding or removing an entry needs no constant here
+	-- (which is what let the two social buttons take the lobby from 5 entries to
+	-- 7, i.e. 3 rows to 4, with no layout edit).
+	-- ONE builder for BOTH places since 2026-08-13: the game place grew from a
+	-- single Settings button to a four-entry roster, and a second hand-rolled
+	-- grid would have been a second copy of this arithmetic to keep in step.
+	local menuColumns = math.max(hud.MenuColumns or 1, 1)
+	local function menuBlock(items): (any, UDim2)
+		local rows = math.ceil(#items / menuColumns)
+		local totalHeight = hud.MenuButtonHeight * rows + hud.MenuGap * (rows - 1)
+		local totalWidth = hud.MenuButtonWidth * menuColumns + hud.MenuGapX * (menuColumns - 1)
+		local children = {
+			Layout = React.createElement("UIGridLayout", {
+				FillDirection = Enum.FillDirection.Horizontal,
+				FillDirectionMaxCells = menuColumns,
+				HorizontalAlignment = Enum.HorizontalAlignment.Left,
+				VerticalAlignment = Enum.VerticalAlignment.Top,
+				SortOrder = Enum.SortOrder.LayoutOrder,
+				CellSize = UDim2.fromScale(hud.MenuButtonWidth / totalWidth, hud.MenuButtonHeight / totalHeight),
+				CellPadding = UDim2.fromScale(hud.MenuGapX / totalWidth, hud.MenuGap / totalHeight),
+			}),
+		}
+		for index, item in ipairs(items) do
+			-- Bare icon + label-below, no background (HudMenuButton). The button
+			-- fills its grid cell (biggest tap area); UIGridLayout controls cell
+			-- size, so no explicit size here.
+			children[item.name] = React.createElement(Components.HudMenuButton, {
+				name = item.name,
+				icon = hud.MenuIcons[item.name] or hud.MenuIconPlaceholder,
+				label = item.label,
+				badge = item.badge,
+				-- Attention breathe, on the same fact as the badge (one predicate,
+				-- two channels — motion is what reaches a player who never reads
+				-- the label, and it survives the squint test the dot alone fails
+				-- at icon size).
+				pulse = item.pulse,
+				-- Under a modal, this button is unreachable by pointer but NOT by a
+				-- D-pad — see the component header. Without this a controller could
+				-- reach the (breathing) Upgrades icon through the shop's own scrim.
+				selectable = modalBusy() == nil,
+				layoutOrder = index,
+				zIndex = 1,
+				onActivated = function()
+					-- The hex tree is a MODAL overlay (world blur, frozen camera,
+					-- movement lock, world prompts off) owned by UpgradesSubsClient, so
+					-- the Upgrades entry MUST route through onToggleUpgrades — falling
+					-- through to togglePanel would open the tree with none of that
+					-- wiring. LIVE since 2026-08-13 (the game roster); it was a dead
+					-- guard for the two years the tree had no button at all.
+					if item.name ~= "Upgrades" then
+						togglePanel(item.name)
+						return
+					end
+					-- `onToggleUpgrades` TOGGLES, so it must carry its own modal
+					-- guard rather than borrowing togglePanel's: closing the tree
+					-- from its own button is legal, opening it over ANOTHER panel is
+					-- not (that would swap `openPanel` out from under a window the
+					-- player never closed, and arm the camera freeze + movement lock
+					-- + world-prompt disable behind it).
+					local blocking = modalBusy()
+					if blocking ~= nil and blocking ~= "Upgrades" then
+						Log.Info("AppRoot", `HUD 'Upgrades' press ignored — '{blocking}' is already open`)
+						return
+					end
+					if callbacks.onToggleUpgrades then
+						callbacks.onToggleUpgrades()
+					else
+						-- R8. NOT "use the checkpoint prompt instead": every early
+						-- return in UpgradesSubsClient.Start happens BEFORE both the
+						-- SetCallbacks and the PromptTriggered connect, so a missing
+						-- callback means the prompt is dead too and the tree cannot
+						-- be opened at all in this place.
+						Log.Once(
+							"AppRoot",
+							"no-toggle-upgrades",
+							"Upgrades HUD button pressed but onToggleUpgrades is not registered — "
+								.. "UpgradesSubsClient aborted its Start (see its own warn: UpgradesUiData "
+								.. "config/state or PlayerControl missing). The checkpoint prompt is dead "
+								.. "for the same reason: the upgrade tree cannot be opened AT ALL here."
+						)
+					end
+				end,
+			})
+		end
+		return children, UDim2.fromScale(totalWidth, totalHeight)
+	end
+	local menuChildren, menuSize = menuBlock(menu)
+	local gameMenuChildren, gameMenuSize = menuBlock(gameMenu)
+	-- ⚠ The COMBINED development build maps BOTH partition markers, so both menus
+	-- render at once and would sit in the same slot. They already collided there
+	-- (the game place's lone Settings button landed on top of the lobby's first
+	-- cell); with a four-entry game roster that is four buttons buried under
+	-- eight, in the one build Studio Play Solo actually runs. Stack instead: the
+	-- game block drops below the lobby block, so both rosters stay reachable.
+	-- A PUBLISHED place maps exactly one marker, so this offset is always 0 live —
+	-- which is why it is computed from the lobby block's own measured height
+	-- rather than added to Theme as a second position constant. ⚠ In the dev
+	-- build the offset therefore MOVES when the lobby roster gains a row (the two
+	-- social buttons arrive on their own server pushes): the game block visibly
+	-- drops one row mid-session. Correct, not fixed — and dev-only.
+	local gameMenuY = hud.MenuPosition.Y
+	if showLobby then
+		gameMenuY += menuSize.Y.Scale + hud.MenuGap
 	end
 
 	-- ── HUD ──────────────────────────────────────────────────────────────
@@ -864,46 +1307,30 @@ local function App()
 			-- keeps only its cake HUD; exposing this menu there creates dead remotes.
 			Visible = showLobby,
 			Position = UDim2.fromScale(hud.MenuPosition.X, hud.MenuPosition.Y),
-			Size = UDim2.fromScale(menuTotalWidth, menuTotalHeight),
+			Size = menuSize,
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
 			ZIndex = 1,
 		}, menuChildren),
-		-- SETTINGS in the GAME place. The meta menu above is lobby-only because its
-		-- handlers are lobby subs — but settings are NOT one of those: SettingsData,
-		-- LocalSettingsService, SettingsSubsClient, SettingsSubs and the panel itself
-		-- are all COMMON, and the panel is already rendered here in both places. Only
-		-- the BUTTON was inside the lobby-gated frame, so a player in a match had no
-		-- way to mute the music. One bare icon, in the same 22px left column and the
-		-- same cell size as a lobby menu button, taking the slot the meta menu
-		-- occupies in the lobby (directly under the two stat pills, which is free in
-		-- the game HUD — the cake bar is top-centre and the boss prize is top-right).
-		GameSettingsBtn = React.createElement("Frame", {
-			Name = "GameSettingsBtn",
+		-- The GAME place's menu: UPGRADES / SHOP / SQUISHIES / SETTINGS (2026-08-13,
+		-- user request). Same builder, same left column, same cell size as the
+		-- lobby's — it simply carries the four entries whose whole stack is COMMON,
+		-- and it replaces the lone `GameSettingsBtn` that used to sit in this slot.
+		-- It is a SEPARATE frame from the meta menu above rather than a branch
+		-- inside it, because that frame is `Visible = showLobby` for its lobby-only
+		-- handlers; these four have server owners in both places
+		-- (ShopSubs / PetSubs / PassOwnershipSubs / SettingsSubs, all COMMON).
+		-- Directly under the two stat pills, which is free in the game HUD — the
+		-- cake bar is top-centre and the top-right corner is deliberately empty.
+		GameMenu = React.createElement("Frame", {
+			Name = "GameMenu",
 			Visible = showGame,
-			Position = UDim2.fromScale(hud.MenuPosition.X, hud.MenuPosition.Y),
-			Size = UDim2.fromScale(hud.MenuButtonWidth, hud.MenuButtonHeight),
+			Position = UDim2.fromScale(hud.MenuPosition.X, gameMenuY),
+			Size = gameMenuSize,
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
 			ZIndex = 1,
-		}, {
-			Button = React.createElement(Components.HudMenuButton, {
-				name = "Settings",
-				icon = hud.MenuIcons.Settings or hud.MenuIconPlaceholder,
-				label = locale.T("menu-settings"),
-				badge = false,
-				zIndex = 1,
-				onActivated = function()
-					togglePanel("Settings")
-				end,
-			}),
-		}),
-		-- ⚠ NO Upgrades button, in EITHER place. The tree's only entry point is the
-		-- authored `UpgradeStation` ProximityPrompt on the checkpoint's computer
-		-- (built by MapService, opened by UpgradesSubsClient) — you are stood at the
-		-- checkpoint after every belly burn anyway, so a HUD button is a second door
-		-- into the same room. `onToggleUpgrades` stays on the callback table for the
-		-- prompt path; nothing in the HUD calls it.
+		}, gameMenuChildren),
 		CakeBar = React.createElement(Components.CakeBar, {
 			name = "CakeBar",
 			visible = showGame and cakeVisible,
@@ -970,6 +1397,11 @@ local function App()
 			visible = eatButtonVisible,
 			buttonText = locale.T("eat-button"),
 			zIndex = 3,
+			-- The Hud layer's bottom edge IS the viewport's, so a pixel offset
+			-- from the bottom is exact here. Its old Y was a viewport fraction
+			-- tuned at one aspect; Roblox's jump button is sized off the SHORTER
+			-- axis, so the two only cleared on a wide window.
+			bottomReservePx = touchReserve,
 			onPressStart = function(input)
 				if callbacks.onEatDown then
 					callbacks.onEatDown(input)
@@ -991,24 +1423,10 @@ local function App()
 			visible = showGame and state.combo ~= nil and (state.combo.value or 0) > 1,
 			zIndex = 1,
 		}),
-		-- What the boss fight is FOR. Top-right, level with the calories pill on the
-		-- left (same 22px reference margin), which is the one corner nothing else
-		-- uses during a boss: the top-centre band is the HP bar + announce banner,
-		-- and the bottom-right is the touch EAT button.
-		BossPrize = if bossPrize ~= nil
-			then React.createElement(Components.BossPrizeCard, {
-				name = "BossPrize",
-				visible = showGame and cakePhase == "boss",
-				anchorPoint = Vector2.new(1, 0),
-				position = UDim2.fromScale(hud.BossPrizePosition.X, hud.BossPrizePosition.Y),
-				size = UDim2.fromScale(0.5, hud.BossPrizeHeight),
-				captionText = locale.T("boss-prize-caption"),
-				petName = bossPrize.petName,
-				rarity = bossPrize.rarity,
-				iconName = bossPrize.iconName,
-				zIndex = 2,
-			})
-			else nil,
+		-- ⚠ The boss PRIZE CARD ("FIGHTING FOR <squishy>") lived here until
+		-- 2026-08-07 and was REMOVED by request — what a cleared cake pays out is
+		-- a surprise again. Nothing replaced it: the top-right corner during a
+		-- boss is now deliberately empty.
 		Announce = React.createElement(Components.AnnounceBanner, {
 			name = "Announce",
 			anchorPoint = Vector2.new(0.5, 0),
@@ -1026,13 +1444,18 @@ local function App()
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
+		ref = appRef, -- read for its AbsoluteSize (safe-area fractions)
 	}, {
 		-- The root gui is FULL-BLEED so panels/overlays and their scrims cover the
 		-- whole screen including the topbar strip (UiRoot). The HUD must still not
-		-- slide UNDER the topbar, so it gets its own layer occupying exactly the
-		-- region the root gui used to: offset down by the gui inset, shortened by
-		-- the same amount. That is an identity transform on every HUD position
-		-- above — which is the point: the inset fix moved no HUD element.
+		-- slide UNDER the topbar, so it gets its own layer offset down by the
+		-- resolved safe-area inset and shortened by the same amount.
+		-- ⚠ 2026-08-09: this is NO LONGER the identity transform the 2026-07-30
+		-- note claimed. `topInset` is now max(GetGuiInset, TopbarInset.Max.Y) plus
+		-- Theme.SafeArea.TopPadPx, so every HUD element moved DOWN by the pad (and
+		-- by more on any client whose unibar is taller than the legacy inset).
+		-- That is the point: the old margin was a viewport FRACTION and collapsed
+		-- to ~8 px on a phone.
 		Hud = React.createElement("Frame", {
 			Name = "Hud",
 			Position = UDim2.new(0, 0, 0, topInset),
@@ -1052,6 +1475,35 @@ local function App()
 			ZIndex = 1,
 		}, hudChildren),
 
+		-- ── celebration splash (zIndex 30) ───────────────────────────────
+		-- features/food-burst.md. A SIBLING of `Hud`, not a child of it: the
+		-- splash is full-bleed and centres itself on the whole screen, while
+		-- `Hud` is shortened by `topInset`, which would bias it downward by the
+		-- unibar height on exactly the phones where the least room exists.
+		-- zIndex 30 sits in the free 4-39 band — over every HUD element
+		-- (1-3) and under the modal scrim (40), so an open panel still buries
+		-- it rather than a "LAYER DEMOLISHED!" splash landing across the shop.
+		-- ⚠ The food confetti itself is NOT here: it lives in its own
+		-- ScreenGui at DisplayOrder 99, one BELOW UiRoot, so the sprites fly
+		-- behind this banner and the words stay readable (FoodBurst.lua).
+		-- ⚠ Suppressed under the tutorial comic for the same reason `Hud` is
+		-- (`Visible = not tutorialSlidesUp` below): the comic's own dim is only
+		-- ~76% opaque, so a gold splash behind it reads as a leak rather than a
+		-- celebration. Being a SIBLING of `Hud` means that gate does not reach
+		-- it, so it is re-applied here.
+		Celebration = React.createElement(Components.CelebrationBanner, {
+			name = "CelebrationBanner",
+			anchorPoint = Vector2.new(0.5, 0.5),
+			position = UDim2.fromScale(hud.CelebrationPosition.X, hud.CelebrationPosition.Y),
+			size = UDim2.fromScale(hud.CelebrationWidth, hud.CelebrationHeight),
+			cheerText = if tutorialSlidesUp then nil else celebrationCheer,
+			subText = celebrationSub,
+			-- Identity, not value: two identical rolls back to back must still
+			-- replay the slam-in.
+			seq = celebrationSeq,
+			zIndex = 30,
+		}),
+
 		-- ── modal scrim (zIndex 40, under every panel) ───────────────────
 		-- Dims the world + HUD behind any open panel (UX audit 2026-08-01:
 		-- panels floated over the full-brightness scene and the colorful HUD
@@ -1066,6 +1518,9 @@ local function App()
 			BorderSizePixel = 0,
 			Text = "",
 			AutoButtonColor = false,
+			-- Pointer-only tap-outside surface. Controller users close through the
+			-- panel X; the full-screen background must not steal selection from it.
+			Selectable = false,
 			Visible = state.openPanel ~= nil and state.openPanel ~= "Upgrades",
 			ZIndex = 40,
 			-- Per-panel dispatch, NOT a blanket Open(nil): closing is a
@@ -1143,6 +1598,13 @@ local function App()
 			nodeWidth = upgradeTree.nodeWidth,
 			nodeHeight = upgradeTree.nodeHeight,
 			caloriesText = formatNumber(state.calories),
+			-- The overlay is FULL-BLEED (its scrim must dim the topbar strip),
+			-- so its own edge controls carry the safe area: the calories chip and
+			-- the Close X sat under Roblox's unibar, and the zoom stack sat under
+			-- the touch jump button. Plain numbers — a table here would reconcile
+			-- the whole tree at HUD re-render rate.
+			topInset01 = safeTop01,
+			bottomReserve01 = safeBottom01,
 			onNodeActivated = function(action)
 				if action.type == "open" then
 					setTreeStack(function(stack)
@@ -1213,7 +1675,8 @@ local function App()
 			name = "MatchmakingPanel",
 			title = locale.T("match-title"),
 			visible = showLobby and state.openPanel == "Matchmaking" and matchmaking ~= nil,
-			size = UDim2.fromScale(matchScale.X, matchScale.Y),
+			position = UDim2.fromScale(0.5, matchCenterY),
+			size = UDim2.fromScale(matchSize.X, matchSize.Y),
 			zIndex = 50,
 			sessionKey = matchmaking and matchmaking.sessionKey or false,
 			busy = matchmaking ~= nil and matchmaking.busy == true,
@@ -1224,6 +1687,16 @@ local function App()
 			playersTitle = locale.T("match-players-heading"),
 			difficultyOptions = difficultyOptions,
 			playerCounts = playerCountOptions,
+			-- The cake setup rail (features/cake-select.md). Presentation only: the
+			-- same view models and the same callback the Cakes panel uses, so the
+			-- two surfaces can never disagree about what is selected. It does NOT
+			-- enter the panel's session state and does NOT ride the queue request
+			-- — `onStart` still sends exactly difficulty + party size.
+			-- The panel title already gives the verb; the compact rail needs only
+			-- the one-word group label (all 16 locales already carry this key).
+			cakeTitle = locale.T("match-cake-heading"),
+			cakeOptions = cakeOptions,
+			onSelectCake = onSelectCake,
 			-- The selector opens on Easy / 1 Player (MatchConfig.defaults) so a solo
 			-- run is ONE tap. The panel ignores a default it is not offering — the
 			-- party row is capped by the pad's own maxPlayers.
@@ -1239,6 +1712,9 @@ local function App()
 			}),
 			busyStatusText = locale.T("match-status-starting"),
 			onStart = function(difficulty, maxPlayers)
+				if current.openPanel ~= "Matchmaking" then
+					return
+				end
 				if callbacks.onConfigureMatch then
 					callbacks.onConfigureMatch(difficulty, maxPlayers)
 				end
@@ -1251,16 +1727,43 @@ local function App()
 			-- dark for a player who just presses START), and whether a finger
 			-- actually landed on a choice is carried by the kit's press counting.
 			onSelectDifficulty = function(difficulty, isDefault)
+				if current.openPanel ~= "Matchmaking" then
+					return
+				end
 				if callbacks.onMatchDifficultyPick then
 					callbacks.onMatchDifficultyPick(difficulty, isDefault == true)
 				end
 			end,
 			onSelectPlayers = function(maxPlayers, isDefault)
+				if current.openPanel ~= "Matchmaking" then
+					return
+				end
 				if callbacks.onMatchPartyPick then
 					callbacks.onMatchPartyPick(maxPlayers, isDefault == true)
 				end
 			end,
 			onClose = closeMatchmaking,
+		}),
+		-- Cake selection (features/cake-select.md). Lobby-only like the two social
+		-- panels below, but deliberately NOT gated on its server push: cake #1 is
+		-- always available, so this is a usable chooser on the first frame and
+		-- the push only ever corrects it. The scrim's `else closeShop()` branch
+		-- already closes it correctly (closeShop is a bare Open(nil)) — this panel
+		-- has no close-time obligation, so it needs no named closer.
+		Cakes = React.createElement(Components.CakeSelectPanel, {
+			name = "CakeSelectPanel",
+			title = locale.T("title-cakes"),
+			visible = showLobby and state.openPanel == "Cakes",
+			-- Same 1000x600 fit as the rewards window, so it rides the existing
+			-- `wideScale` rather than adding a third coupled scale site. The
+			-- coupling is documented on Theme.CakeSelectLayout.
+			size = UDim2.fromScale(wideScale.X, wideScale.Y),
+			zIndex = 50,
+			cakes = cakeOptions,
+			onSelect = onSelectCake,
+			onClose = function()
+				AppRoot.Open(nil)
+			end,
 		}),
 		-- Invite Friends. The button asks Roblox for the native invite prompt
 		-- (SocialSubsClient owns the SocialService call — R4); the gems are paid
@@ -1358,6 +1861,9 @@ local function App()
 			fatText = locale.T("gym-fat-left", { n = math.ceil(gymRemain01 * 100) }),
 			buttonText = locale.T("gym-tap"),
 			zIndex = 40,
+			-- Full-bleed overlay with a bottom-right thumb button: same corner as
+			-- Roblox's touch jump button.
+			bottomReserve01 = safeBottom01,
 			onTap = function()
 				if callbacks.onGymTap then
 					callbacks.onGymTap()
@@ -1379,16 +1885,11 @@ local function App()
 		}),
 
 		-- ── onboarding (features/tutorial.md) ────────────────────────────
-		-- Objective pointer sits just ABOVE the HUD (1) and below every panel
-		-- (50): it marks a thing in the WORLD, so a panel opened over it must
-		-- cover it, but the HUD must not.
-		TutorialArrow = React.createElement(Components.HintArrow, {
-			name = "TutorialArrow",
-			visible = tutorialArrow,
-			labelText = locale.T("tutorial-arrow-upgrades"),
-			getTarget = callbacks.onTutorialArrowTarget,
-			zIndex = 45,
-		}),
+		-- ⚠ There is no TutorialArrow here any more (2026-08-09, user request).
+		-- Both world-facing steps draw the same WORLD BEAM, owned end-to-end by
+		-- TutorialSubsClient — teaching one "follow the line" instead of a line
+		-- and then a screen marker. `Components.HintArrow` stays in the kit
+		-- unused; nothing in the app renders it.
 		-- The instruction popup deliberately brings no scrim/catcher (see the
 		-- component header): a full-screen Active surface would swallow the
 		-- left-click it is teaching. 70 = over panels, under the reveal.

@@ -1,7 +1,8 @@
 --[[
 	CakeSubsClient — the cake domain on the client (R4):
 	  * CakeSnapshot/CakeDelta -> LocalCakeField mirror, renderer refresh
-	  * CakeCycleUpdate -> boss view, HUD cycle state, announcements
+	  * CakeCycleUpdate -> boss + ZONE-GATE mini-boss views, HUD cycle state,
+	    announcements
 	  * input: PC = hold the mouse ANYWHERE; TOUCH = the dedicated on-screen EAT
 	    button only (AppRoot EatButton, NOT any finger — the joystick never eats,
 	    Task 3). Either way you eat the cake DIRECTLY IN FRONT of you (aim by
@@ -49,16 +50,28 @@ function CakeSubsClient.Start(data, modules)
 	local ComboMeter = modules.ComboMeter
 	local EatGestureController = modules.EatGestureController
 	local BossView = modules.BossView
+	local MiniBossView = modules.MiniBossView -- zone-gate boss (features/cake-cycle.md)
 	local LocalStatsService = modules.LocalStatsService
 	local ChunkDebris = modules.ChunkDebris
 	local AppRoot = modules.AppRoot
 	local LocalEatState = modules.LocalEatState -- flat-while-eating gate (Task 4)
 	local PlayerControlService = modules.PlayerControlService
 	local FloatingNumbers = modules.FloatingNumbers
+	local FoodBurst = modules.FoodBurst -- celebration confetti (features/food-burst.md)
 	local LocaleData = data.LocaleData
 
 	local player = Players.LocalPlayer
 	local rEatAt = Net.Remote("EatAt")
+	if MiniBossView == nil then
+		-- The gate is SERVER-side, so the fight still works and still blocks the
+		-- cake — the player just gets no monster to look at. Never silent (R8).
+		Log.Warn(SCOPE, "MiniBossView module missing -- zone-gate mini-bosses will be invisible (the fight still gates the cake)")
+	end
+	if FoodBurst == nil then
+		-- Cosmetic only: the cheer banner, the chime and the camera punch all
+		-- still fire, the celebration just loses its confetti. Never silent (R8).
+		Log.Warn(SCOPE, "FoodBurst module missing -- layer/monster celebrations will have no food confetti")
+	end
 	local controlGateReady = PlayerControlService ~= nil and type(PlayerControlService.IsLocked) == "function"
 	if not controlGateReady then
 		Log.Warn(SCOPE, "PlayerControlService.IsLocked missing -- cake input disabled to avoid unsafe handoff prediction")
@@ -75,11 +88,69 @@ function CakeSubsClient.Start(data, modules)
 		return lockedOrError == true
 	end
 
+	-- ── Burial rescue ───────────────────────────────────────────────────
 	-- The cake is only COLLIDABLE once this client's columns are built, but the
-	-- character spawns on `CakeSpawn` as soon as the player joins — so a slow load
-	-- drops them THROUGH the cake and the columns come up around them. Called right
-	-- after every rebuild (see the snapshot handler); config + rationale in
-	-- `CakeConfig.render.collision.buriedRescue*`.
+	-- character is placed at cake height before that (the spawn pad on join, the
+	-- server's new-cake lift) — so it can end up UNDER the surface, and
+	-- `columnsRebuild` then closes 1024 solid columns around it.
+	--
+	-- ⚠ This used to be called from exactly ONE place, right after a snapshot's
+	-- rebuild. A reserved match broadcasts ONE snapshot per ~35-minute session, so
+	-- that single check was the only recovery the game had: if it was voided (no
+	-- character yet, a control lock held, or the burial happened later — a
+	-- respawn, a walk back from the checkpoint) the player stayed inside the cake
+	-- for the whole match. It is now armed three ways: after a rebuild, on every
+	-- fresh character, and on a slow dwell-gated timer.
+	-- Config + rationale in `CakeConfig.render.collision.buriedRescue*`.
+
+	-- The world Y of the SOLID surface the character is standing in/on, or nil if
+	-- there is none there.
+	--
+	-- ⚠ This asks the COLLISION COLUMNS, not the field. The two are deliberately
+	-- different: `render.collision.riseRate` holds a column BELOW the field while
+	-- refilling cake oozes back, which is the "you stay buried, jump out" feel. A
+	-- field-based test therefore reads a big depth during exactly that feel, and a
+	-- rescue driven by it would teleport the player to the full refilled height —
+	-- the punt the rise cap exists to prevent. The column top is what the
+	-- character is physically inside, which is the only thing "buried" can mean.
+	-- It also covers the rim ring, where the field says nothing (`SurfacePoint`
+	-- nil outside the footprint) but a column can stand at FULL cake height
+	-- because `CakeRenderer.colTarget` averages only the IN-cake cells of its
+	-- block. That ring used to be an unrecoverable trap.
+	local function solidTopAt(root: BasePart): number?
+		if CakeRenderer.ColumnTopAt == nil then
+			Log.Once(SCOPE, "column-top-missing", "CakeRenderer.ColumnTopAt missing -- burial rescue falls back to the field surface")
+			local surface = LocalCakeField.SurfacePoint(root.Position.X, root.Position.Z)
+			return if surface ~= nil then surface.Y else nil
+		end
+		return CakeRenderer.ColumnTopAt(root.Position.X, root.Position.Z)
+	end
+
+	-- How deep the character is inside solid cake, or nil when it is not.
+	local function buriedDepth(root: BasePart): number?
+		local top = solidTopAt(root)
+		if top == nil then
+			return nil
+		end
+		local depth = top - root.Position.Y
+		return if depth >= CakeConfig.render.collision.buriedRescueStuds then depth else nil
+	end
+
+	local function liftOut(root: BasePart, depth: number, why: string)
+		local cfg = CakeConfig.render.collision
+		-- `buriedDepth` proved a solid top exists; re-read it so the lift lands on
+		-- the CURRENT top rather than on a stale one.
+		local top = solidTopAt(root) or (root.Position.Y + depth)
+		-- Zero the assembly: a bare CFrame write keeps velocity, and a character
+		-- being lifted is usually one that has been falling.
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+		root.CFrame = CFrame.new(root.Position.X, top + cfg.buriedRescueLift, root.Position.Z)
+		Log.Warn(SCOPE, `local character was {math.floor(depth)} studs INSIDE the cake ({why}) — lifted onto the surface`)
+	end
+
+	-- Snapshot path: the rebuild has just made the cake solid, so a character
+	-- under it is buried NOW — no dwell, lift immediately.
 	local function rescueBuriedLocal()
 		if inputLocked() then
 			return -- a teleport handoff owns the character; never yank it mid-flight
@@ -87,23 +158,88 @@ function CakeSubsClient.Start(data, modules)
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if root == nil then
-			return -- not spawned yet; the NEXT snapshot's rebuild will catch them
+			return -- no character yet; the timed watchdog below owns this case now
 		end
-		local surface = LocalCakeField.SurfacePoint(root.Position.X, root.Position.Z)
-		if surface == nil then
-			return -- standing off the cake: nothing to be buried in
+		local depth = buriedDepth(root)
+		if depth ~= nil then
+			liftOut(root, depth, "join/load race")
 		end
+	end
+
+	-- Timed watchdog: the safety net for every burial the snapshot path cannot
+	-- see. Dwell-gated so it can NEVER undo the deliberate "refilling cake buries
+	-- you, jump out" feel (`render.collision.riseRate`) — that state resolves in a
+	-- jump; staying buried for `buriedRescueDwellSeconds` straight does not.
+	local buriedSince: number? = nil
+	local rescuePollClock = 0
+	local function watchdogStep(dt: number, root: BasePart?)
 		local cfg = CakeConfig.render.collision
-		local buriedBy = surface.Y - root.Position.Y
-		if buriedBy < cfg.buriedRescueStuds then
+		rescuePollClock += dt
+		if rescuePollClock < cfg.buriedRescuePollSeconds then
 			return
 		end
-		root.CFrame = CFrame.new(root.Position.X, surface.Y + cfg.buriedRescueLift, root.Position.Z)
-		Log.Warn(
-			SCOPE,
-			`local character was {math.floor(buriedBy)} studs INSIDE the cake when the columns came up `
-				.. `(join/load race) — lifted onto the surface`
-		)
+		rescuePollClock = 0
+		if root == nil then
+			buriedSince = nil
+			return
+		end
+		if inputLocked() then
+			-- SKIP this tick, do not forfeit: unlike the old one-shot path, a lock
+			-- held right now costs nothing — we re-check in half a second. But a
+			-- lock that never clears silently disables the last safety net (R8).
+			if buriedSince ~= nil then
+				Log.Once(SCOPE, "watchdog-locked", "burial watchdog is holding off: a movement lock is held while the character is buried")
+			end
+			return
+		end
+		local depth = buriedDepth(root)
+		if depth == nil then
+			buriedSince = nil
+			return
+		end
+		buriedSince = (buriedSince or 0) + cfg.buriedRescuePollSeconds
+		if buriedSince >= cfg.buriedRescueDwellSeconds then
+			buriedSince = nil
+			liftOut(root, depth, `buried for {cfg.buriedRescueDwellSeconds}s`)
+		end
+	end
+
+	-- A fresh character was not on the cake while its columns went stale, so the
+	-- rate-limited rise has nothing to protect: snap them to truth before it
+	-- lands, then re-check. Without this a respawn onto a refilled centre rests on
+	-- the coarse server slab (the MIN of its 6x6-stud block) several studs under
+	-- its own surface.
+	local function armFreshCharacter(character: Model)
+		buriedSince = nil
+		-- Snap immediately (no root needed), then re-snap and re-check once the
+		-- character has had time to land. ⚠ No blocking WaitForChild here (R8):
+		-- on a slow client it would delay the snap by up to its timeout, which is
+		-- the very window this exists to close. If the root is still missing at the
+		-- re-check the timed watchdog owns the case.
+		CakeRenderer.SnapCollisionNow()
+		task.delay(CakeConfig.render.collision.freshCharacterSnapSeconds, function()
+			if player.Character ~= character then
+				return -- died again; that life's own arming handles it
+			end
+			CakeRenderer.SnapCollisionNow()
+			local root = character:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if root == nil then
+				Log.Once(SCOPE, "fresh-character-no-root", "fresh character had no HumanoidRootPart at the spawn re-check -- the timed watchdog covers it")
+				return
+			end
+			local depth = buriedDepth(root)
+			if depth ~= nil and not inputLocked() then
+				liftOut(root, depth, "respawn onto stale collision")
+			end
+		end)
+	end
+	player.CharacterAdded:Connect(armFreshCharacter)
+	-- ⚠ Arm the character that ALREADY exists too. LocalBootstrap requires ~40
+	-- modules before this subscription Starts, so on a slow client life #1 has
+	-- already spawned and CharacterAdded will never fire for it — and life #1 on
+	-- the join is precisely the reported symptom.
+	if player.Character then
+		armFreshCharacter(player.Character)
 	end
 
 	CakeRenderer.Setup(LocalCakeField)
@@ -118,11 +254,21 @@ function CakeSubsClient.Start(data, modules)
 	local isFull = false -- belly at capacity: eating is blocked (server + here)
 	local lastFullCueAt = 0
 	local lastLockCueAt = 0 -- layer gate: debounce the "eat the top layer first" cue
+	-- When the last CELEBRATION started (layer cleared / Cake Monster down).
 	-- A layer FINISHES exactly while you are mowing its floor, which is also
 	-- when the locked cue wants to fire — so the nag used to stomp the
-	-- celebration within one frame (seen in playtest). The clear wins.
-	local lastLayerClearedAt = -math.huge
-	local LAYER_CLEAR_PRIORITY_SECONDS = 2.5
+	-- celebration within one frame (seen in playtest). The celebration wins,
+	-- and since it became a full splash the same applies to find banners.
+	local lastCelebrationAt = -math.huge
+	-- ⚠ Set BELOW from the celebration banner's own Duration, so the window can
+	-- never end up shorter than the splash it protects. It used to be a bare
+	-- 2.5 that happened to exceed the 2.4 s banner by a tenth — anyone tuning
+	-- the splash to 3 s would have silently reinstated the playtest bug.
+	local LAYER_CLEAR_PRIORITY_SECONDS
+	-- Which zone gate's ENTRANCE has already been played (nil = not in a gate).
+	-- Keyed on the gate index rather than a boolean so the three gates of one
+	-- cake each get their own breach, and cleared on every exit.
+	local miniBossCuedGate: number? = nil
 	-- Spots where a buried find is close enough to the surface to glint through
 	-- the icing. Keyed by find+position so a new cake's finds never collide with
 	-- a stale entry; cleared when the crown breaks through (see TreasureUpdate)
@@ -136,16 +282,76 @@ function CakeSubsClient.Start(data, modules)
 	local lastComboSent = 1
 	local announceSeq = 0
 
-	-- Single source for the banner lifetime (Theme.AnnounceBanner.Duration).
-	local ANNOUNCE_SECONDS = require(Shared:WaitForChild("UIKit"):WaitForChild("Theme")).AnnounceBanner.Duration
+	-- Single source for both banner lifetimes (Theme.*.Duration).
+	local KitTheme = require(Shared:WaitForChild("UIKit"):WaitForChild("Theme"))
+	local ANNOUNCE_SECONDS = KitTheme.AnnounceBanner.Duration
+	local CELEBRATION_SECONDS = KitTheme.CelebrationBanner.Duration
+	-- The nag/find banners must not stomp a celebration that is still playing.
+	LAYER_CLEAR_PRIORITY_SECONDS = math.max(2.5, CELEBRATION_SECONDS)
+
+	-- True while a layer/monster celebration owns the screen. Lower-value
+	-- banners check this instead of pushing over it — the "eat the top layer
+	-- first" nag already had to (it fires in the same frame the layer ends), and
+	-- since the celebration became a full splash a rare FIND lands in exactly
+	-- the same window: you mow the last cells of a band and uncover something at
+	-- once, which is routine rather than rare.
+	local function celebrationOwnsScreen(): boolean
+		return os.clock() - lastCelebrationAt <= LAYER_CLEAR_PRIORITY_SECONDS
+	end
 
 	local function pushAnnounce(key: string)
 		announceSeq += 1
 		local seq = announceSeq
-		AppRoot.Set({ announceKey = key })
+		-- Retires any celebration splash still on screen: the two banners share
+		-- the top of the screen and one must always win outright.
+		AppRoot.Set({ announceKey = key, celebration = false })
 		task.delay(ANNOUNCE_SECONDS, function()
 			if announceSeq == seq then
 				AppRoot.Set({ announceKey = false })
+			end
+		end)
+	end
+
+	-- CELEBRATION (features/food-burst.md): the big splash + a burst of food.
+	-- `kind` selects the cheer list ("layer" / "monster"), `subKey` is the
+	-- optional factual second line, `count` how many sprites to launch.
+	--
+	-- ⚠ It shares `announceSeq` with pushAnnounce ON PURPOSE. The two banners
+	-- occupy the same beat and must never overlap: a plain announce arriving
+	-- mid-celebration has to be able to retire the splash, and vice versa, which
+	-- one shared sequence number gives for free.
+	local function pushCelebration(kind: string, fallbackKey: string, subKey: string?)
+		announceSeq += 1
+		local seq = announceSeq
+		-- Arms the priority window for BOTH beats — the single writer. Setting it
+		-- in the `layer-cleared` branch instead left the Cake Monster's splash,
+		-- the bigger of the two, unprotected from the nag and the find banners.
+		lastCelebrationAt = os.clock()
+		-- The phrase is rolled HERE, once, and travels as a KEY: the HUD
+		-- re-renders ~14x/second while the splash is up, and rolling inside the
+		-- render would deal a new phrase on every bite.
+		-- ⚠ LocaleData is treated as optional everywhere else in this file
+		-- (the bootstrap pcalls each data Init and KEEPS GOING), and a throw
+		-- here would abort the rest of the CakeCycleUpdate handler — including
+		-- the AppRoot.Set that carries phase, timer, finds and monster HP.
+		local cheerKey = fallbackKey
+		if LocaleData ~= nil and type(LocaleData.RollCheer) == "function" then
+			cheerKey = LocaleData.RollCheer(kind, fallbackKey)
+		else
+			Log.Once(SCOPE, "cheer-no-locale", "LocaleData.RollCheer missing — celebrations use the fixed fallback line")
+		end
+		AppRoot.Set({
+			-- On the fallback path the cheer can BE the subtitle's key; showing
+			-- one sentence stacked on itself is worse than showing it once.
+			celebration = { cheerKey = cheerKey, subKey = if subKey ~= cheerKey then subKey else nil, seq = seq },
+			announceKey = false,
+		})
+		if FoodBurst ~= nil then
+			FoodBurst.Fire(kind)
+		end
+		task.delay(CELEBRATION_SECONDS, function()
+			if announceSeq == seq then
+				AppRoot.Set({ celebration = false })
 			end
 		end)
 	end
@@ -177,6 +383,14 @@ function CakeSubsClient.Start(data, modules)
 			return
 		end
 		cyclePhase = meta.phase or "eating"
+		-- A fresh cake can never have a live gate; drop any rig still standing
+		-- (no poof — it was not beaten, the cake was replaced under it).
+		if MiniBossView ~= nil and cyclePhase ~= "miniboss" then
+			miniBossCuedGate = nil
+			if MiniBossView.IsShown() then
+				MiniBossView.Hide(false)
+			end
+		end
 		AppRoot.Set({ cake = {
 			phase = cyclePhase,
 			progress = meta.progress or 0,
@@ -207,14 +421,80 @@ function CakeSubsClient.Start(data, modules)
 		if type(payload.activeBandIndex) == "number" then
 			LocalCakeField.SetActiveBand(payload.activeBandIndex)
 		end
+		-- ── ZONE GATE (features/cake-cycle.md) ──────────────────────────
+		-- A mini-boss bursts UP THROUGH the cake when the layer gate crosses
+		-- into the next flavour zone. Same tap, different target: the cake is
+		-- off the menu until it is beaten.
+		if MiniBossView ~= nil then
+			local mini = if type(payload.miniBoss) == "table" then payload.miniBoss else nil
+			if cyclePhase == "miniboss" and mini ~= nil then
+				-- ⚠ The entrance juice is latched on the GATE INDEX — i.e. on the
+				-- phase transition — NOT on `MiniBossView.IsShown()`. Gating it on
+				-- the view's success looks equivalent and is not: `Show` no-ops
+				-- when the rig cannot be resolved (no `Assets.MiniBosses` in a
+				-- fresh clone, a renamed rig, a template harvest into a new game),
+				-- `IsShown()` then stays false forever, and since this update
+				-- repeats at 1 Hz for a fight that is UNTIMED BY DESIGN the player
+				-- would take a boss sting, a 0.55 camera punch (trauma is
+				-- ADDITIVE, so it never decays back) and 100 particles EVERY
+				-- SECOND until they tapped the gate down.
+				if miniBossCuedGate ~= mini.index then
+					miniBossCuedGate = mini.index
+					-- THE BREACH: crust blows out in a ring around the hole it
+					-- came through, the camera takes a punch, and the boss sting
+					-- plays. The view owns the rig; the juice belongs here with
+					-- the rest of the bite/layer FX.
+					local origin = CakeConfig.grid.origin
+					local surface = LocalCakeField.SurfacePoint(origin.x, origin.z)
+					SoundPool.Play("bossAppear")
+					CameraShake.Impulse(0.55)
+					local burstY = (surface and surface.Y) or (origin.y + 1)
+					for step = 0, 9 do
+						local angle = step * math.pi / 5
+						ParticlePool.Burst(
+							Vector3.new(origin.x + math.cos(angle) * 9, burstY + 2, origin.z + math.sin(angle) * 9),
+							Color3.fromRGB(255, 236, 200),
+							10
+						)
+					end
+				end
+				-- Retried every update on purpose: it is a FindFirstChild + a
+				-- Log.Once when the folder is missing, so a late-replicating
+				-- Assets tree still gets its boss instead of an invisible fight.
+				if not MiniBossView.IsShown() then
+					local origin = CakeConfig.grid.origin
+					local surface = LocalCakeField.SurfacePoint(origin.x, origin.z)
+					local zoneName = if type(mini.zoneKey) == "string" and LocaleData ~= nil
+						then LocaleData.T(mini.zoneKey)
+						else ""
+					MiniBossView.Show(mini.model, zoneName, surface and surface.Y, mini.hp, mini.maxHp)
+				end
+				MiniBossView.SetHp(mini.hp, mini.maxHp)
+			else
+				-- Defeated (the usual exit) or wiped by a new cake / phase reset.
+				-- The win sting is keyed on the ANNOUNCE + the latch, not on
+				-- IsShown, so a gate fought without a visible rig still resolves
+				-- audibly.
+				local defeated = payload.announce == "miniboss-defeated"
+				if MiniBossView.IsShown() then
+					MiniBossView.Hide(defeated)
+				end
+				if defeated and miniBossCuedGate ~= nil then
+					SoundPool.Play("bossDefeat")
+					CameraShake.Impulse(0.3)
+				end
+				miniBossCuedGate = nil
+			end
+		end
 		if cyclePhase == "boss" then
 			if not BossView.IsShown() then
 				BossView.Show()
 				SoundPool.Play("bossAppear")
 			end
-			if payload.boss then
-				BossView.SetHp(payload.boss.hp, payload.boss.maxHp)
-			end
+			-- ⚠ No BossView.SetHp: the Cake Monster's world-space HP bar was
+			-- removed 2026-08-13 (features/cake-cycle.md). Its health reaches
+			-- the player through the HUD's CakeBar, fed by the AppRoot.Set at
+			-- the bottom of this handler — `payload.boss` is still carried.
 		else
 			if BossView.IsShown() then
 				BossView.Hide()
@@ -227,14 +507,35 @@ function CakeSubsClient.Start(data, modules)
 				)
 			end
 		end
+		-- ── the two CELEBRATION beats (features/food-burst.md) ────────────
+		-- Both take the big splash + a burst of food instead of the plain
+		-- announce line, so `celebrated` suppresses pushAnnounce below: two
+		-- banners in one frame stomp each other.
+		local celebrated = false
 		if payload.announce == "cake-cleared" then
 			SoundPool.Play("cakeCleared")
+			-- The Cake Monster is down. Biggest burst in the game, hardest
+			-- punch, and the cheer keeps `cake-cleared` as its SUBTITLE — the
+			-- phrase carries the feeling, that line carries the squishy.
+			CameraShake.Impulse(0.42)
+			pushCelebration("monster", "cake-cleared", "cake-cleared")
+			celebrated = true
+		elseif payload.announce == "miniboss-defeated" then
+			-- A ZONE GATE beaten. It gets the SAME treatment as the finale (user
+			-- request 2026-08-13) — splash, cheer, confetti — at the middle of
+			-- the three sizes, because it happens ~4x a cake. The defeat sting
+			-- and the poof already fired in the MiniBossView block above; the
+			-- camera punch belongs with the celebration, not with the view.
+			CameraShake.Impulse(0.32)
+			pushCelebration("crumb", "miniboss-defeated")
+			celebrated = true
 		elseif payload.announce == "layer-cleared" then
 			-- A whole layer gone: chime, a soft punch and a ring of crumbs kicked
 			-- up around the eater. The rhythm beat of the whole session.
-			lastLayerClearedAt = os.clock()
 			SoundPool.Play("layerCleared")
 			CameraShake.Impulse(0.22)
+			pushCelebration("layer", "layer-cleared")
+			celebrated = true
 			local character = player.Character
 			local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
 			if root then
@@ -250,7 +551,7 @@ function CakeSubsClient.Start(data, modules)
 		elseif payload.announce and string.find(payload.announce, "rare-cake", 1, true) then
 			SoundPool.Play("rareCake")
 		end
-		if type(payload.announce) == "string" then
+		if not celebrated and type(payload.announce) == "string" then
 			pushAnnounce(payload.announce)
 		end
 		AppRoot.Set({ cake = {
@@ -261,10 +562,9 @@ function CakeSubsClient.Start(data, modules)
 			biome = payload.biome,
 			rareKind = payload.rareKind,
 			finds = payload.finds, -- per-cake find goal for the HUD bar
-			-- The squishy THIS player is fighting for, pre-rolled server-side when
-			-- the boss opened and attached per recipient (features/cake-cycle.md).
-			-- Server clears it on win/loss, so the card disappears with the fight.
-			pendingPet = if type(payload.pendingPet) == "table" then payload.pendingPet else nil,
+			-- The zone gate's HP, so the top-centre bar becomes its health bar
+			-- (features/cake-cycle.md). nil in every other phase.
+			miniBoss = if type(payload.miniBoss) == "table" then payload.miniBoss else nil,
 			announce = payload.announce,
 		} })
 	end)
@@ -367,7 +667,14 @@ function CakeSubsClient.Start(data, modules)
 				-- Only rare+ finds earn a banner — 40 finds a cake, so a banner
 				-- per find would be pure noise. A FIRST-EVER discovery always
 				-- does, and outranks the rarity banner.
-				if firstEver then
+				-- ⚠ Not while a celebration owns the screen: uncovering a find on
+				-- the last bite of a layer is routine, and a one-line "EPIC
+				-- FIND!" replacing a 2.4 s splash mid-slam — while its confetti
+				-- is still in the air — reads as a bug. The find's own ring,
+				-- shake and floating number above still fire.
+				if celebrationOwnsScreen() then
+					Log.Info(SCOPE, "find banner held back — a layer/monster celebration is on screen")
+				elseif firstEver then
 					pushAnnounce("find-new")
 				elseif fx.ring and payload.rarity then
 					pushAnnounce(`find-{payload.rarity}`)
@@ -458,6 +765,23 @@ function CakeSubsClient.Start(data, modules)
 			return
 		end
 
+		if cyclePhase == "miniboss" then
+			-- The zone gate takes the SAME tap the cake does; the server routes it
+			-- (CakeSubs). Position is our own root, so it is always in reach and
+			-- carries no aim information the server would have to trust.
+			rEatAt:FireServer(root.Position)
+			if MiniBossView ~= nil and MiniBossView.IsShown() then
+				local at = MiniBossView.Center()
+				ParticlePool.Burst(
+					at + Vector3.new((math.random() - 0.5) * 4, (math.random() - 0.5) * 4, (math.random() - 0.5) * 4),
+					Color3.fromRGB(255, 210, 120),
+					6
+				)
+			end
+			SoundPool.Play("bossHit")
+			CameraShake.Impulse(0.1)
+			return
+		end
 		if cyclePhase == "boss" then
 			rEatAt:FireServer(root.Position)
 			local origin = CakeConfig.grid.origin
@@ -513,7 +837,7 @@ function CakeSubsClient.Start(data, modules)
 					local now = os.clock()
 					if
 						now - lastLockCueAt > CakeConfig.layerGate.cueInterval
-						and now - lastLayerClearedAt > LAYER_CLEAR_PRIORITY_SECONDS
+						and now - lastCelebrationAt > LAYER_CLEAR_PRIORITY_SECONDS
 					then
 						lastLockCueAt = now
 						-- SILENT ON PURPOSE (user req): the layer gate refuses a
@@ -663,22 +987,24 @@ function CakeSubsClient.Start(data, modules)
 	local lastCrunchAt = 0
 	RunService.RenderStepped:Connect(function(dt)
 		local footPos = nil -- CLOSE to the surface: cosmetic squish/wax
-		local overCakePos = nil -- over the loaf at ANY depth: collision-scan centre
+		local scanCentre = nil -- collision-scan centre: the character's raw XZ
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if root then
+			-- ⚠ The scan centre is the character's POSITION, not its surface point.
+			-- It used to be the surface point, which is nil off the footprint — so
+			-- the collision scan went dead at the checkpoint, at the gym, and in the
+			-- rim ring where a column stands at full cake height over out-of-cake
+			-- XZ. Columns went stale exactly where the player was about to return.
+			scanCentre = root.Position
 			local surfacePoint = LocalCakeField.SurfacePoint(root.Position.X, root.Position.Z)
-			if surfacePoint then
-				-- Over the loaf → drive the collision scan (even when BURIED, so a
-				-- sunk player's columns keep rising back — Task 2 review fix).
-				overCakePos = surfacePoint
-				-- Only the near-surface case gets the cosmetic underfoot squish/wax.
-				if math.abs(root.Position.Y - surfacePoint.Y) < CakeConfig.feel.onCakeYTolerance then
-					footPos = surfacePoint
-				end
+			-- Only the near-surface case gets the cosmetic underfoot squish/wax.
+			if surfacePoint and math.abs(root.Position.Y - surfacePoint.Y) < CakeConfig.feel.onCakeYTolerance then
+				footPos = surfacePoint
 			end
 		end
-		CakeRenderer.Step(dt, footPos, overCakePos)
+		watchdogStep(dt, root)
+		CakeRenderer.Step(dt, footPos, scanCentre)
 		CakeWaxShell.Step(dt, footPos) -- always-visible wax coating that cracks underfoot
 		-- Textured outer wall hiding the cake below the current + next rendered
 		-- layers — but only in editable mode; the parts fallback draws the whole cake
@@ -693,6 +1019,12 @@ function CakeSubsClient.Start(data, modules)
 		SoundPool.Step(dt)
 		ParticlePool.Step(dt)
 		BossView.Step(dt)
+		if MiniBossView ~= nil then
+			MiniBossView.Step(dt) -- entrance, the stare, and the HP-driven shrink
+		end
+		if FoodBurst ~= nil then
+			FoodBurst.Step(dt) -- celebration confetti; a no-op while nothing is live
+		end
 
 		-- GLINT: a slow shimmer on the cake SURFACE directly above every find
 		-- that is nearly uncovered. It never shows the item itself (that would be

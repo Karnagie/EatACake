@@ -50,7 +50,7 @@ local Components = {
 	CakeBar = require(ComponentsFolder.CakeBar),
 	ComboBadge = require(ComponentsFolder.ComboBadge),
 	AnnounceBanner = require(ComponentsFolder.AnnounceBanner),
-	BossPrizeCard = require(ComponentsFolder.BossPrizeCard),
+	CelebrationBanner = require(ComponentsFolder.CelebrationBanner),
 	UpgradeRow = require(ComponentsFolder.UpgradeRow),
 	UpgradesPanel = require(ComponentsFolder.UpgradesPanel),
 	HexNode = require(ComponentsFolder.HexNode),
@@ -59,7 +59,14 @@ local Components = {
 	EatButton = require(ComponentsFolder.EatButton),
 	PetRevealOverlay = require(ComponentsFolder.PetRevealOverlay),
 	MatchChoice = require(ComponentsFolder.MatchChoice),
+	MatchModeCard = require(ComponentsFolder.MatchModeCard),
+	MatchDifficultyChoice = require(ComponentsFolder.MatchDifficultyChoice),
+	MatchPartyChoice = require(ComponentsFolder.MatchPartyChoice),
 	MatchmakingPanel = require(ComponentsFolder.MatchmakingPanel),
+	-- Cake selection (features/cake-select.md)
+	CakeCard = require(ComponentsFolder.CakeCard),
+	CakeChoice = require(ComponentsFolder.CakeChoice),
+	CakeSelectPanel = require(ComponentsFolder.CakeSelectPanel),
 	-- One-offer window, shared by Invite Friends + the community reward
 	-- (features/referrals.md, features/group-reward.md)
 	SocialPanel = require(ComponentsFolder.SocialPanel),

@@ -1,9 +1,16 @@
 --[[
-	BossView — client-side visual of the Cake Guardian (GDD §6.2): a giant
-	gummy bear built from primitives ONCE at Init (template, R5), cloned in
-	when the cycle enters the boss phase. Purely cosmetic — hits are EatAt
-	taps, HP arrives via CakeCycleUpdate. World-space HP bar (non-kit UI is
-	allowed for world-space visuals per the UI workflow).
+	BossView — client-side visual of the CAKE MONSTER (GDD §6.2, called the
+	boss everywhere in code and phase strings): a giant gummy bear built from
+	primitives ONCE at Init (template, R5), cloned in when the cycle enters the
+	boss phase. Purely cosmetic — hits are EatAt taps.
+
+	⚠ It has NO health bar and NO nameplate (removed 2026-08-13, user request).
+	The monster's HP is the HUD's top-centre CakeBar, which shows the same
+	`payload.boss.hp` with a timer beside it (features/app-root.md) — a
+	world-space bar over the model was the SAME number a second time, and it
+	covered the thing the player is supposed to be looking at. Nothing here
+	consumes HP any more, so there is no SetHp: `CakeCycleUpdate` feeds the bar
+	directly through AppRoot.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -14,7 +21,6 @@ local BossView = {}
 
 local template: Model?
 local current: Model?
-local hpFill: Frame?
 local clock = 0
 
 function BossView.Init()
@@ -48,34 +54,6 @@ function BossView.Init()
 	ball("PawR", Vector3.new(4, 4, 4), Vector3.new(8, 8, 0), gummy)
 	model.PrimaryPart = body
 
-	local gui = Instance.new("BillboardGui")
-	gui.Name = "HpBar"
-	gui.Size = UDim2.fromOffset(260, 34)
-	gui.StudsOffsetWorldSpace = Vector3.new(0, 16, 0)
-	gui.AlwaysOnTop = true
-	local back = Instance.new("Frame")
-	back.Size = UDim2.fromScale(1, 0.5)
-	back.Position = UDim2.fromScale(0, 0.5)
-	back.BackgroundColor3 = Color3.fromRGB(40, 20, 30)
-	back.BorderSizePixel = 0
-	local fill = Instance.new("Frame")
-	fill.Name = "Fill"
-	fill.Size = UDim2.fromScale(1, 1)
-	fill.BackgroundColor3 = Color3.fromRGB(120, 255, 140)
-	fill.BorderSizePixel = 0
-	fill.Parent = back
-	local title = Instance.new("TextLabel")
-	title.Size = UDim2.fromScale(1, 0.5)
-	title.BackgroundTransparency = 1
-	title.Font = Enum.Font.FredokaOne
-	title.TextScaled = true
-	title.TextColor3 = Color3.new(1, 1, 1)
-	title.TextStrokeTransparency = 0.3
-	title.Text = CakeConfig.cycle.bossName
-	title.Parent = gui
-	back.Parent = gui
-	gui.Parent = body
-
 	template = model
 end
 
@@ -93,17 +71,6 @@ function BossView.Show()
 	current = template:Clone()
 	current:PivotTo(CFrame.new(origin.x, origin.y + 2, origin.z))
 	current.Parent = workspace
-	local body = current:FindFirstChild("Body")
-	local gui = body and body:FindFirstChild("HpBar")
-	local back = gui and (gui :: BillboardGui):FindFirstChildOfClass("Frame")
-	hpFill = back and back:FindFirstChild("Fill") :: Frame?
-end
-
---API
-function BossView.SetHp(hp: number, maxHp: number)
-	if hpFill then
-		hpFill.Size = UDim2.fromScale(math.clamp(hp / math.max(1, maxHp), 0, 1), 1)
-	end
 end
 
 --API
@@ -111,7 +78,6 @@ function BossView.Hide()
 	if current then
 		current:Destroy()
 		current = nil
-		hpFill = nil
 	end
 end
 

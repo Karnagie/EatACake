@@ -12,8 +12,11 @@ paths, GDD §16.10). Tuning ONLY in `Shared/config/JuiceConfig`.
 | `CameraShake` | trauma-based impulse shake, applied post-Camera render step |
 | `ComboMeter` | x1→x10, +1/2s continuous, reset >1.5s pause. FX-ONLY (never calories) |
 | `FloatingNumbers` | 24 pooled BillboardGuis, size scales with combo |
+| `FoodBurst` | 64 pooled screen-space food sprites — the CELEBRATION confetti, own doc: `features/food-burst.md` |
 
 ## Event → FX map
+layer cleared / Cake Monster down: chime + camera punch + a burst of food
+sprites across the screen and a random-cheer splash (`features/food-burst.md`);
 bite (predicted): layer SFX + crumbs (palette color) + shake + the eat gesture
 (flying layer piece, `EatGestureController` — see `features/cake-sim.md`);
 chocolate adds shard burst + crack. Landing on a fresh cake: crust crack
