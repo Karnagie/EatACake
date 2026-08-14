@@ -1,0 +1,15 @@
+{
+  "universeId": 10593425705,
+  "cookieFile": "C:/Users/vladimir/Desktop/reuploader/ROBLOSECURITY.txt",
+  "csv": "translations.csv",
+  "baseline": ".baseline.json",
+  "sourceLanguage": "en",
+  "languages": ["ru", "es", "pt", "fr", "de", "it", "ja", "ko", "zh-hans", "zh-hant", "id", "th", "tr", "vi", "pl", "ar"],
+  "harvest": {
+    "keyedModules": ["src/client/common/data/LocaleData.lua"],
+    "catalogues": [
+      { "file": "src/server/common/data/ShopData.lua", "fields": ["label", "desc", "text"] }
+    ],
+    "staticEntries": "localization/static_entries.json"
+  }
+}

@@ -1,0 +1,6843 @@
+{
+ "entries": {
+  "btn-claim\u0001\u0001Claim!": {
+   "example": "",
+   "translations": {
+    "ru": "Получить!",
+    "es": "¡Reclamar!",
+    "pt": "Resgatar!",
+    "fr": "Réclamer !",
+    "de": "Beanspruchen!",
+    "it": "Richiedi!",
+    "ja": "受け取る！",
+    "ko": "획득!",
+    "zh-hans": "领取！",
+    "zh-hant": "領取！",
+    "id": "Klaim!",
+    "th": "รับ!",
+    "tr": "Al!",
+    "vi": "Nhận!",
+    "pl": "Odbierz!",
+    "ar": "الحصول!"
+   }
+  },
+  "btn-claimed\u0001\u0001Claimed": {
+   "example": "",
+   "translations": {
+    "ru": "Получено",
+    "es": "Reclamado",
+    "pt": "Resgatado",
+    "fr": "Réclamé",
+    "de": "Beansprucht",
+    "it": "Reclamato",
+    "ja": "受け取り済み",
+    "ko": "획득됨",
+    "zh-hans": "已领取",
+    "zh-hant": "已領取",
+    "id": "Terklaim",
+    "th": "รับแล้ว",
+    "tr": "Alındı",
+    "vi": "Đã nhận",
+    "pl": "Odebrano",
+    "ar": "تم الاستلام"
+   }
+  },
+  "btn-tomorrow\u0001\u0001Tomorrow": {
+   "example": "",
+   "translations": {
+    "ru": "Завтра",
+    "es": "Mañana",
+    "pt": "Amanhã",
+    "fr": "Demain",
+    "de": "Morgen",
+    "it": "Domani",
+    "ja": "明日",
+    "ko": "내일",
+    "zh-hans": "明天",
+    "zh-hant": "明天",
+    "id": "Besok",
+    "th": "พรุ่งนี้",
+    "tr": "Yarın",
+    "vi": "Ngày mai",
+    "pl": "Jutro",
+    "ar": "غدا"
+   }
+  },
+  "btn-locked\u0001\u0001Locked": {
+   "example": "",
+   "translations": {
+    "ru": "Закрыто",
+    "es": "Bloqueado ",
+    "pt": "Trancado",
+    "fr": "Verrouillé",
+    "de": "Gesperrt",
+    "it": "Bloccato ",
+    "ja": "ロック済み",
+    "ko": "잠김",
+    "zh-hans": "已锁定",
+    "zh-hant": "已鎖定",
+    "id": "Terkunci",
+    "th": "ล็อค",
+    "tr": "Kilitli",
+    "vi": "Bị Khóa",
+    "pl": "Zablokowane",
+    "ar": "مقفل"
+   }
+  },
+  "label-day-n\u0001\u0001Day {n}": {
+   "example": "",
+   "translations": {
+    "ru": "День {n}",
+    "es": "Día {n}",
+    "pt": "Dia {n}",
+    "fr": "Jour {n}",
+    "de": "Tag {n}",
+    "it": "Giorno {n}",
+    "ja": "日 {n}",
+    "ko": "일 {n}",
+    "zh-hans": "第{n}天",
+    "zh-hant": "第{n}天",
+    "id": "Hari {n}",
+    "th": "วันที่ {n}",
+    "tr": "Gün {n}",
+    "vi": "Ngày {n}",
+    "pl": "Dzień {n}",
+    "ar": "اليوم {n}"
+   }
+  },
+  "label-gold-n\u0001\u0001+{n} Gold": {
+   "example": "",
+   "translations": {
+    "ru": "+{n} золота",
+    "es": "+{n} Oro ",
+    "pt": "+{n} Ouro",
+    "fr": "+{n} Or",
+    "de": "+{n} Gold ",
+    "it": "+{n} Oro ",
+    "ja": "+{n} ゴールド",
+    "ko": "+{n} 골드",
+    "zh-hans": "+{n} 金币",
+    "zh-hant": "+{n} 黃金",
+    "id": "+{n} Emas ",
+    "th": "+{n} ทอง",
+    "tr": "+{n} Altın",
+    "vi": "+{n} Vàng ",
+    "pl": "+{n} Złota",
+    "ar": "+{n} الذهب "
+   }
+  },
+  "label-gems-n\u0001\u0001+{n} Gems": {
+   "example": "",
+   "translations": {
+    "ru": "+{n} драгоценных камней",
+    "es": "+{n} Gemas ",
+    "pt": "+{n} Gemas",
+    "fr": "+{n} Gemmes",
+    "de": "+{n} Edelsteine ",
+    "it": "+{n} gemme ",
+    "ja": "+{n} ジェム",
+    "ko": "+{n} 보석",
+    "zh-hans": "+{n} 颗宝石",
+    "zh-hant": "+{n} 顆寶石",
+    "id": "+{n} Permata ",
+    "th": "+{n} อัญมณี",
+    "tr": "+{n} Mücevherler",
+    "vi": "+{n} Đá quý ",
+    "pl": "+{n} klejnotów ",
+    "ar": "+{n} الجواهر "
+   }
+  },
+  "label-calories-n\u0001\u0001+{n} Cal": {
+   "example": "",
+   "translations": {
+    "ru": "+{n} калорий",
+    "es": "+{n} Calorías ",
+    "pt": "+{n} Calorias",
+    "fr": "+{n} Cal",
+    "de": "+{n} Kalorien",
+    "it": "+{n} Cal",
+    "ja": "+{n} カロリー",
+    "ko": "+{n} 캘",
+    "zh-hans": "+{n} 卡路里 ",
+    "zh-hant": "+{n} 卡路里",
+    "id": "+{n} Kalori ",
+    "th": "+{n} Cal",
+    "tr": "+{n} Kalori",
+    "vi": "+{n} Calo",
+    "pl": "+{n} kalorii",
+    "ar": "+{n} من السعرات الحرارية"
+   }
+  },
+  "label-egg\u0001\u0001Free Egg": {
+   "example": "",
+   "translations": {
+    "ru": "Бесплатное яйцо",
+    "es": "Huevo gratis",
+    "pt": "Ovo Grátis",
+    "fr": "Oeuf gratuit",
+    "de": "Kostenloses Ei",
+    "it": "Uovo gratuito",
+    "ja": "無料の卵",
+    "ko": "무료 에그",
+    "zh-hans": "免费鸡蛋",
+    "zh-hant": "免費雞蛋",
+    "id": "Telur Gratis",
+    "th": "ไข่ฟรี",
+    "tr": "Bedava Yumurta",
+    "vi": "Trứng miễn phí",
+    "pl": "Darmowe jajko.",
+    "ar": "البيضة المجانية"
+   }
+  },
+  "label-egg-epic\u0001\u0001EPIC Egg!": {
+   "example": "",
+   "translations": {
+    "ru": "Эпическое яйцо!",
+    "es": "Huevo épico!",
+    "pt": "Ovo ÉPICO!",
+    "fr": "Oeuf épique !",
+    "de": "EPISCHES Ei!",
+    "it": "Uovo EPICO!",
+    "ja": "エピックエッグ！",
+    "ko": "에픽 에그!",
+    "zh-hans": "史诗蛋！",
+    "zh-hant": "史詩蛋！",
+    "id": "Telur EPIC!",
+    "th": "ไข่อีปิค!",
+    "tr": "Epik Yumurta!",
+    "vi": "Trứng EPIC!",
+    "pl": "Epickie jajko!",
+    "ar": "البيضة الأسطورية!"
+   }
+  },
+  "label-boost\u0001\u0001x2 Boost": {
+   "example": "",
+   "translations": {
+    "ru": "x2 Усиление ",
+    "es": "Impulso x2",
+    "pt": "x2 Impulso ",
+    "fr": "Boost x2",
+    "de": "x2 Schub\n",
+    "it": "x2 Potenziamento ",
+    "ja": "x2ブースト",
+    "ko": "x2 부스트",
+    "zh-hans": "x2 加成 ",
+    "zh-hant": "雙倍加成",
+    "id": "x2 Peningkatan ",
+    "th": "x2 บูส ",
+    "tr": "x2 Takviye",
+    "vi": "x2 Tăng cường ",
+    "pl": "x2 Wzmocnienie",
+    "ar": "تعزيز x2"
+   }
+  },
+  "boost-bite\u0001\u0001Extra Bite": {
+   "example": "",
+   "translations": {
+    "ru": "Дополнительный укус",
+    "es": "Mordida extra",
+    "pt": "Mordida Extra",
+    "fr": "Morsure supplémentaire",
+    "de": "Extra-Biss ",
+    "it": "Morso Extra",
+    "ja": "エクストラバイト",
+    "ko": "추가 바이트",
+    "zh-hans": "额外一口",
+    "zh-hant": "額外一口",
+    "id": "Gigitan Ekstra",
+    "th": "กัดพิเศษ",
+    "tr": "Ekstra ısırma ",
+    "vi": "Thêm một miếng",
+    "pl": "Dodatkowe ugryzienie",
+    "ar": "لقمة إضافية"
+   }
+  },
+  "boost-speed\u0001\u0001x2 Speed": {
+   "example": "",
+   "translations": {
+    "ru": "x2 Скорость",
+    "es": "x2 Velocidad",
+    "pt": "x2 Velocidade",
+    "fr": "x2 Vitesse",
+    "de": "x2 Geschwindigkeit",
+    "it": "x2 Velocità",
+    "ja": "x2 スピード",
+    "ko": "x2 스피드",
+    "zh-hans": "x2 速度",
+    "zh-hant": "雙倍速度",
+    "id": "x2 Kecepatan",
+    "th": "x2 ความเร็ว",
+    "tr": "x2 Hız",
+    "vi": "x2 Tốc độ",
+    "pl": "x2 Prędkość",
+    "ar": "سرعة x2"
+   }
+  },
+  "boost-capacity\u0001\u0001x2 Stomach": {
+   "example": "",
+   "translations": {
+    "ru": "x2 Желудок",
+    "es": "x2 Estómago ",
+    "pt": "x2 Estômago",
+    "fr": "x2 Estomac",
+    "de": "x2 Magen",
+    "it": "x2 Stomaco ",
+    "ja": "x2 胃",
+    "ko": "x2 배\n",
+    "zh-hans": "x2 胃",
+    "zh-hant": "x2 胃",
+    "id": "x2 Perut ",
+    "th": "x2 ท้อง ",
+    "tr": "x2 Mide",
+    "vi": "x2 Dạ dày",
+    "pl": "x2 Brzuch",
+    "ar": "x2 المعدة"
+   }
+  },
+  "boost-15m\u0001\u0001x2 Calories": {
+   "example": "",
+   "translations": {
+    "ru": "x2 калорий",
+    "es": "x2 Calorías ",
+    "pt": "x2 Calorias",
+    "fr": "x2 Calories",
+    "de": "x2 Kalorien",
+    "it": "x2 Calorie",
+    "ja": "x2カロリー",
+    "ko": "x2 칼로리",
+    "zh-hans": "x2 卡路里",
+    "zh-hant": "雙倍卡路里",
+    "id": "x2 Kalori ",
+    "th": "x2 แคลอรี่",
+    "tr": "x2 Kalori",
+    "vi": "x2 Calo",
+    "pl": "x2 Kalorie",
+    "ar": "×2 السعرات الحرارية"
+   }
+  },
+  "status-code-ok-gems\u0001\u0001Code redeemed! +{n} Gems": {
+   "example": "",
+   "translations": {
+    "ru": "Код активирован! +{n} самоцветов",
+    "es": "Código canjeado! +{n} Gemas ",
+    "pt": "Código resgatado! +{n} Gemas",
+    "fr": "Code utilisé ! +{n} Gemmes",
+    "de": "Code eingelöst! +{n} Edelsteine ",
+    "it": "Codice riscattato! +{n} gemme ",
+    "ja": "コードを引き換えました！+{n}ジェム",
+    "ko": "코드 교환 완료! +{n} 보석",
+    "zh-hans": "兑换码已兑换！+{n} 颗宝石 ",
+    "zh-hant": "代碼已兌換！+{n} 顆寶石 ",
+    "id": "Kode ditebus! +{n} Permata ",
+    "th": "แลกโค้ดแล้ว! +{n} อัญมณี",
+    "tr": "Kod kullanıldı! +{n} Mücevher",
+    "vi": "Mã đã được sử dụng! +{n} Gems",
+    "pl": "Kod wykorzystany! +{n} klejnotów",
+    "ar": "تم استرداد الرمز! +{n} الجواهر "
+   }
+  },
+  "menu-daily\u0001\u0001Daily": {
+   "example": "",
+   "translations": {
+    "ru": "Ежедневно",
+    "es": "Diario",
+    "pt": "Diário",
+    "fr": "Quotidien",
+    "de": "Täglich ",
+    "it": "Giornaliero ",
+    "ja": "デイリー",
+    "ko": "일간",
+    "zh-hans": "每日",
+    "zh-hant": "每日",
+    "id": "Harian",
+    "th": "ประจำวัน",
+    "tr": "Günlük",
+    "vi": "Hàng ngày",
+    "pl": "Codzienne",
+    "ar": "يوميا"
+   }
+  },
+  "menu-shop\u0001\u0001Shop": {
+   "example": "",
+   "translations": {
+    "ru": "Магазин",
+    "es": "Tienda ",
+    "pt": "Loja",
+    "fr": "Boutique",
+    "de": "Geschäft",
+    "it": "Negozio ",
+    "ja": "ショップ",
+    "ko": "상점",
+    "zh-hans": "商店",
+    "zh-hant": "商店",
+    "id": "Toko",
+    "th": "ร้านค้า",
+    "tr": "Mağaza",
+    "vi": "Cửa hàng",
+    "pl": "Sklep",
+    "ar": "المتجر "
+   }
+  },
+  "menu-codes\u0001\u0001Codes": {
+   "example": "",
+   "translations": {
+    "ru": "Коды",
+    "es": "Códigos",
+    "pt": "Códigos",
+    "fr": "Codes",
+    "de": "Codes",
+    "it": "Codici",
+    "ja": "コード",
+    "ko": "코드",
+    "zh-hans": "代码",
+    "zh-hant": "代碼",
+    "id": "Kode",
+    "th": "โค้ด",
+    "tr": "Kodlar",
+    "vi": "Mã",
+    "pl": "Kody",
+    "ar": "الرموز"
+   }
+  },
+  "menu-settings\u0001\u0001Settings": {
+   "example": "",
+   "translations": {
+    "ru": "Настройки",
+    "es": "Configuración",
+    "pt": "Configurações",
+    "fr": "Paramètres",
+    "de": "Optionen",
+    "it": "Impostazioni",
+    "ja": "設定",
+    "ko": "설정",
+    "zh-hans": "设置",
+    "zh-hant": "設定",
+    "id": "Pengaturan",
+    "th": "ตั้งค่า",
+    "tr": "Ayarlar",
+    "vi": "Cài đặt",
+    "pl": "Ustawienia",
+    "ar": "الإعدادات"
+   }
+  },
+  "menu-pets\u0001\u0001Squishies": {
+   "example": "",
+   "translations": {
+    "ru": "Мягкие игрушки",
+    "es": "Squishies",
+    "pt": "Squishies",
+    "fr": "Squishies",
+    "de": "Squishies",
+    "it": "Squishies",
+    "ja": "スクイシー",
+    "ko": "스 퀴시",
+    "zh-hans": "软萌玩具",
+    "zh-hant": "軟糖",
+    "id": "Squishies",
+    "th": "Squishies",
+    "tr": "Yumuşacıklar",
+    "vi": "Thú bông mềm",
+    "pl": "Pluszaki",
+    "ar": "الإسفنج"
+   }
+  },
+  "menu-upgrades\u0001\u0001Upgrades": {
+   "example": "",
+   "translations": {
+    "ru": "Улучшения",
+    "es": "Mejoras ",
+    "pt": "Melhorias ",
+    "fr": "Améliorations",
+    "de": "Verbesserungen",
+    "it": "Miglioramenti",
+    "ja": "アップグレード",
+    "ko": "강화",
+    "zh-hans": "升级",
+    "zh-hant": "升級",
+    "id": "Peningkatan ",
+    "th": "อัพเกรด",
+    "tr": "Yükseltmeler",
+    "vi": "Nâng cấp",
+    "pl": "Ulepszenia",
+    "ar": "الترقيات "
+   }
+  },
+  "menu-cakes\u0001\u0001Cakes": {
+   "example": "",
+   "translations": {
+    "ru": "Торты",
+    "es": "Tartas",
+    "pt": "Bolos",
+    "fr": "Gâteaux",
+    "de": "Kuchen",
+    "it": "Torte",
+    "ja": "ケーキ",
+    "ko": "케이크",
+    "zh-hans": "蛋糕",
+    "zh-hant": "蛋糕",
+    "id": "Kue",
+    "th": "เค้ก",
+    "tr": "Kekler",
+    "vi": "Bánh",
+    "pl": "Torty",
+    "ar": "الكعك"
+   }
+  },
+  "menu-invite\u0001\u0001Invite": {
+   "example": "",
+   "translations": {
+    "ru": "Пригласить",
+    "es": "Invitar",
+    "pt": "Convidar",
+    "fr": "Inviter",
+    "de": "Einladen",
+    "it": "Invitare",
+    "ja": "招待する",
+    "ko": "초대",
+    "zh-hans": "邀请",
+    "zh-hant": "邀請",
+    "id": "Undang",
+    "th": "เชิญชวน",
+    "tr": "Davet Et",
+    "vi": "Mời",
+    "pl": "Zapraszam",
+    "ar": "دعوة"
+   }
+  },
+  "menu-group\u0001\u0001Reward": {
+   "example": "",
+   "translations": {
+    "ru": "Награда",
+    "es": "Recompensa",
+    "pt": "Recompensa",
+    "fr": "Récompense",
+    "de": "Belohnung",
+    "it": "Ricompensa",
+    "ja": "褒賞",
+    "ko": "보상",
+    "zh-hans": "奖励",
+    "zh-hant": "獎勵",
+    "id": "Hadiah",
+    "th": "รางวัล",
+    "tr": "Ödül",
+    "vi": "Phần thưởng",
+    "pl": "Nagroda",
+    "ar": "المكافأة"
+   }
+  },
+  "title-settings\u0001\u0001Settings": {
+   "example": "",
+   "translations": {
+    "ru": "Настройки",
+    "es": "Configuración",
+    "pt": "Configurações",
+    "fr": "Paramètres",
+    "de": "Optionen",
+    "it": "Impostazioni",
+    "ja": "設定",
+    "ko": "설정",
+    "zh-hans": "设置",
+    "zh-hant": "設定",
+    "id": "Pengaturan",
+    "th": "ตั้งค่า",
+    "tr": "Ayarlar",
+    "vi": "Cài đặt",
+    "pl": "Ustawienia",
+    "ar": "الإعدادات"
+   }
+  },
+  "title-daily-rewards\u0001\u0001Daily Rewards": {
+   "example": "",
+   "translations": {
+    "ru": "Ежедневные награды",
+    "es": "Recompensas diarias",
+    "pt": "Recompensas Diárias",
+    "fr": "Récompenses quotidiennes",
+    "de": "Tägliche Belohnungen",
+    "it": "Ricompense giornaliere",
+    "ja": "デイリー報酬",
+    "ko": "일일 보상",
+    "zh-hans": "每日奖励",
+    "zh-hant": "每日獎勵",
+    "id": "Hadiah Harian",
+    "th": "รางวัลประจำวัน",
+    "tr": "Günlük Ödüller",
+    "vi": "Phần thưởng hàng ngày",
+    "pl": "Codzienne Nagrody",
+    "ar": "المكافآت اليومية"
+   }
+  },
+  "title-shop\u0001\u0001Shop": {
+   "example": "",
+   "translations": {
+    "ru": "Магазин",
+    "es": "Tienda ",
+    "pt": "Loja",
+    "fr": "Boutique",
+    "de": "Geschäft",
+    "it": "Negozio ",
+    "ja": "ショップ",
+    "ko": "상점",
+    "zh-hans": "商店",
+    "zh-hant": "商店",
+    "id": "Toko",
+    "th": "ร้านค้า",
+    "tr": "Mağaza",
+    "vi": "Cửa hàng",
+    "pl": "Sklep",
+    "ar": "المتجر "
+   }
+  },
+  "title-codes\u0001\u0001Codes": {
+   "example": "",
+   "translations": {
+    "ru": "Коды",
+    "es": "Códigos",
+    "pt": "Códigos",
+    "fr": "Codes",
+    "de": "Codes",
+    "it": "Codici",
+    "ja": "コード",
+    "ko": "코드",
+    "zh-hans": "代码",
+    "zh-hant": "代碼",
+    "id": "Kode",
+    "th": "โค้ด",
+    "tr": "Kodlar",
+    "vi": "Mã",
+    "pl": "Kody",
+    "ar": "الرموز"
+   }
+  },
+  "title-pets\u0001\u0001Squishies": {
+   "example": "",
+   "translations": {
+    "ru": "Мягкие игрушки",
+    "es": "Squishies",
+    "pt": "Squishies",
+    "fr": "Squishies",
+    "de": "Squishies",
+    "it": "Squishies",
+    "ja": "スクイシー",
+    "ko": "스 퀴시",
+    "zh-hans": "软萌玩具",
+    "zh-hant": "軟糖",
+    "id": "Squishies",
+    "th": "Squishies",
+    "tr": "Yumuşacıklar",
+    "vi": "Thú bông mềm",
+    "pl": "Pluszaki",
+    "ar": "الإسفنج"
+   }
+  },
+  "title-upgrades\u0001\u0001Upgrades": {
+   "example": "",
+   "translations": {
+    "ru": "Улучшения",
+    "es": "Mejoras ",
+    "pt": "Melhorias ",
+    "fr": "Améliorations",
+    "de": "Verbesserungen",
+    "it": "Miglioramenti",
+    "ja": "アップグレード",
+    "ko": "강화",
+    "zh-hans": "升级",
+    "zh-hant": "升級",
+    "id": "Peningkatan ",
+    "th": "อัพเกรด",
+    "tr": "Yükseltmeler",
+    "vi": "Nâng cấp",
+    "pl": "Ulepszenia",
+    "ar": "الترقيات "
+   }
+  },
+  "title-cakes\u0001\u0001Choose a Cake": {
+   "example": "",
+   "translations": {
+    "ru": "Выберите торт",
+    "es": "Elige un pastel",
+    "pt": "Escolha um Bolo",
+    "fr": "Choisissez un gâteau",
+    "de": "Wählen Sie einen Kuchen",
+    "it": "Scegli una torta",
+    "ja": "ケーキを選ぶ",
+    "ko": "케이크 선택",
+    "zh-hans": "选择一个蛋糕",
+    "zh-hant": "選擇一個蛋糕",
+    "id": "Pilih Kue",
+    "th": "เลือกเค้ก",
+    "tr": "Bir Kek Seçin",
+    "vi": "Chọn bánh",
+    "pl": "Wybierz tort",
+    "ar": "اختر كعكة"
+   }
+  },
+  "cake-name-classic\u0001\u0001Classic Cake": {
+   "example": "",
+   "translations": {
+    "ru": "Классический торт",
+    "es": "Tarta Clásica ",
+    "pt": "Bolo Clássico",
+    "fr": "Gâteau classique",
+    "de": "Klassischer Kuchen",
+    "it": "Torta Classica",
+    "ja": "クラシックケーキ",
+    "ko": "클래식 케이크",
+    "zh-hans": "经典蛋糕",
+    "zh-hant": "經典蛋糕",
+    "id": "Kue Klasik",
+    "th": "เค้กคลาสสิค",
+    "tr": "Klasik Kek",
+    "vi": "Bánh Cổ Điển",
+    "pl": "Klasyczne ciasto",
+    "ar": "الكعكة الكلاسيكية"
+   }
+  },
+  "cake-name-rainbow\u0001\u0001Rainbow Cake": {
+   "example": "",
+   "translations": {
+    "ru": "Радужный торт",
+    "es": "Torta arcoíris",
+    "pt": "Bolo Arco-Íris",
+    "fr": "Gâteau arc-en-ciel",
+    "de": "Regenbogen-Kuchen",
+    "it": "Torta Arcobaleno",
+    "ja": "レインボーケーキ",
+    "ko": "레인보우 케이크",
+    "zh-hans": "彩虹蛋糕",
+    "zh-hant": "彩虹蛋糕",
+    "id": "Kue Pelangi",
+    "th": "เค้กสายรุ้ง",
+    "tr": "Gökkuşağı Keki",
+    "vi": "Bánh cầu vồng",
+    "pl": "Tęczowy tort",
+    "ar": "كعكة قوس قزح "
+   }
+  },
+  "cake-unlock-hint\u0001\u0001Finish a cake to unlock!": {
+   "example": "",
+   "translations": {
+    "ru": "Завершите торт, чтобы разблокировать!",
+    "es": "Termina un pastel para desbloquearlo.",
+    "pt": "Termine um bolo para desbloquear!",
+    "fr": "Terminez un gâteau pour le débloquer !",
+    "de": "Beende einen Kuchen zum Freischalten!",
+    "it": "Finisci una torta per sbloccare!",
+    "ja": "ケーキを完成させるとアンロックされます！",
+    "ko": "케이크를 완성하여 잠금 해제하세요!",
+    "zh-hans": "完成一个蛋糕以解锁！",
+    "zh-hant": "完成一個蛋糕以解鎖！",
+    "id": "Selesaikan kue untuk membuka kunci!",
+    "th": "เสร็จสิ้นเค้กเพื่อปลดล็อค!",
+    "tr": "Kilidi açmak için bir pasta bitirin!",
+    "vi": "Hoàn thành một chiếc bánh để mở khóa!",
+    "pl": "Zakończ tort, aby go odblokować!",
+    "ar": "أكمل الكعكة لفتحها!"
+   }
+  },
+  "cake-name-soon\u0001\u0001???": {
+   "example": "",
+   "translations": {
+    "ru": "???",
+    "es": "???",
+    "pt": "???",
+    "fr": "???",
+    "de": "???",
+    "it": "???",
+    "ja": "???",
+    "ko": "???",
+    "zh-hans": "？？？",
+    "zh-hant": "？？？",
+    "id": "???",
+    "th": "???",
+    "tr": "???",
+    "vi": "???",
+    "pl": "???",
+    "ar": "؟؟؟"
+   }
+  },
+  "cake-status-soon\u0001\u0001Coming Soon!": {
+   "example": "",
+   "translations": {
+    "ru": "Скоро будет!",
+    "es": "¡Próximamente!",
+    "pt": "Em Breve!",
+    "fr": "Bientôt disponible !",
+    "de": "Kommt bald!",
+    "it": "Prossimamente!",
+    "ja": "近日公開！",
+    "ko": "곧 출시됩니다!",
+    "zh-hans": "即将推出！",
+    "zh-hant": "即將推出！",
+    "id": "Segera Hadir!",
+    "th": "เร็วๆนี้!",
+    "tr": "Yakında Geliyor!",
+    "vi": "Sắp có!",
+    "pl": "Wkrótce!",
+    "ar": "قريباً!"
+   }
+  },
+  "match-title\u0001\u0001Choose a Match": {
+   "example": "",
+   "translations": {
+    "ru": "Выберите матч",
+    "es": "Elegir una Partida ",
+    "pt": "Escolha uma Partida",
+    "fr": "Choisir un match",
+    "de": "Wähle ein Match aus",
+    "it": "Scegli una Partita ",
+    "ja": "マッチを選択する",
+    "ko": "매치 선택",
+    "zh-hans": "选择比赛",
+    "zh-hant": "選擇比賽",
+    "id": "Pilih Pertandingan",
+    "th": "เลือกแมตช์",
+    "tr": "Bir Maç Seçin",
+    "vi": "Chọn một trận đấu",
+    "pl": "Wybierz mecz",
+    "ar": "اختر مباراة"
+   }
+  },
+  "match-difficulty-heading\u0001\u0001Difficulty": {
+   "example": "",
+   "translations": {
+    "ru": "Сложность",
+    "es": "Dificultad",
+    "pt": "Dificuldade",
+    "fr": "Difficulté",
+    "de": "Schwierigkeit",
+    "it": "Difficoltà",
+    "ja": "難易度",
+    "ko": "난이도",
+    "zh-hans": "难度",
+    "zh-hant": "難度",
+    "id": "Kesulitan",
+    "th": "ความยาก\n",
+    "tr": "Zorluk",
+    "vi": "Độ khó",
+    "pl": "Trudność",
+    "ar": "الصعوبة"
+   }
+  },
+  "match-players-heading\u0001\u0001Party Size": {
+   "example": "",
+   "translations": {
+    "ru": "Размер группы",
+    "es": "Tamaño del grupo",
+    "pt": "Tamanho do Grupo",
+    "fr": "Taille du groupe",
+    "de": "Gruppengröße ",
+    "it": "Dimensione del gruppo",
+    "ja": "パーティーサイズ",
+    "ko": "파티 크기",
+    "zh-hans": "派对规模 ",
+    "zh-hant": "派對規模",
+    "id": "Ukuran Pesta",
+    "th": "ขนาดปาร์ตี้",
+    "tr": "Parti Boyutu",
+    "vi": "Kích thước nhóm",
+    "pl": "Rozmiar grupy",
+    "ar": "حجم المجموعة "
+   }
+  },
+  "match-cake-heading\u0001\u0001Cake": {
+   "example": "",
+   "translations": {
+    "ru": "Торт",
+    "es": "Tarta",
+    "pt": "Bolo",
+    "fr": "Gâteau",
+    "de": "Kuchen",
+    "it": "Torta",
+    "ja": "ケーキ",
+    "ko": "케이크",
+    "zh-hans": "蛋糕",
+    "zh-hant": "蛋糕",
+    "id": "Kue",
+    "th": "เค้ก",
+    "tr": "Kek",
+    "vi": "Bánh",
+    "pl": "Tort",
+    "ar": "كيك"
+   }
+  },
+  "match-difficulty-easy\u0001\u0001Easy": {
+   "example": "",
+   "translations": {
+    "ru": "Легко",
+    "es": "Fácil",
+    "pt": "Fácil",
+    "fr": "Facile",
+    "de": "Einfach",
+    "it": "Facile",
+    "ja": "簡単",
+    "ko": "쉬운",
+    "zh-hans": "简单",
+    "zh-hant": "簡單",
+    "id": "Mudah",
+    "th": "ง่าย",
+    "tr": "Kolay",
+    "vi": "Dễ",
+    "pl": "Łatwy",
+    "ar": "سهل"
+   }
+  },
+  "match-difficulty-medium\u0001\u0001Medium": {
+   "example": "",
+   "translations": {
+    "ru": "Средний",
+    "es": "Medio",
+    "pt": "Médio",
+    "fr": "Moyen",
+    "de": "Mittel",
+    "it": "Medio",
+    "ja": "ミディアム",
+    "ko": "중간",
+    "zh-hans": "中等",
+    "zh-hant": "中等",
+    "id": "Medium",
+    "th": "ปานกลาง",
+    "tr": "Orta",
+    "vi": "Trung bình",
+    "pl": "Średni",
+    "ar": "متوسط"
+   }
+  },
+  "match-difficulty-hard\u0001\u0001Hard": {
+   "example": "",
+   "translations": {
+    "ru": "Сложно",
+    "es": "Difícil",
+    "pt": "Difícil",
+    "fr": "Difficile",
+    "de": "Schwer",
+    "it": "Difficile",
+    "ja": "ハード",
+    "ko": "어려움",
+    "zh-hans": "困难",
+    "zh-hant": "難的",
+    "id": "Sulit",
+    "th": "ยาก",
+    "tr": "Zor",
+    "vi": "Khó",
+    "pl": "Trudny",
+    "ar": "صعب"
+   }
+  },
+  "match-difficulty-easy-detail\u0001\u0001Relaxed pace": {
+   "example": "",
+   "translations": {
+    "ru": "Располагающий темп",
+    "es": "Ritmo relajado",
+    "pt": "Ritmo relaxado",
+    "fr": "Tempo détendu",
+    "de": "Entspanntes Tempo",
+    "it": "Pace rilassata ",
+    "ja": "ゆったりとしたペース",
+    "ko": "느긋한 속도",
+    "zh-hans": "轻松的节奏 ",
+    "zh-hant": "輕鬆的步調",
+    "id": "Kecepatan yang santai",
+    "th": "อัตราที่ผ่อนคลาย",
+    "tr": "Rahat tempo",
+    "vi": "Tốc độ thư giãn",
+    "pl": "Spokojne tempo",
+    "ar": "الوتيرة المريحة"
+   }
+  },
+  "match-difficulty-medium-detail\u0001\u0001More layers, better rewards": {
+   "example": "",
+   "translations": {
+    "ru": "Больше слоёв, больше наград",
+    "es": "Más capas, mejores recompensas.",
+    "pt": "Mais camadas, melhores recompensas",
+    "fr": "Plus de couches, de meilleures récompenses",
+    "de": "Mehr Schichten, bessere Belohnungen",
+    "it": "Più livelli, ricompense migliori",
+    "ja": "より多くのレイヤー、より良い報酬",
+    "ko": "더 많은 층, 더 좋은 보상",
+    "zh-hans": "更多层，更好的奖励",
+    "zh-hant": "更多層數，更好的獎勵",
+    "id": "Lebih banyak lapisan, hadiah yang lebih baik ",
+    "th": "มีชั้นมากขึ้น รางวัลที่ดีขึ้น",
+    "tr": "Daha fazla katman, daha iyi ödüller",
+    "vi": "Nhiều lớp, phần thưởng tốt hơn",
+    "pl": "Więcej warstw, lepsze nagrody",
+    "ar": "المزيد من الطبقات، مكافآت أفضل"
+   }
+  },
+  "match-difficulty-hard-detail\u0001\u0001Most layers, best rewards": {
+   "example": "",
+   "translations": {
+    "ru": "Больше слоёв, лучшие награды",
+    "es": "Más capas, mejores recompensas",
+    "pt": "Mais camadas, melhores recompensas",
+    "fr": "Plus de couches, meilleures récompenses",
+    "de": "Meiste Schichten, beste Belohnungen ",
+    "it": "Più livelli, migliori ricompense",
+    "ja": "最多レイヤー、最高報酬",
+    "ko": "최다 레이어, 최고의 보상",
+    "zh-hans": "最多的层数，最好的奖励 ",
+    "zh-hant": "最多的層數，最好的獎勵",
+    "id": "Paling banyak lapisan, hadiah terbaik ",
+    "th": "ชั้นมากที่สุด รางวัลที่ดีที่สุด",
+    "tr": "En çok katman, en iyi ödüller",
+    "vi": "Nhiều lớp nhất, phần thưởng tốt nhất",
+    "pl": "Więcej warstw, lepsze nagrody",
+    "ar": "أكثر الطبقات، أفضل المكافآت "
+   }
+  },
+  "match-reward-multiplier\u0001\u0001{n}x": {
+   "example": "",
+   "translations": {
+    "ru": "{n}x",
+    "es": "{n}x",
+    "pt": "{n}x",
+    "fr": "{n}x",
+    "de": "{n}x",
+    "it": "{n}x",
+    "ja": "{n}倍",
+    "ko": "{n}배",
+    "zh-hans": "{n} 倍",
+    "zh-hant": "{n} 倍",
+    "id": "{n}x",
+    "th": "{n}x ",
+    "tr": "{n}x",
+    "vi": "{n}x",
+    "pl": "{n}x",
+    "ar": "{n}×"
+   }
+  },
+  "match-player-one\u0001\u00011 Player": {
+   "example": "",
+   "translations": {
+    "ru": "1 игрок",
+    "es": "1 Jugador",
+    "pt": "1 Jogador",
+    "fr": "1 joueur",
+    "de": "1 Spieler",
+    "it": "1 giocatore",
+    "ja": "1人のプレイヤー",
+    "ko": "1명의 플레이어",
+    "zh-hans": "1名玩家",
+    "zh-hant": "1名玩家",
+    "id": "1 Pemain",
+    "th": "ผู้เล่น 1 คน",
+    "tr": "1 Oyuncu",
+    "vi": "1 người chơi",
+    "pl": "1 gracz",
+    "ar": "لاعب واحد"
+   }
+  },
+  "match-player-many\u0001\u0001{n} Players": {
+   "example": "",
+   "translations": {
+    "ru": "{n} игроков",
+    "es": "{n} Jugadores ",
+    "pt": "{n} Jogadores",
+    "fr": "{n} Joueurs",
+    "de": "{n} Spieler ",
+    "it": "{n} Giocatori ",
+    "ja": "{n} プレイヤー",
+    "ko": "{n} 플레이어",
+    "zh-hans": "{n} 玩家",
+    "zh-hant": "{n} 玩家",
+    "id": "{n} Pemain",
+    "th": "{n} ผู้เล่น",
+    "tr": "{n} Oyuncular",
+    "vi": "{n} Người chơi",
+    "pl": "{n} Graczy",
+    "ar": "{n} اللاعبين"
+   }
+  },
+  "match-start\u0001\u0001START": {
+   "example": "",
+   "translations": {
+    "ru": "НАЧАТЬ",
+    "es": "COMENZAR",
+    "pt": "COMEÇAR",
+    "fr": "COMMENCER",
+    "de": "STARTEN",
+    "it": "INIZIA",
+    "ja": "スタート",
+    "ko": "시작",
+    "zh-hans": "开始",
+    "zh-hant": "開始",
+    "id": "MULAI",
+    "th": "เริ่ม",
+    "tr": "BAŞLA",
+    "vi": "BẮT ĐẦU",
+    "pl": "START",
+    "ar": "البداية"
+   }
+  },
+  "match-starting\u0001\u0001STARTING...": {
+   "example": "",
+   "translations": {
+    "ru": "НАЧИНАЕМ...",
+    "es": "EMPEZANDO...",
+    "pt": "COMEÇANDO...",
+    "fr": "DÉMARRAGE...",
+    "de": "STARTET...",
+    "it": "INIZIANDO...",
+    "ja": "スタートしています...",
+    "ko": "시작하는 중...",
+    "zh-hans": "正在开始...",
+    "zh-hant": "即將開始...",
+    "id": "MULAI...",
+    "th": "กำลังเริ่ม...",
+    "tr": "BAŞLIYOR...",
+    "vi": "BẮT ĐẦU...",
+    "pl": "START...",
+    "ar": "يتم البدء..."
+   }
+  },
+  "match-status-choose\u0001\u0001Choose difficulty and party size": {
+   "example": "",
+   "translations": {
+    "ru": "Выберите сложность и размер группы.",
+    "es": "Elige la dificultad y el tamaño del grupo ",
+    "pt": "Escolha dificuldade e tamanho de grupo",
+    "fr": "Choisis la difficulté et la taille du groupe",
+    "de": "Wähle Schwierigkeit und Gruppengröße ",
+    "it": "Scegli la difficoltà e le dimensioni del gruppo",
+    "ja": "難易度とパーティーのサイズを選択してください",
+    "ko": "난이도와 파티 크기 선택",
+    "zh-hans": "选择难度和队伍规模 ",
+    "zh-hant": "選擇難度和隊伍規模",
+    "id": "Pilih kesulitan dan ukuran pesta",
+    "th": "เลือกความยากและขนาดปาร์ตี้",
+    "tr": "Zorluk ve parti boyutunu seçin.",
+    "vi": "Chọn độ khó và kích thước nhóm",
+    "pl": "Wybierz trudność i rozmiar grupy",
+    "ar": "اختر الصعوبة وحجم الفريق"
+   }
+  },
+  "match-status-partial\u0001\u0001Choose one more option": {
+   "example": "",
+   "translations": {
+    "ru": "Выберите еще один вариант",
+    "es": "Elige una opción más",
+    "pt": "Escolha mais uma opção",
+    "fr": "Choisissez une autre option",
+    "de": "Wählen Sie eine weitere Option",
+    "it": "Scegli un'altra opzione",
+    "ja": "もう1つオプションを選択してください",
+    "ko": "한 가지 옵션을 더 선택하세요.",
+    "zh-hans": "再选择一个选项",
+    "zh-hant": "再選擇一個選項",
+    "id": "Pilih satu opsi lagi",
+    "th": "เลือกอีกหนึ่งตัวเลือก",
+    "tr": "Bir seçenek daha seçin",
+    "vi": "Chọn thêm một lựa chọn nữa",
+    "pl": "Wybierz jeszcze jedną opcję",
+    "ar": "اختر خيارًا آخر"
+   }
+  },
+  "match-status-ready\u0001\u0001{current}/{max} players here - ready to launch!": {
+   "example": "",
+   "translations": {}
+  },
+  "match-status-starting\u0001\u0001Starting the match...": {
+   "example": "",
+   "translations": {
+    "ru": "Начинаем матч...",
+    "es": "Comenzando la partida...",
+    "pt": "Começando a partida...",
+    "fr": "Démarrage du match...",
+    "de": "Spiel wird begonnen ...",
+    "it": "Inizio della partita...",
+    "ja": "試合開始...",
+    "ko": "매치를 시작합니다...",
+    "zh-hans": "比赛即将开始...",
+    "zh-hant": "比賽即將開始...",
+    "id": "Memulai pertandingan...",
+    "th": "กำลังจะเริ่มการแข่งขัน...",
+    "tr": "Maç başlıyor...",
+    "vi": "Bắt đầu trận đấu...",
+    "pl": "Rozpoczynanie meczu...",
+    "ar": "بدء المباراة..."
+   }
+  },
+  "match-error-start\u0001\u0001Couldn't start the match. Try again.": {
+   "example": "",
+   "translations": {
+    "ru": "Не удалось начать матч. Попробуйте еще раз.",
+    "es": "No se pudo iniciar la partida. Inténtalo de nuevo.",
+    "pt": "Não foi possível iniciar a partida. Tente novamente.",
+    "fr": "Impossible de démarrer le match. Réessayez.",
+    "de": "Das Spiel konnte nicht gestartet werden. Versuche es erneut.",
+    "it": "Non è stato possibile iniziare la partita. Riprova.",
+    "ja": "マッチを開始できませんでした。もう一度お試しください。",
+    "ko": "매치를 시작할 수 없습니다. 다시 시도하세요.",
+    "zh-hans": "无法开始比赛。请重试。",
+    "zh-hant": "無法開始比賽。請再試一次。",
+    "id": "Tidak dapat memulai pertandingan. Coba lagi.",
+    "th": "ไม่สามารถเริ่มการแข่งขันได้ ลองอีกครั้ง",
+    "tr": "Maç başlatılamadı. Tekrar deneyin.",
+    "vi": "Không thể bắt đầu trận đấu. Hãy thử lại.",
+    "pl": "Nie udało się rozpocząć meczu. Spróbuj ponownie.",
+    "ar": "تعذر بدء المباراة. جرب مرة أخرى."
+   }
+  },
+  "match-error-session-lost\u0001\u0001That match session ended. Step in again.": {
+   "example": "",
+   "translations": {
+    "ru": "Эта сессия матчей завершилась. Войдите снова.",
+    "es": "Esa sesión de partido terminó. Vuelve a entrar.",
+    "pt": "Essa sessão de partidas terminou. Entre novamente.",
+    "fr": "Cette session de match est terminée. Rejoignez-nous à nouveau.",
+    "de": "Diese Spielsitzung ist beendet. Tritt erneut ein. ",
+    "it": "Quella sessione di partite è finita. Entra di nuovo.",
+    "ja": "そのマッチセッションは終了しました。もう一度ステップしてください。",
+    "ko": "해당 매치 세션이 종료되었습니다. 다시 참가하세요.",
+    "zh-hans": "那场比赛已经结束了。请再次参与。 ",
+    "zh-hant": "該比賽場次已結束。請再次進入。",
+    "id": "Sesi pertandingan itu berakhir. Masuk lagi.",
+    "th": "เซสชันการแข่งขันนั้นจบลงแล้ว กลับเข้าไปอีกครั้ง",
+    "tr": "Bu maç oturumu sona erdi. Tekrar girin.",
+    "vi": "Phiên trận đấu đó đã kết thúc. Hãy tham gia lại.",
+    "pl": "Ta sesja meczów się skończyła. Wejdź ponownie.",
+    "ar": "لقد انتهت جلسة المباراة. ادخل مرة أخرى."
+   }
+  },
+  "match-error-invalid-choice\u0001\u0001Choose a valid difficulty and party size.": {
+   "example": "",
+   "translations": {
+    "ru": "Выберите действительную сложность и размер группы.",
+    "es": "Elige una dificultad y tamaño de grupo válidos.",
+    "pt": "Escolha uma dificuldade válida e tamanho de grupo.",
+    "fr": "Choisissez une difficulté valide et la taille du groupe.",
+    "de": "Wähle eine gültige Schwierigkeit und Gruppengröße.",
+    "it": "Scegli una difficoltà valida e le dimensioni del gruppo.",
+    "ja": "有効な難易度とパーティーサイズを選択してください。",
+    "ko": "유효한 난이도와 파티 크기를 선택하세요.",
+    "zh-hans": "选择一个有效的难度和队伍规模。",
+    "zh-hant": "選擇一個有效的難度和隊伍規模。",
+    "id": "Pilih kesulitan dan ukuran pesta yang valid.",
+    "th": "เลือกความยากและขนาดปาร์ตี้ที่ถูกต้อง",
+    "tr": "Geçerli bir zorluk ve parti boyutu seçin.",
+    "vi": "Chọn một độ khó và kích thước nhóm hợp lệ.",
+    "pl": "Wybierz poprawną trudność i rozmiar grupy.",
+    "ar": "اختر صعوبة صالحة وحجم المجموعة."
+   }
+  },
+  "belly-label\u0001\u0001BELLY {fill}/{cap}": {
+   "example": "",
+   "translations": {}
+  },
+  "belly-glutton\u0001\u0001FULL! GLUTTON x2": {
+   "example": "",
+   "translations": {
+    "ru": "ПОЛНЫЙ! Обжор x2",
+    "es": "¡LLENO! Glutón x2",
+    "pt": "CHEIO! GLUTTON x2",
+    "fr": "PLEIN ! GLUTTON x2 ",
+    "de": "VOLL! GLUTTON x2",
+    "it": "PIENO! GLUTTON x2",
+    "ja": "満タン！グルトンx2 ",
+    "ko": "가득! 과식자 x2 ",
+    "zh-hans": "已满！贪吃鬼 x2",
+    "zh-hant": "滿了！暴食者 x2",
+    "id": "PENUH! GLUTTON x2 ",
+    "th": "เต็ม! GLUTTON x2",
+    "tr": "DOLU! Glutton x2 ",
+    "vi": "Đầy! GLUTTON x2",
+    "pl": "Pełny! GLUTTON x2",
+    "ar": "ممتلئ! الشراهة x2"
+   }
+  },
+  "cake-progress\u0001\u0001CAKE {pct}%": {
+   "example": "",
+   "translations": {
+    "ru": "Торт {pct}%",
+    "es": "TARTA {pct}%",
+    "pt": "BOLO {pct}%",
+    "fr": "GÂTEAU {pct}%",
+    "de": "Kuchen {pct}%",
+    "it": "TORTA {pct}%",
+    "ja": "ケーキ {pct}%",
+    "ko": "케이크 {pct}%",
+    "zh-hans": "蛋糕 {pct}%",
+    "zh-hant": "蛋糕 {pct}%",
+    "id": "KUE {pct}%",
+    "th": "เค้ก {pct}%",
+    "tr": "Kek {pct}%",
+    "vi": "Bánh {pct}%",
+    "pl": "Tort {pct}%",
+    "ar": "الكيك {pct}%"
+   }
+  },
+  "cake-finds\u0001\u0001FINDS {found}/{total}": {
+   "example": "",
+   "translations": {}
+  },
+  "cake-boss\u0001\u0001CAKE MONSTER! {timer}s": {
+   "example": "",
+   "translations": {}
+  },
+  "cake-miniboss\u0001\u0001CRUMB MONSTER! EAT IT!": {
+   "example": "",
+   "translations": {}
+  },
+  "cake-reward\u0001\u0001SQUISHY TIME!": {
+   "example": "",
+   "translations": {
+    "ru": "Время мягкости!",
+    "es": "¡HORA DE APLASTAR!",
+    "pt": "HORA DO SQUISHY!",
+    "fr": "Temps moelleux !",
+    "de": "SQUISHY-ZEIT!",
+    "it": "TEMPO SQUISHY!",
+    "ja": "スクイシータイム！",
+    "ko": "스 퀴시 타임!",
+    "zh-hans": "软萌时刻！",
+    "zh-hant": "軟軟時間！",
+    "id": "Waktu Squishy!",
+    "th": "เวลา SQUISHY!",
+    "tr": "Yumuşacık Zaman!",
+    "vi": "Thời gian mềm mại!",
+    "pl": "Czas Squishy!",
+    "ar": "وقت اللينة! "
+   }
+  },
+  "cake-spawning\u0001\u0001NEW CAKE IN {timer}s": {
+   "example": "",
+   "translations": {
+    "ru": "Новый торт через {timer} секунд",
+    "es": "NUEVO PASTEL EN {timer}s ",
+    "pt": "NOVO BOLO EM {timer}s ",
+    "fr": "NOUVEAU GÂTEAU EN {timer} s",
+    "de": "NEUER KUCHEN IN {timer} s",
+    "it": "NUOVA TORTA IN {timer} s",
+    "ja": "新しいケーキまで{timer}秒",
+    "ko": "{timer}초 후 새로운 케이크가 나와요",
+    "zh-hans": "新蛋糕将在{timer}秒后出现 ",
+    "zh-hant": "新蛋糕將在{timer}秒後出現 ",
+    "id": "Kue Baru Dalam {timer} Detik ",
+    "th": "เค้กใหม่ใน {timer} วินาที",
+    "tr": "{timer} saniye içinde yeni bir pasta",
+    "vi": "Bánh mới trong {timer} giây",
+    "pl": "Nowe ciasto za {timer} s",
+    "ar": "كعكة جديدة في {timer} ثواني"
+   }
+  },
+  "announce-new-cake\u0001\u0001A fresh cake rolled in!": {
+   "example": "",
+   "translations": {
+    "ru": "Свежий торт появился!",
+    "es": "¡Un pastel fresco enrollado!",
+    "pt": "Um bolo fresco enrolado!",
+    "fr": "Un gâteau frais est arrivé !",
+    "de": "Ein frischer Kuchen wurde gerollt!",
+    "it": "Una torta fresca arrotolata!",
+    "ja": "フレッシュなケーキが転がってきた！",
+    "ko": "신선한 케이크가 들어왔어요!",
+    "zh-hans": "一块新鲜的蛋糕滚了进来！",
+    "zh-hant": "一個新鮮的蛋糕滾進來了！",
+    "id": "Sebuah kue segar digulung!",
+    "th": "เค้กสดม้วนเข้ามา!",
+    "tr": "Taze bir pasta yuvarlandı!",
+    "vi": "Một chiếc bánh tươi mới được cuộn ra!",
+    "pl": "Świeże ciasto zostało wytworzone!",
+    "ar": "تم تدحرج كعكة طازجة!"
+   }
+  },
+  "announce-rare-cake-golden\u0001\u0001GOLDEN CAKE! x3 calories!": {
+   "example": "",
+   "translations": {
+    "ru": "Золотой торт! x3 калорий!",
+    "es": "Tarta dorada! x3 calorías!",
+    "pt": "BOLO DOURADO! x3 calorias!",
+    "fr": "Gâteau doré ! x3 calories !",
+    "de": "Goldener Kuchen! x3 Kalorien!",
+    "it": "Torta dorata! x3 calorie!",
+    "ja": "ゴールデンケーキ！ x3カロリー！",
+    "ko": "골든 케이크! x3 칼로리!",
+    "zh-hans": "黄金蛋糕！x3卡路里！ ",
+    "zh-hant": "黃金蛋糕！每個有3倍卡路里！",
+    "id": "Kue Emas! x3 kalori!",
+    "th": "เค้กทองคำ! x3 แคลอรี่!",
+    "tr": "Altın Kek! x3 kalori!",
+    "vi": "Bánh vàng! x3 calo!",
+    "pl": "Złote ciasto! x3 kalorie!",
+    "ar": "الكعكة الذهبية! x3 السعرات الحرارية!"
+   }
+  },
+  "announce-rare-cake-rainbow\u0001\u0001RAINBOW CAKE! Epic squishy guaranteed!": {
+   "example": "",
+   "translations": {
+    "ru": "Радужный торт! Гарантированно эпическая мягкость!",
+    "es": "¡Tarta de arcoíris! ¡Epic squishy garantizado!",
+    "pt": "Bolo de arco-íris! Slime épico garantido!",
+    "fr": "Gâteau arc-en-ciel ! Moelleux épique garanti !",
+    "de": "Regenbogen-Kuchen! Epischer Squish garantiert!",
+    "it": "Torta arcobaleno! Epic squishy garantito!",
+    "ja": "レインボーケーキ！エピックなスクイシーが確定！",
+    "ko": "레인보우 케이크! 에픽 스 퀴시 보장!",
+    "zh-hans": "彩虹蛋糕！保证超级松软！",
+    "zh-hant": "彩虹蛋糕！保證有超棒的軟萌質感！",
+    "id": "Kue Pelangi! Kelembutan epik dijamin!",
+    "th": "เค้กสายรุ้ง! รับประกันว่าจะเป็นอะไรที่นุ่มแน่นอน! ",
+    "tr": "Gökkuşağı Keki! Epik yumuşacık garantili!",
+    "vi": "Bánh cầu vồng! Chắc chắn sẽ siêu mềm mại! ",
+    "pl": "Tęczowe ciasto! Gwarantowane epickie squishy!",
+    "ar": "كعكة قوس قزح! ضمان الملمعة الرائعة! "
+   }
+  },
+  "announce-boss-spawned\u0001\u0001The Cake Monster wakes up!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-cake-cleared\u0001\u0001Cake cleared! Everyone gets a squishy!": {
+   "example": "",
+   "translations": {
+    "ru": "Торт очищен! Все получают мягкий десерт!",
+    "es": "¡El pastel está limpio! ¡Todos reciben un bocadillo esponjoso!",
+    "pt": "Bolo limpo! Todo mundo ganha um squishy!",
+    "fr": "Le gâteau est terminé ! Tout le monde obtient un squishy !",
+    "de": "Kuchen abgeräumt! Jeder bekommt einen Squishy!",
+    "it": "Torta spazzata via! Tutti ricevono un soffice spuntino!",
+    "ja": "ケーキをクリアしたよ！みんなスクイシーをゲットできるよ！",
+    "ko": "케이크가 사라졌어요! 모두가 스 퀴시를 얻어요!",
+    "zh-hans": "蛋糕已清理！每个人都得到了一块软软的蛋糕！ ",
+    "zh-hant": "蛋糕已經吃完了！每個人都會得到一個軟軟的東西！",
+    "id": "Kue sudah habis! Semua orang mendapatkan yang lembut!",
+    "th": "เค้กเคลียร์แล้ว! ทุกคนจะได้รับสควิชี่!",
+    "tr": "Kek temizlendi! Herkes yumuşak bir şey alır!",
+    "vi": "Bánh đã được dọn sạch! Mọi người đều nhận được một chiếc bánh mềm mại!",
+    "pl": "Tort wyczyszczony! Wszyscy dostają gąbkę!",
+    "ar": "تم إنهاء الكعك! يحصل الجميع على كعكة رقيقة!"
+   }
+  },
+  "announce-layer-locked\u0001\u0001Eat the top layer first!": {
+   "example": "",
+   "translations": {
+    "ru": "Сначала съешьте верхний слой!",
+    "es": "¡Primero come la capa superior!",
+    "pt": "Coma a camada superior primeiro!",
+    "fr": "Mangez d'abord la couche supérieure !",
+    "de": "Iss zuerst die oberste Schicht!",
+    "it": "Mangia il livello superiore per primo!",
+    "ja": "最上層を先に食べてください！",
+    "ko": "맨 위층을 먼저 먹으세요!",
+    "zh-hans": "先吃掉最上面的一层！",
+    "zh-hant": "先吃頂層吧！",
+    "id": "Makan lapisan atas terlebih dahulu!",
+    "th": "กินชั้นบนสุดก่อน!",
+    "tr": "Önce üst katmanı yiyin!",
+    "vi": "Hãy ăn lớp trên cùng trước nhé!",
+    "pl": "Najpierw zjedz najwyższą warstwę!",
+    "ar": "تناول الطبقة العليا أولاً!"
+   }
+  },
+  "announce-layer-cleared\u0001\u0001LAYER CLEARED!": {
+   "example": "",
+   "translations": {
+    "ru": "Слой очищен!",
+    "es": "¡CAPA DESPEJADA!",
+    "pt": "CAMADA LIMPA!",
+    "fr": "COUCHE ÉFFACÉE !",
+    "de": "Schicht geklärt!",
+    "it": "STRATO ELIMINATO!",
+    "ja": "レイヤーをクリアしました！",
+    "ko": "레이어 클리어!",
+    "zh-hans": "层已清除！",
+    "zh-hant": "層已清除！",
+    "id": "LAYER DIHAPUS!",
+    "th": "เคลียร์ชั้นแล้ว!",
+    "tr": "Katman temizlendi!",
+    "vi": "Lớp đã được dọn sạch!",
+    "pl": "Warstwa oczyszczona!",
+    "ar": "تم تطهير الطبقة!"
+   }
+  },
+  "announce-miniboss-spawned\u0001\u0001SOMETHING BURST OUT OF THE CAKE!": {
+   "example": "",
+   "translations": {
+    "ru": "Что-то вырвалось из торта!",
+    "es": "¡ALGO SALIÓ DEL PASTEL!",
+    "pt": "ALGO EXPLODIU DO BOLO!",
+    "fr": "QUELQUE CHOSE A ÉCLAT DU GÂTEAU !",
+    "de": "Etwas ist aus dem Kuchen hervorgekommen!",
+    "it": "QUALCOSA È USCITO DALLA TORTA!",
+    "ja": "ケーキから何かが飛び出してきた！",
+    "ko": "케이크에서 무언가가 터져 나왔어요!",
+    "zh-hans": "有东西从蛋糕里爆出来了！ ",
+    "zh-hant": "有東西從蛋糕裡衝出來了！",
+    "id": "Sesuatu meledak dari kue!",
+    "th": "มีบางอย่างระเบิดออกมาจากเค้ก!",
+    "tr": "Kekten bir şey fırladı!",
+    "vi": "Một cái gì đó nổ ra khỏi chiếc bánh!",
+    "pl": "Coś wyskoczyło z ciasta!",
+    "ar": "لقد انفجر شيء من الكعكة!"
+   }
+  },
+  "announce-miniboss-defeated\u0001\u0001CRUMB MONSTER DOWN! DIG DEEPER!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-1\u0001\u0001LAYER DEMOLISHED!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-2\u0001\u0001NOM NOM NOM!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-3\u0001\u0001ONE LAYER DOWN!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-4\u0001\u0001NOTHING BUT CRUMBS!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-5\u0001\u0001LICKED CLEAN!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-6\u0001\u0001THAT WAS DELICIOUS!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-7\u0001\u0001BIG BITE!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-8\u0001\u0001SUGAR RUSH!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-9\u0001\u0001GONE IN SECONDS!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-10\u0001\u0001MORE CAKE, PLEASE!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-11\u0001\u0001CRUMBS EVERYWHERE!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-12\u0001\u0001TASTY!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-13\u0001\u0001KEEP DIGGING!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-14\u0001\u0001WHAT A MOUTHFUL!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-15\u0001\u0001SWEET!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-16\u0001\u0001ATE THE WHOLE THING!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-17\u0001\u0001YUMMY!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-18\u0001\u0001LAYER WIPED OUT!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-19\u0001\u0001SO GOOD!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-layer-cheer-20\u0001\u0001ANOTHER ONE EATEN!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-crumb-cheer-1\u0001\u0001CRUMB MONSTER DOWN! DIG DEEPER!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-crumb-cheer-2\u0001\u0001GATE SMASHED!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-crumb-cheer-3\u0001\u0001ATE IT WHOLE!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-crumb-cheer-4\u0001\u0001THE CAKE IS OPEN AGAIN!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-crumb-cheer-5\u0001\u0001OUT OF MY WAY!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-crumb-cheer-6\u0001\u0001CRUNCHED!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-crumb-cheer-7\u0001\u0001NEXT LAYER, PLEASE!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-crumb-cheer-8\u0001\u0001THAT ONE WAS CHEWY!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-crumb-cheer-9\u0001\u0001GUARD? WHAT GUARD?": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-crumb-cheer-10\u0001\u0001KEEP EATING DOWN!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-monster-cheer-1\u0001\u0001MONSTER MUNCHED!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-monster-cheer-2\u0001\u0001YOU ATE THE MONSTER!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-monster-cheer-3\u0001\u0001CAKE MONSTER DOWN!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-monster-cheer-4\u0001\u0001TASTES LIKE VICTORY!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-monster-cheer-5\u0001\u0001CHOMPED!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-monster-cheer-6\u0001\u0001MONSTER? MORE LIKE DESSERT!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-monster-cheer-7\u0001\u0001EATEN IN ONE SITTING!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-monster-cheer-8\u0001\u0001THE CAKE IS YOURS!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-monster-cheer-9\u0001\u0001MONSTER DEVOURED!": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-monster-cheer-10\u0001\u0001NOT A CRUMB LEFT!": {
+   "example": "",
+   "translations": {}
+  },
+  "zone-chocolate\u0001\u0001CHOCOLATE": {
+   "example": "",
+   "translations": {
+    "ru": "ШОКОЛАД",
+    "es": "CHOCOLATE",
+    "pt": "CHOCOLATE",
+    "fr": "CHOCOLAT",
+    "de": "SCHOKOLADE",
+    "it": "CIOCCOLATO",
+    "ja": "チョコレート",
+    "ko": "초콜릿",
+    "zh-hans": "巧克力",
+    "zh-hant": "巧克力",
+    "id": "COKELAT",
+    "th": "ช็อคโกแลต",
+    "tr": "ÇİKOLATA",
+    "vi": "SÔ CÔ LA",
+    "pl": "CZEKOLADA",
+    "ar": "الشوكولاتة"
+   }
+  },
+  "zone-jelly\u0001\u0001JELLY": {
+   "example": "",
+   "translations": {
+    "ru": "ЖЕЛЕ",
+    "es": "JALEA",
+    "pt": "GELÉIA",
+    "fr": "GELÉE",
+    "de": "WACKELPUDDING",
+    "it": "GELATINA",
+    "ja": "ゼリー",
+    "ko": "젤리",
+    "zh-hans": "凝胶",
+    "zh-hant": "果凍",
+    "id": "JELLY",
+    "th": "เจลลี่",
+    "tr": "JÖLE",
+    "vi": "THẠCH",
+    "pl": "DŻELKA",
+    "ar": "الجيلي"
+   }
+  },
+  "zone-butter\u0001\u0001BUTTER": {
+   "example": "",
+   "translations": {
+    "ru": "СЛИВКО",
+    "es": "MANTEQUILLA",
+    "pt": "MANTEIGA",
+    "fr": "BEURRE",
+    "de": "BUTTER",
+    "it": "BURRO",
+    "ja": "バター",
+    "ko": "버터",
+    "zh-hans": "奶油",
+    "zh-hant": "奶油",
+    "id": "MENTEGA",
+    "th": "เนย",
+    "tr": "TENEKE",
+    "vi": "BƠ",
+    "pl": "MASŁO",
+    "ar": "الزبدة"
+   }
+  },
+  "zone-cheese\u0001\u0001CHEESE": {
+   "example": "",
+   "translations": {
+    "ru": "СЫР",
+    "es": "QUESO",
+    "pt": "QUEIJO",
+    "fr": "FROMAGE",
+    "de": "KÄSE",
+    "it": "FORMAGGIO",
+    "ja": "チーズ",
+    "ko": "치즈",
+    "zh-hans": "奶酪",
+    "zh-hant": "奶酪",
+    "id": "KEJU",
+    "th": "ชีส",
+    "tr": "PEYNIR",
+    "vi": "PHO MÁ",
+    "pl": "SER",
+    "ar": "الجبن"
+   }
+  },
+  "zone-jam\u0001\u0001JAM": {
+   "example": "",
+   "translations": {
+    "ru": "ДЖАМ",
+    "es": "MERMELADA",
+    "pt": "JAM",
+    "fr": "JAM",
+    "de": "JAM",
+    "it": "MARMELADE",
+    "ja": "ジャム",
+    "ko": "잼",
+    "zh-hans": "果酱",
+    "zh-hant": "果醬",
+    "id": "JAM",
+    "th": "แยม",
+    "tr": "REÇEL",
+    "vi": "MỨT",
+    "pl": "DŻEM",
+    "ar": "المربى"
+   }
+  },
+  "zone-sponge\u0001\u0001SPONGE": {
+   "example": "",
+   "translations": {
+    "ru": "ГУБКА",
+    "es": "ESPONJA",
+    "pt": "ESFREGONA",
+    "fr": "ÉPONGE",
+    "de": "SCHWAMM",
+    "it": "SPUGNA",
+    "ja": "スポンジ",
+    "ko": "스폰지",
+    "zh-hans": "海绵",
+    "zh-hant": "海綿",
+    "id": "Spons",
+    "th": "ฟองน้ำ",
+    "tr": "Sünger",
+    "vi": "BỌT biển",
+    "pl": "Gąbka",
+    "ar": "الإسفنج"
+   }
+  },
+  "zone-cream\u0001\u0001CREAM": {
+   "example": "",
+   "translations": {
+    "ru": "КРЕМ",
+    "es": "CREMA",
+    "pt": "CREME",
+    "fr": "CRÈME",
+    "de": "CREME",
+    "it": "CREMA",
+    "ja": "クリーム",
+    "ko": "크림",
+    "zh-hans": "奶油",
+    "zh-hant": "奶油",
+    "id": "KRIM",
+    "th": "ครีม",
+    "tr": "KREMA",
+    "vi": "KEM",
+    "pl": "KREMA",
+    "ar": "كريمة"
+   }
+  },
+  "zone-candy\u0001\u0001CANDY": {
+   "example": "",
+   "translations": {
+    "ru": "КОНФЕТЫ",
+    "es": "CARAMELOS",
+    "pt": "DOCES",
+    "fr": "BONBONS",
+    "de": "SÜSSE",
+    "it": "CARAMELLE",
+    "ja": "キャンディー",
+    "ko": "캔디",
+    "zh-hans": "糖果",
+    "zh-hant": "糖果",
+    "id": "PERMEN",
+    "th": "ลูกอม",
+    "tr": "ŞEKER",
+    "vi": "KẸO",
+    "pl": "CUKIERKI",
+    "ar": "الحلوى"
+   }
+  },
+  "zone-caramel\u0001\u0001CARAMEL": {
+   "example": "",
+   "translations": {
+    "ru": "Карамель",
+    "es": "CARAMELO",
+    "pt": "CARAMELO",
+    "fr": "CARAMEL",
+    "de": "KARAMEL",
+    "it": "CARAMELLO",
+    "ja": "キャラメル",
+    "ko": "캐러멜",
+    "zh-hans": "焦糖",
+    "zh-hant": "焦糖",
+    "id": "KARAMEL",
+    "th": "คาราเมล",
+    "tr": "Karamel",
+    "vi": "CARAMEL",
+    "pl": "KARAMEL",
+    "ar": "الكراميل"
+   }
+  },
+  "zone-crumb\u0001\u0001CRUMBS": {
+   "example": "",
+   "translations": {
+    "ru": "Крошки",
+    "es": "MIGAS",
+    "pt": "COVINHAS",
+    "fr": "Miettes",
+    "de": "KRÜMEL",
+    "it": "CROSTE",
+    "ja": "クランブス",
+    "ko": "크럼브",
+    "zh-hans": "碎屑",
+    "zh-hant": "碎屑",
+    "id": "REMPAH",
+    "th": "เศษ",
+    "tr": "KIRIKLAR",
+    "vi": "MẨN VỤN",
+    "pl": "Okruchy",
+    "ar": "الفتات"
+   }
+  },
+  "zone-rainbow-red\u0001\u0001RED": {
+   "example": "",
+   "translations": {}
+  },
+  "zone-rainbow-orange\u0001\u0001ORANGE": {
+   "example": "",
+   "translations": {}
+  },
+  "zone-rainbow-yellow\u0001\u0001YELLOW": {
+   "example": "",
+   "translations": {}
+  },
+  "zone-rainbow-green\u0001\u0001GREEN": {
+   "example": "",
+   "translations": {}
+  },
+  "zone-rainbow-blue\u0001\u0001BLUE": {
+   "example": "",
+   "translations": {}
+  },
+  "zone-rainbow-indigo\u0001\u0001INDIGO": {
+   "example": "",
+   "translations": {}
+  },
+  "zone-rainbow-violet\u0001\u0001VIOLET": {
+   "example": "",
+   "translations": {}
+  },
+  "announce-find-new\u0001\u0001NEW DISCOVERY!": {
+   "example": "",
+   "translations": {
+    "ru": "Новое открытие!",
+    "es": "NUEVO DESCUBRIMIENTO!",
+    "pt": "NOVA DESCOBERTA!",
+    "fr": "NOUVELLE DÉCOUVERTE !",
+    "de": "NEUE ENTDECKUNG!",
+    "it": "NUOVA SCOPERTA!",
+    "ja": "新しい発見！",
+    "ko": "새로운 발견!",
+    "zh-hans": "新的发现！",
+    "zh-hant": "新的發現！",
+    "id": "Penemuan Baru!",
+    "th": "การค้นพบใหม่!",
+    "tr": "YENI KEŞIF!",
+    "vi": "Khám phá mới!",
+    "pl": "NOWE ODKRYCIE!",
+    "ar": "اكتشاف جديد!"
+   }
+  },
+  "announce-find-rare\u0001\u0001RARE FIND!": {
+   "example": "",
+   "translations": {
+    "ru": "Редкая находка!",
+    "es": "¡ENCONTRADO RARO!",
+    "pt": "ACHADO RARO!",
+    "fr": "TROUVE RARE !",
+    "de": "SELTENER FUND!",
+    "it": "RARA SCOPERTA!",
+    "ja": "レアな発見！",
+    "ko": "희귀한 발견!",
+    "zh-hans": "稀有发现！",
+    "zh-hant": "稀有發現！",
+    "id": "Temuan Langka!",
+    "th": "การค้นพบที่หายาก!",
+    "tr": "NADİR BULUŞ!",
+    "vi": "Phát hiện hiếm có!",
+    "pl": "Rzadkie znalezisko!",
+    "ar": "اكتشاف نادر!"
+   }
+  },
+  "announce-find-epic\u0001\u0001EPIC FIND!": {
+   "example": "",
+   "translations": {
+    "ru": "Эпическая находка!",
+    "es": "¡DESCUBRIMIENTO ÉPICO!",
+    "pt": "DESCOBRIMENTO ÉPICO!",
+    "fr": "TROUVE ÉPIQUE!",
+    "de": "EPISCHER FUND!",
+    "it": "TROVA EPICA!",
+    "ja": "エピックな発見！",
+    "ko": "에픽 발견!",
+    "zh-hans": "史诗级发现！",
+    "zh-hant": "史詩級的發現！",
+    "id": "Penemuan Epik!",
+    "th": "การค้นพบอันยิ่งใหญ่!",
+    "tr": "Epik Keşif!",
+    "vi": "Phát hiện tuyệt vời!",
+    "pl": "Epickie znalezisko!",
+    "ar": "اكتشاف مذهل!"
+   }
+  },
+  "announce-find-legendary\u0001\u0001LEGENDARY FIND!": {
+   "example": "",
+   "translations": {
+    "ru": "Легендарная находка!",
+    "es": "¡DESCUBRIMIENTO LEGENDARIO!",
+    "pt": "ACHADO LENDÁRIO!",
+    "fr": "Découverte légendaire !",
+    "de": "LEGENDÄRER FUND!",
+    "it": "TROVATO LEGGENDARIO!",
+    "ja": "レジェンダリーの発見！",
+    "ko": "전설적인 발견!",
+    "zh-hans": "传奇级发现！",
+    "zh-hant": "傳奇發現！",
+    "id": "Penemuan Legendaris!",
+    "th": "การค้นพบในตำนาน!",
+    "tr": "Efsanevi Keşif!",
+    "vi": "Phát hiện huyền thoại!",
+    "pl": "Legendarne znalezisko!",
+    "ar": "الاكتشاف الأسطوري!"
+   }
+  },
+  "announce-match-lost\u0001\u0001Match lost! Returning to the lobby...": {
+   "example": "",
+   "translations": {
+    "ru": "Матч проигран! Возвращаемся в лобби...",
+    "es": "Partida perdida. Volviendo al lobby...",
+    "pt": "Partida perdida! Voltando ao lobby...",
+    "fr": "Match perdu ! Retour dans le lobby...",
+    "de": "Match verloren! Zurück zur Lobby...",
+    "it": "Partita persa! Ritorno alla lobby...",
+    "ja": "試合に負けました！ロビーに戻ります...",
+    "ko": "매치 패배! 로비로 돌아갑니다...",
+    "zh-hans": "比赛失败！正在返回大厅... ",
+    "zh-hant": "比賽失敗了！返回大廳中...",
+    "id": "Pertandingan kalah! Kembali ke lobi...",
+    "th": "การแข่งขันแพ้! กำลังกลับไปที่ล็อบบี้...",
+    "tr": "Maç kaybedildi! Lobiye geri dönülüyor...",
+    "vi": "Trận đấu thất bại! Quay trở lại sảnh chờ...",
+    "pl": "Mecz przegrany! Wracamy do lobby...",
+    "ar": "تم خسارة المباراة. سيتم العودة إلى اللوبي..."
+   }
+  },
+  "upgrade-capacity\u0001\u0001Stomach Capacity": {
+   "example": "",
+   "translations": {
+    "ru": "Объем желудка",
+    "es": "Capacidad del estómago",
+    "pt": "Capacidade do Estômago",
+    "fr": "Capacité de l'estomac",
+    "de": "Magenkapazität",
+    "it": "Capacità dello stomaco",
+    "ja": "胃の容量",
+    "ko": "배의 용량",
+    "zh-hans": "胃容量",
+    "zh-hant": "胃容量",
+    "id": "Kapasitas Perut",
+    "th": "ความจุท้อง",
+    "tr": "Mide Kapasitesi",
+    "vi": "Dung tích dạ dày",
+    "pl": "Pojemność żołądka",
+    "ar": "سعة المعدة"
+   }
+  },
+  "upgrade-bite-radius\u0001\u0001Bite Radius": {
+   "example": "",
+   "translations": {
+    "ru": "Радиус укуса ",
+    "es": "Radio de mordida ",
+    "pt": "Raio de Mordida",
+    "fr": "Rayon de morsure",
+    "de": "Bissradius ",
+    "it": "Raggio di Morso ",
+    "ja": "噛む範囲",
+    "ko": "바이트 반경",
+    "zh-hans": "咬合半径 ",
+    "zh-hant": "咬擊範圍",
+    "id": "Radius Gigitan ",
+    "th": "รัศมีกัด ",
+    "tr": "Isırma Yarıçapı ",
+    "vi": "Bán kính cắn",
+    "pl": "Promień ugryzienia",
+    "ar": "دائرة العض "
+   }
+  },
+  "upgrade-bite-depth\u0001\u0001Bite Depth": {
+   "example": "",
+   "translations": {
+    "ru": "Глубина укуса",
+    "es": "Profundidad de mordida",
+    "pt": "Profundidade da Mordida",
+    "fr": "Profondeur de morsure",
+    "de": "Biss-Tiefe",
+    "it": "Profondità del morso ",
+    "ja": "噛みつきの深さ",
+    "ko": "깨물기 깊이",
+    "zh-hans": "咬合深度",
+    "zh-hant": "咬傷深度",
+    "id": "Kedalaman Gigitan ",
+    "th": "ความลึกการกัด",
+    "tr": "Isırma Derinliği",
+    "vi": "Độ sâu cắn",
+    "pl": "Głębokość ugryzienia",
+    "ar": "عمق العضة"
+   }
+  },
+  "upgrade-eat-speed\u0001\u0001Eat Speed": {
+   "example": "",
+   "translations": {
+    "ru": "Скорость еды",
+    "es": "Velocidad de Comida",
+    "pt": "Velocidade de Comer",
+    "fr": "Vitesse de manger",
+    "de": "Essgeschwindigkeit",
+    "it": "Velocità di Mangiamento",
+    "ja": "食事速度",
+    "ko": "먹는 속도",
+    "zh-hans": "进食速度",
+    "zh-hant": "進食速度",
+    "id": "Kecepatan Makan",
+    "th": "ความเร็วการกิน",
+    "tr": "Yeme Hızı",
+    "vi": "Tốc độ ăn",
+    "pl": "Prędkość jedzenia",
+    "ar": "سرعة الأكل "
+   }
+  },
+  "upgrade-gym-eff\u0001\u0001Gym Efficiency": {
+   "example": "",
+   "translations": {
+    "ru": "Эффективность спортзала",
+    "es": "Eficiencia del gimnasio",
+    "pt": "Eficiência do Ginásio",
+    "fr": "Efficacité du gymnase",
+    "de": "Gym-Effizienz",
+    "it": "Efficienza della palestra",
+    "ja": "ジムの効率",
+    "ko": "헬스장 효율",
+    "zh-hans": "健身房效率 ",
+    "zh-hant": "健身房效率",
+    "id": "Efisiensi Gym ",
+    "th": "ประสิทธิภาพของยิม",
+    "tr": "Spor Salonu Verimliliği",
+    "vi": "Hiệu quả phòng tập",
+    "pl": "Efektywność siłowni",
+    "ar": "كفاءة الصالة الرياضية "
+   }
+  },
+  "upgrade-burn-speed\u0001\u0001Burn Speed": {
+   "example": "",
+   "translations": {
+    "ru": "Скорость горения",
+    "es": "Velocidad de combustión",
+    "pt": "Velocidade de Queimamento",
+    "fr": "Vitesse de combustion",
+    "de": "Brenngeschwindigkeit",
+    "it": "Velocità di combustione",
+    "ja": "燃焼速度",
+    "ko": "연소 속도",
+    "zh-hans": "燃烧速度",
+    "zh-hant": "燃燒速度",
+    "id": "Kecepatan Bakar",
+    "th": "ความเร็วในการเผาไหม้",
+    "tr": "Yanma Hızı",
+    "vi": "Tốc độ đốt",
+    "pl": "Prędkość palenia",
+    "ar": "سرعة الحرق"
+   }
+  },
+  "upgrade-burn-per-tap\u0001\u0001Burn Per Tap": {
+   "example": "",
+   "translations": {
+    "ru": "Сжигание за клик",
+    "es": "Quemar por toque ",
+    "pt": "Queimar Por Toque",
+    "fr": "Brûler par tap",
+    "de": "Brennen pro Tap",
+    "it": "Brucia Per Tap",
+    "ja": "タップごとに燃やす",
+    "ko": "탭당 화상",
+    "zh-hans": "每次点击燃烧一次 ",
+    "zh-hant": "每點擊一次燃燒一次",
+    "id": "Bakar Per Tap",
+    "th": "เผาต่อแตะ",
+    "tr": "Tık Başına Yanma",
+    "vi": "Lượng calo bị đốt cho mỗi lần nhấn",
+    "pl": "Spalanie za dotknięcie",
+    "ar": "الحرق لكل ضغطة "
+   }
+  },
+  "upgrade-instant-burn\u0001\u0001Instant Burn": {
+   "example": "",
+   "translations": {
+    "ru": "Мгновенное горение",
+    "es": "Quemadura instantánea",
+    "pt": "Queimadura Instantânea",
+    "fr": "Brûlure instantanée",
+    "de": "Sofortbrennen",
+    "it": "Bruciatura istantanea",
+    "ja": "インスタントバーン",
+    "ko": "인스턴트 버른",
+    "zh-hans": "瞬间燃烧",
+    "zh-hant": "瞬間燃燒",
+    "id": "Pembakaran Instan",
+    "th": "เผาไหม้ทันที",
+    "tr": "Anında Yanma",
+    "vi": "Đốt nhanh",
+    "pl": "Natychmiastowe spalenie",
+    "ar": "الحرق الفوري"
+   }
+  },
+  "upgrade-run-speed\u0001\u0001Run Speed": {
+   "example": "",
+   "translations": {
+    "ru": "Скорость бега",
+    "es": "Velocidad de carrera",
+    "pt": "Velocidade de Corrida",
+    "fr": "Vitesse de course",
+    "de": "Laufgeschwindigkeit",
+    "it": "Velocità di corsa",
+    "ja": "走る速さ",
+    "ko": "달리기 속도",
+    "zh-hans": "跑步速度",
+    "zh-hant": "跑步速度",
+    "id": "Kecepatan Lari",
+    "th": "วิ่งเร็ว",
+    "tr": "Koşma Hızı",
+    "vi": "Tốc độ chạy",
+    "pl": "Prędkość biegu",
+    "ar": "سرعة الجري"
+   }
+  },
+  "label-level-n\u0001\u0001Lv {n}/{cap}": {
+   "example": "",
+   "translations": {}
+  },
+  "btn-max\u0001\u0001MAX": {
+   "example": "",
+   "translations": {
+    "ru": "МАКС",
+    "es": "MÁX.",
+    "pt": "MÁX",
+    "fr": "MAX",
+    "de": "MAX",
+    "it": "MAX",
+    "ja": "マックス",
+    "ko": "최대",
+    "zh-hans": "最大值",
+    "zh-hant": "最大值",
+    "id": "MAKSIMAL",
+    "th": "สูงสุด",
+    "tr": "MAKSİMUM",
+    "vi": "TỐI ĐA",
+    "pl": "MAKS.",
+    "ar": "الحد الأقصى"
+   }
+  },
+  "price-calories\u0001\u0001{n} cal": {
+   "example": "",
+   "translations": {
+    "ru": "{n} калорий",
+    "es": "{n} cal",
+    "pt": "{n} cal",
+    "fr": "{n} cal",
+    "de": "{n} Kalorien",
+    "it": "{n} calorie",
+    "ja": "{n} カロリー",
+    "ko": "{n} 칼로리",
+    "zh-hans": "{n} 卡路里",
+    "zh-hant": "{n} 卡路里",
+    "id": "{n} kalori",
+    "th": "{n} cal",
+    "tr": "{n} kalori",
+    "vi": "{n} cal",
+    "pl": "{n} cali",
+    "ar": "{n} السعرات الحرارية"
+   }
+  },
+  "cat-eating\u0001\u0001Eating": {
+   "example": "",
+   "translations": {
+    "ru": "Еда",
+    "es": "Comiendo",
+    "pt": "Comendo",
+    "fr": "Manger",
+    "de": "Essen",
+    "it": "Mangiare",
+    "ja": "食べる",
+    "ko": "먹기",
+    "zh-hans": "正在吃东西",
+    "zh-hant": "吃東西",
+    "id": "Makan",
+    "th": "การกิน",
+    "tr": "Yemek",
+    "vi": "Ăn",
+    "pl": "Jedzenie",
+    "ar": "الأكل "
+   }
+  },
+  "cat-body\u0001\u0001Body": {
+   "example": "",
+   "translations": {
+    "ru": "Тело",
+    "es": "Cuerpo",
+    "pt": "Corpo",
+    "fr": "Corps",
+    "de": "Körper",
+    "it": "Corpo",
+    "ja": "体",
+    "ko": "몸",
+    "zh-hans": "身体",
+    "zh-hant": "身體",
+    "id": "Tubuh",
+    "th": "ตัว",
+    "tr": "Vücut",
+    "vi": "Cơ thể",
+    "pl": "Ciało",
+    "ar": "الجسم"
+   }
+  },
+  "cat-gym\u0001\u0001Gym": {
+   "example": "",
+   "translations": {
+    "ru": "Спортзал",
+    "es": "Gimnasio ",
+    "pt": "Academia",
+    "fr": "Salle de gym",
+    "de": "Fitnessstudio ",
+    "it": "Palestra ",
+    "ja": "ジム",
+    "ko": "헬스장",
+    "zh-hans": "健身房 ",
+    "zh-hant": "健身房",
+    "id": "Gimnasium",
+    "th": "ยิม",
+    "tr": "Spor Salonu",
+    "vi": "Phòng tập gym ",
+    "pl": "Siłownia",
+    "ar": "الصالة الرياضية"
+   }
+  },
+  "hex-name-capacity\u0001\u0001Belly": {
+   "example": "",
+   "translations": {
+    "ru": "Желудок",
+    "es": "Vientre",
+    "pt": "Barriga",
+    "fr": "Ventre",
+    "de": "Bauch",
+    "it": "Pancia ",
+    "ja": "お腹",
+    "ko": "배",
+    "zh-hans": "肚子",
+    "zh-hant": "肚子",
+    "id": "Perut",
+    "th": "ท้อง",
+    "tr": "Göbek",
+    "vi": "Bụng",
+    "pl": "Brzuszek",
+    "ar": "البطن"
+   }
+  },
+  "hex-name-biteRadius\u0001\u0001Bite": {
+   "example": "",
+   "translations": {
+    "ru": "Укус",
+    "es": "Morder ",
+    "pt": "Morder",
+    "fr": "Mordre",
+    "de": "Beißen",
+    "it": "Morso ",
+    "ja": "かむ",
+    "ko": "깨물기",
+    "zh-hans": "咬一口",
+    "zh-hant": "咬一口",
+    "id": "Gigit",
+    "th": "กัด",
+    "tr": "Isırmak",
+    "vi": "Cắn",
+    "pl": "Ugryź",
+    "ar": "العض"
+   }
+  },
+  "hex-name-biteDepth\u0001\u0001Depth": {
+   "example": "",
+   "translations": {
+    "ru": "Глубина",
+    "es": "Profundidad ",
+    "pt": "Profundidade",
+    "fr": "Profondeur",
+    "de": "Tiefe",
+    "it": "Profondità",
+    "ja": "深さ",
+    "ko": "깊이",
+    "zh-hans": "深度",
+    "zh-hant": "深度",
+    "id": "Kedalaman",
+    "th": "ความลึก",
+    "tr": "Derinlik",
+    "vi": "Độ sâu",
+    "pl": "Głębia",
+    "ar": "العمق"
+   }
+  },
+  "hex-name-eatSpeed\u0001\u0001Eat": {
+   "example": "",
+   "translations": {
+    "ru": "Есть",
+    "es": "Comer",
+    "pt": "Comer",
+    "fr": "Manger",
+    "de": "Essen",
+    "it": "Mangia",
+    "ja": "食べる",
+    "ko": "먹기",
+    "zh-hans": "吃",
+    "zh-hant": "吃",
+    "id": "Makan",
+    "th": "กิน",
+    "tr": "Ye",
+    "vi": "Ăn",
+    "pl": "Jedz",
+    "ar": "أكل "
+   }
+  },
+  "hex-name-gymEff\u0001\u0001Gym": {
+   "example": "",
+   "translations": {
+    "ru": "Спортзал",
+    "es": "Gimnasio ",
+    "pt": "Academia",
+    "fr": "Salle de gym",
+    "de": "Fitnessstudio ",
+    "it": "Palestra ",
+    "ja": "ジム",
+    "ko": "헬스장",
+    "zh-hans": "健身房 ",
+    "zh-hant": "健身房",
+    "id": "Gimnasium",
+    "th": "ยิม",
+    "tr": "Spor Salonu",
+    "vi": "Phòng tập gym ",
+    "pl": "Siłownia",
+    "ar": "الصالة الرياضية"
+   }
+  },
+  "hex-name-burnSpeed\u0001\u0001Speed": {
+   "example": "",
+   "translations": {
+    "ru": "Скорость",
+    "es": "Velocidad ",
+    "pt": "Velocidade",
+    "fr": "Vitesse",
+    "de": "Geschwindigkeit",
+    "it": "Velocità",
+    "ja": "速度",
+    "ko": "스피드",
+    "zh-hans": "速度",
+    "zh-hant": "速度",
+    "id": "Kecepatan",
+    "th": "ความเร็ว",
+    "tr": "Hız",
+    "vi": "Tốc độ",
+    "pl": "Prędkość",
+    "ar": "السرعة"
+   }
+  },
+  "hex-name-burnPerTap\u0001\u0001Tap": {
+   "example": "",
+   "translations": {
+    "ru": "Нажмите",
+    "es": "Tocar",
+    "pt": "Toque",
+    "fr": "Tapez",
+    "de": "Tippen",
+    "it": "Tocca ",
+    "ja": "タップ",
+    "ko": "탭",
+    "zh-hans": "点击",
+    "zh-hant": "點擊",
+    "id": "Ketuk",
+    "th": "แตะ",
+    "tr": "Dokun",
+    "vi": "Nhấn",
+    "pl": "Stuknij",
+    "ar": "اضغط"
+   }
+  },
+  "hex-name-instantBurn\u0001\u0001Instant": {
+   "example": "",
+   "translations": {
+    "ru": "Мгновенный",
+    "es": "Instantáneo",
+    "pt": "Instantâneo",
+    "fr": "Instantané",
+    "de": "Sofort",
+    "it": "Istantaneo",
+    "ja": "インスタント",
+    "ko": "인스턴트",
+    "zh-hans": "瞬间",
+    "zh-hant": "瞬間",
+    "id": "Instan",
+    "th": "ทันที",
+    "tr": "Anında",
+    "vi": "Tức thì",
+    "pl": "Natychmiastowy",
+    "ar": "فوري"
+   }
+  },
+  "hex-name-runSpeed\u0001\u0001Run": {
+   "example": "",
+   "translations": {
+    "ru": "Бежать",
+    "es": "Correr",
+    "pt": "Correr",
+    "fr": "Courir",
+    "de": "Laufen",
+    "it": "Corri",
+    "ja": "走る",
+    "ko": "달리기",
+    "zh-hans": "跑步",
+    "zh-hant": "跑步",
+    "id": "Lari",
+    "th": "วิ่ง",
+    "tr": "Koş",
+    "vi": "Chạy",
+    "pl": "Bieg",
+    "ar": "الركض "
+   }
+  },
+  "upgrade-capacity-desc\u0001\u0001Bigger belly — hold more cake before the gym.": {
+   "example": "",
+   "translations": {
+    "ru": "Большой живот - держите больше торта перед спортзалом.",
+    "es": "Vientre más grande - sostén más pastel antes del gimnasio.",
+    "pt": "Barriga maior - segure mais bolo antes do ginásio.",
+    "fr": "Plus gros ventre - tenez plus de gâteau avant la salle de gym.",
+    "de": "Größerer Bauch - halte mehr Kuchen vor dem Fitnessstudio.",
+    "it": "Pancia più grande - tieni più torta prima della palestra.",
+    "ja": "大きな腹 - ジムの前により多くのケーキを持っています。",
+    "ko": "더 큰 배 - 헬스장에 가기 전에 더 많은 케이크를 들 수 있습니다.",
+    "zh-hans": "更大的肚子 - 在健身房之前可以容纳更多的蛋糕。",
+    "zh-hant": "更大的肚子 - 在健身房前可以裝更多的蛋糕。",
+    "id": "Perut yang lebih besar - pegang lebih banyak kue sebelum gym.",
+    "th": "ท้องใหญ่ขึ้น - ถือเค้กมากขึ้นก่อนยิม.",
+    "tr": "Daha büyük karın - spor salonuna gitmeden önce daha fazla pasta tutun.",
+    "vi": "Bụng lớn hơn - giữ nhiều bánh hơn trước phòng tập thể dục.",
+    "pl": "Większy brzuch - trzymaj więcej ciasta przed siłownią.",
+    "ar": "البطنة الأكبر - احمل المزيد من الكعك قبل الصالة الرياضية."
+   }
+  },
+  "upgrade-bite-radius-desc\u0001\u0001Wider bites — clear more cake per chomp.": {
+   "example": "",
+   "translations": {
+    "ru": "Более широкие укусы - съедайте больше торта за укус.",
+    "es": "Mordidas más anchas: limpia más pastel por mordida.",
+    "pt": "Mordidas mais amplas - limpe mais bolo por mordida.",
+    "fr": "Des morsures plus larges - dégustez plus de gâteau à chaque bouchée.",
+    "de": "Breitere Bisse - klare mehr Kuchen pro Bissen.",
+    "it": "Morso più ampio: mangia più torta per morso.",
+    "ja": "大きな一口 - かじるたびにもっと多くのケーキを食べることができます。",
+    "ko": "넓은 깨물기 - 한 입당 더 많은 케이크를 먹을 수 있습니다.",
+    "zh-hans": "更大的咬口 - 每次咬一口可以吃掉更多的蛋糕。 ",
+    "zh-hant": "更寬的咬痕 - 每次咬一口可以吃掉更多蛋糕。",
+    "id": "Gigitan yang lebih lebar - hapus lebih banyak kue per gigitan.",
+    "th": "กัดให้กว้างขึ้น - เคลียร์เค้กมากขึ้นในแต่ละครั้งที่กัด",
+    "tr": "Daha geniş ısırışlar - her ısırışta daha fazla pasta temizleyin.",
+    "vi": "Cắn rộng hơn - có thể ăn nhiều bánh hơn mỗi lần cắn.",
+    "pl": "Szerzejsze ugryzienia - wyczyść więcej ciasta za każde ugryzienie.",
+    "ar": "العضات الأوسع - قم بتناول المزيد من الكعكة في كل عضة."
+   }
+  },
+  "upgrade-bite-depth-desc\u0001\u0001Deeper bites — dig further into the cake.": {
+   "example": "",
+   "translations": {
+    "ru": "Более глубокие укусы - копайте глубже в торт.",
+    "es": "Mordeduras más profundas: profundiza en el pastel.",
+    "pt": "Mordidas mais profundas - cave mais fundo no bolo.",
+    "fr": "Morsures plus profondes - creusez plus profondément dans le gâteau.",
+    "de": "Tiefere Bisse - grabe tiefer in den Kuchen.",
+    "it": "Morso più profondo: scava più a fondo nella torta. ",
+    "ja": "深い噛みつき - ケーキをさらに深く掘り下げます。",
+    "ko": "더 깊은 깨물기 - 케이크를 더 깊이 파세요.",
+    "zh-hans": "更深的咬痕 - 进一步挖掘蛋糕。",
+    "zh-hant": "更深的咬痕 - 更深入地挖掘蛋糕。",
+    "id": "Gigitan yang lebih dalam - gali lebih jauh ke dalam kue.",
+    "th": "กัดลึกขึ้น - ขุดลงไปในเค้กต่อไป",
+    "tr": "Daha derin ısırıklar - pastaya daha derine kazın.",
+    "vi": "Những cú cắn sâu hơn - đào sâu hơn vào chiếc bánh.",
+    "pl": "Głębsze ugryzienia - kop dalej w ciasto.",
+    "ar": "اللدغات الأعمق - حفر أعمق في الكعكة."
+   }
+  },
+  "upgrade-eat-speed-desc\u0001\u0001Faster chewing — more bites per second.": {
+   "example": "",
+   "translations": {
+    "ru": "Более быстрое жевание - больше укусов в секунду.",
+    "es": "Masticación más rápida: más mordeduras por segundo.",
+    "pt": "Mastigação mais rápida - mais mordidas por segundo.",
+    "fr": "Mastication plus rapide - plus de morsures par seconde.",
+    "de": "Schnelleres Kauen - mehr Bisse pro Sekunde.",
+    "it": "Masticazione più veloce - più morsi al secondo.",
+    "ja": "より速い噛みつき - 毎秒より多くの一口。",
+    "ko": "더 빠른 씹기 - 초당 더 많은 깨물기 수.",
+    "zh-hans": "更快的咀嚼速度 - 每秒咬更多次。",
+    "zh-hant": "更快的咀嚼速度 - 每秒咬更多次。",
+    "id": "Mengunyah lebih cepat - lebih banyak gigitan per detik.",
+    "th": "การกัดที่เร็วขึ้น - กัดมากขึ้นต่อวินาที",
+    "tr": "Daha hızlı çiğnemek - saniyede daha fazla ısırma.",
+    "vi": "Nhai nhanh hơn - nhiều lần nhấm mỗi giây.",
+    "pl": "Szybsze żucie - więcej ugryzienia na sekundę.",
+    "ar": "المضغ الأسرع - المزيد من العضات في الثانية."
+   }
+  },
+  "upgrade-gym-eff-desc\u0001\u0001Better workout — more calories banked per burn.": {
+   "example": "",
+   "translations": {
+    "ru": "Лучшая тренировка - больше калорий сжигается за раз.",
+    "es": "Mejor entrenamiento: más calorías acumuladas por quema.",
+    "pt": "Melhor treino - mais calorias acumuladas por queima.",
+    "fr": "Meilleure séance d'entraînement - plus de calories stockées par brûlure.",
+    "de": "Besseres Training - mehr gespeicherte Kalorien pro Verbrennung.",
+    "it": "Allenamento migliore: più calorie accumulate per bruciare.",
+    "ja": "より良いトレーニング-燃焼ごとにより多くのカロリーを貯めることができます。",
+    "ko": "더 나은 운동 - 더 많은 칼로리를 저장합니다.",
+    "zh-hans": "更好的锻炼效果 - 每次燃烧可储存更多卡路里。",
+    "zh-hant": "更好的鍛鍊效果 - 每次燃燒時儲存更多卡路里。",
+    "id": "Latihan yang lebih baik - lebih banyak kalori yang disimpan per pembakaran.",
+    "th": "ออกกำลังกายที่ดีขึ้น - เก็บแคลอรี่มากขึ้นในแต่ละครั้งที่เผาไหม้",
+    "tr": "Daha iyi egzersiz - yakım başına daha fazla kalori kazanılır.",
+    "vi": "Tập luyện hiệu quả hơn - nhiều calo được tiết kiệm cho mỗi lần tập luyện.",
+    "pl": "Lepszy trening - więcej spalonych kalorii.",
+    "ar": "تمرين أفضل - المزيد من السعرات الحرارية المخزنة لكل حرق. "
+   }
+  },
+  "upgrade-burn-speed-desc\u0001\u0001Faster passive burn — fat melts quicker while you work out.": {
+   "example": "",
+   "translations": {
+    "ru": "Более быстрое пассивное горение - жир тает быстрее во время тренировки.",
+    "es": "Quemadura pasiva más rápida: la grasa se derrite más rápido mientras haces ejercicio.",
+    "pt": "Queimamento passivo mais rápido - a gordura derrete mais rapidamente enquanto você se exercita.",
+    "fr": "Brûlure passive plus rapide - la graisse fond plus rapidement pendant que vous vous entraînez.",
+    "de": "Schnellere passive Verbrennung - Fett schmilzt schneller, während du trainierst.",
+    "it": "Combustione passiva più veloce: il grasso si scioglie più velocemente mentre fai attività fisica.",
+    "ja": "より速いパッシブ燃焼 - 運動中に脂肪がより速く溶けます。",
+    "ko": "더 빠른 패시브 버닝 - 운동하는 동안 지방이 더 빨리 녹아요.",
+    "zh-hans": "更快的被动燃烧 - 当你锻炼时，脂肪会更快地融化。",
+    "zh-hant": "更快的被動燃燒速度 - 當你鍛鍊時，脂肪會更快地融化。",
+    "id": "Pembakaran pasif yang lebih cepat - lemak meleleh lebih cepat saat Anda berolahraga.",
+    "th": "การเผาไหม้แบบพาสซีฟที่เร็วขึ้น - ไขมันละลายเร็วขึ้นในขณะที่คุณออกกำลังกาย",
+    "tr": "Daha hızlı pasif yanma - egzersiz yaparken yağ daha hızlı erir.",
+    "vi": "Quá trình đốt cháy thụ động nhanh hơn - mỡ tan nhanh hơn trong khi bạn tập thể dục.",
+    "pl": "Szybsze pasywne spalanie – tłuszcz topi się szybciej podczas treningu.",
+    "ar": "الحرق السلبي الأسرع - يذوب الدهون بشكل أسرع أثناء التمرين."
+   }
+  },
+  "upgrade-burn-per-tap-desc\u0001\u0001Each tap torches more fat — fewer taps to empty the belly.": {
+   "example": "",
+   "translations": {
+    "ru": "Каждое нажатие сжигает больше жира - меньше нажатий, чтобы опустошить живот.",
+    "es": "Cada toque quema más grasa: menos toques para vaciar el vientre.",
+    "pt": "Cada toque queima mais gordura - menos toques para esvaziar a barriga.",
+    "fr": "Chaque tap brûle plus de graisse - moins de taps pour vider le ventre.",
+    "de": "Jeder Tap verbrennt mehr Fett - weniger Taps, um den Bauch zu entleeren.",
+    "it": "Ogni tocco brucia più grasso: meno tocchi per svuotare la pancia.",
+    "ja": "それぞれのタップでより多くの脂肪が燃えます。腹を空けるにはタップ数を減らしましょう。",
+    "ko": "각 탭은 더 많은 지방을 태우습니다. 배를 비우려면 탭을 덜 누르세요.",
+    "zh-hans": "每次点击都会燃烧更多的脂肪 - 点击次数越少，肚子就越容易变平。 ",
+    "zh-hant": "每點擊一次就會燃燒更多脂肪 - 點擊次數越少，肚子就會越小。",
+    "id": "Setiap ketukan membakar lebih banyak lemak - lebih sedikit ketukan untuk mengosongkan perut.",
+    "th": "แต่ละการแตะจะเผาไหม้ไขมันมากขึ้น - มีการแตะน้อยลงเพื่อลดหน้าท้องให้ว่างเปล่า ",
+    "tr": "Her dokunma daha fazla yağ yakar - karnı boşaltmak için daha az dokunma gerekir.",
+    "vi": "Mỗi lần nhấn sẽ đốt cháy thêm chất béo - ít nhấn hơn để làm rỗng bụng.",
+    "pl": "Każde dotknięcie spala więcej tłuszczu – mniej dotknięć, aby opróżnić brzuszek.",
+    "ar": "كل ضربة تحرق المزيد من الدهون - عدد أقل من الضربات لإفراغ البطن."
+   }
+  },
+  "upgrade-instant-burn-desc\u0001\u0001Burn a slice of fat the instant you start — max tier clears it all!": {
+   "example": "",
+   "translations": {
+    "ru": "Сожгите кусок жира, как только вы начнете - максимальный уровень очистит все это!",
+    "es": "Quema una rebanada de grasa en el momento en que comiences - ¡El nivel máximo lo elimina todo!",
+    "pt": "Queime uma fatia de gordura no instante em que você começar - o nível máximo limpa tudo!",
+    "fr": "Brûlez une tranche de graisse dès que vous commencez - le niveau maximum efface tout !",
+    "de": "Verbrenne ein Stück Fett, sobald du anfängst – die maximale Stufe löscht alles aus! ",
+    "it": "Brucia una fetta di grasso nell'istante in cui inizi - il livello massimo cancella tutto!",
+    "ja": "開始する瞬間に脂肪のスライスを燃やします。最大ティアではすべてクリアされます！",
+    "ko": "시작하는 순간 지방 조각을 태우세요. 최대 티어에서는 모든 것을 클리어할 수 있습니다!",
+    "zh-hans": "从你开始的那一刻起就燃烧一块脂肪 - 最高等级可以清除所有的脂肪！ ",
+    "zh-hant": "從你開始的那一刻起，就燃燒一塊脂肪，最高等級可以清除所有的脂肪！",
+    "id": "Bakar sepotong lemak begitu Anda memulai - tingkat maksimal akan membersihkan semuanya!",
+    "th": "เผาชิ้นไขมันทันทีที่คุณเริ่ม - ระดับสูงสุดจะล้างทั้งหมด!",
+    "tr": "Başladığınız anda bir yağ dilimi yakın - maksimum seviye bunların hepsini temizler!",
+    "vi": "Đốt một lát mỡ ngay khi bạn bắt đầu - cấp độ tối đa sẽ xóa sạch tất cả!",
+    "pl": "Spal plasterek tłuszczu w momencie rozpoczęcia - maksymalny poziom usuwa wszystko!",
+    "ar": "قم بحرق شريحة من الدهون في اللحظة التي تبدأ فيها - المستوى الأقصى يمسح كل شيء!"
+   }
+  },
+  "upgrade-run-speed-desc\u0001\u0001Zippier legs — run around the cake faster.": {
+   "example": "",
+   "translations": {
+    "ru": "Более легкие ноги - бегайте по торту быстрее.",
+    "es": "Piernas más rápidas: corre alrededor del pastel más rápido.",
+    "pt": "Pernas mais ágeis - corra ao redor do bolo mais rápido.",
+    "fr": "Jambes plus rapides - courez autour du gâteau plus rapidement.",
+    "de": "Zippigere Beine - renne schneller um den Kuchen herum.",
+    "it": "Gambe più veloci: corri intorno alla torta più velocemente.",
+    "ja": "より速い脚 - ケーキをより速く走り回ることができます。",
+    "ko": "더 빠른 다리 - 케이크를 더 빨리 뛰어다닐 수 있어요.",
+    "zh-hans": "更快的腿速 - 在蛋糕上跑得更快。 ",
+    "zh-hant": "更快的腿速 - 在蛋糕上跑得更快。",
+    "id": "Kaki yang lebih cepat - lari mengelilingi kue dengan lebih cepat.",
+    "th": "ขาที่ว่องไวมากขึ้น - วิ่งรอบๆ เค้กได้เร็วขึ้น ",
+    "tr": "Daha hızlı bacaklar - pastanın etrafında daha hızlı koşun.",
+    "vi": "Chân nhanh hơn - chạy xung quanh chiếc bánh nhanh hơn.",
+    "pl": "Nogi Zippiera - biegnij po torcie szybciej.",
+    "ar": "الساقات الأكثر حيوية - اركض حول الكعكة بشكل أسرع. "
+   }
+  },
+  "hex-owned\u0001\u0001Owned": {
+   "example": "",
+   "translations": {
+    "ru": "Приобретено",
+    "es": "En propiedad",
+    "pt": "Possuído",
+    "fr": "Possédé",
+    "de": "In Besitz",
+    "it": "Posseduto",
+    "ja": "所有済み",
+    "ko": "보유 중",
+    "zh-hans": "已拥有",
+    "zh-hant": "已擁有",
+    "id": "Dimiliki",
+    "th": "มีแล้ว",
+    "tr": "Sahip Olunan",
+    "vi": "Sở hữu",
+    "pl": "Posiadany",
+    "ar": "مملوكة"
+   }
+  },
+  "hex-locked\u0001\u0001Locked": {
+   "example": "",
+   "translations": {
+    "ru": "Закрыто",
+    "es": "Bloqueado ",
+    "pt": "Trancado",
+    "fr": "Verrouillé",
+    "de": "Gesperrt",
+    "it": "Bloccato ",
+    "ja": "ロック済み",
+    "ko": "잠김",
+    "zh-hans": "已锁定",
+    "zh-hant": "已鎖定",
+    "id": "Terkunci",
+    "th": "ล็อค",
+    "tr": "Kilitli",
+    "vi": "Bị Khóa",
+    "pl": "Zablokowane",
+    "ar": "مقفل"
+   }
+  },
+  "hex-open\u0001\u0001Open": {
+   "example": "",
+   "translations": {
+    "ru": "Открыть",
+    "es": "Abrir",
+    "pt": "Abrir",
+    "fr": "Ouvrir",
+    "de": "Öffnen",
+    "it": "Apri",
+    "ja": "開く",
+    "ko": "열기",
+    "zh-hans": "打开",
+    "zh-hant": "開啟",
+    "id": "Buka",
+    "th": "เปิด",
+    "tr": "Aç",
+    "vi": "Mở",
+    "pl": "Otwórz",
+    "ar": "يفتح"
+   }
+  },
+  "hex-back\u0001\u0001Back": {
+   "example": "",
+   "translations": {
+    "ru": "Назад",
+    "es": "Volver",
+    "pt": "Voltar",
+    "fr": "Retour",
+    "de": "Zurück",
+    "it": "Indietro",
+    "ja": "戻る",
+    "ko": "뒤로",
+    "zh-hans": "返回",
+    "zh-hant": "返回",
+    "id": "Kembali",
+    "th": "กลับ",
+    "tr": "Geri",
+    "vi": "Quay lại",
+    "pl": "Powrót",
+    "ar": "العودة"
+   }
+  },
+  "hex-logo\u0001\u0001UPGRADES": {
+   "example": "",
+   "translations": {
+    "ru": "Улучшения",
+    "es": "MEJORAS ",
+    "pt": "MELHORIAS ",
+    "fr": "AMÉLIORATIONS",
+    "de": "VERBESSERUNGEN",
+    "it": "MIGLIORAMENTI",
+    "ja": "アップグレード",
+    "ko": "업그레이드",
+    "zh-hans": "升级 ",
+    "zh-hant": "升級",
+    "id": "PENINGKATAN",
+    "th": "อัพเกรด",
+    "tr": "YÜKSELTMELER",
+    "vi": "NÂNG CẤP",
+    "pl": "ULEPSZENIA",
+    "ar": "الترقيات "
+   }
+  },
+  "hex-progress\u0001\u0001{owned}/{total} tiers": {
+   "example": "",
+   "translations": {}
+  },
+  "hex-open-desc\u0001\u0001Open this branch of upgrades.": {
+   "example": "",
+   "translations": {
+    "ru": "Откройте эту ветвь улучшений.",
+    "es": "Abre esta rama de mejoras.",
+    "pt": "Abra este ramo de melhorias.",
+    "fr": "Ouvrez cette branche d'améliorations.",
+    "de": "Öffne diesen Zweig von Upgrades.",
+    "it": "Apri questo ramo di aggiornamenti.",
+    "ja": "このアップグレードの枝を開きます。",
+    "ko": "업그레이드의 이 가지를 엽니다.",
+    "zh-hans": "打开这个升级分支。",
+    "zh-hant": "開啟這個升級分支。",
+    "id": "Buka cabang peningkatan ini.",
+    "th": "เปิดสาขาอัพเกรดนี้",
+    "tr": "Yükseltmelerin bu dalını açın.",
+    "vi": "Mở nhánh nâng cấp này.",
+    "pl": "Otwórz tę gałąź ulepszeń.",
+    "ar": "افتح هذا الفرع من الترقيات."
+   }
+  },
+  "hex-tip-cost\u0001\u0001Costs {n} calories": {
+   "example": "",
+   "translations": {
+    "ru": "Стоит {n} калорий",
+    "es": "Cuesta {n} calorías ",
+    "pt": "Custa {n} calorias ",
+    "fr": "Coûte {n} calories",
+    "de": "Kostet {n} Kalorien",
+    "it": "Costa {n} calorie ",
+    "ja": "コストは{n}カロリーです",
+    "ko": "{n} 칼로리가 필요합니다.",
+    "zh-hans": "需要 {n} 卡路里 ",
+    "zh-hant": "花費 {n} 卡路里",
+    "id": "Biaya {n} kalori",
+    "th": "ใช้ {n} แคลอรี่",
+    "tr": "{n} kalori harcar",
+    "vi": "Chi phí {n} calo",
+    "pl": "Kosztuje {n} kalorii",
+    "ar": "يكلف {n} من السعرات الحرارية."
+   }
+  },
+  "hex-tip-max\u0001\u0001Maxed out!": {
+   "example": "",
+   "translations": {
+    "ru": "Достигнут максимум!",
+    "es": "¡Al máximo!",
+    "pt": "No máximo!",
+    "fr": "Maximisé !",
+    "de": "Ausgeschöpft!",
+    "it": "Al massimo!",
+    "ja": "限界に達しました！",
+    "ko": "최대입니다!",
+    "zh-hans": "已达到最高水平！ ",
+    "zh-hant": "已達上限！",
+    "id": "Sudah maksimal!",
+    "th": "ถึงขีดสุดแล้ว!",
+    "tr": "Sınırda!",
+    "vi": "Đã đạt đến giới hạn!",
+    "pl": "Na maksymalnym poziomie!",
+    "ar": "لقد وصلت إلى الحد الأقصى!"
+   }
+  },
+  "hex-tip-locked\u0001\u0001Buy the previous tier first.": {
+   "example": "",
+   "translations": {
+    "ru": "Сначала купите предыдущий уровень.",
+    "es": "Compra el nivel anterior primero.",
+    "pt": "Compre o nível anterior primeiro.",
+    "fr": "Achetez d'abord le niveau précédent.",
+    "de": "Kaufe zuerst die vorherige Stufe.",
+    "it": "Acquista prima il livello precedente.",
+    "ja": "まず前のティアを購入してください。",
+    "ko": "먼저 이전 티어를 구매하세요.",
+    "zh-hans": "请先购买上一等级。",
+    "zh-hant": "請先購買上一個等級。",
+    "id": "Beli tingkat sebelumnya terlebih dahulu.",
+    "th": "ซื้อระดับก่อนหน้าก่อน",
+    "tr": "Önce önceki seviyeyi satın alın.",
+    "vi": "Mua cấp độ trước đó trước tiên.",
+    "pl": "Najpierw kup poprzedni poziom.",
+    "ar": "قم بشراء المستوى السابق أولاً."
+   }
+  },
+  "hex-close\u0001\u0001Close [E]": {
+   "example": "",
+   "translations": {
+    "ru": "Закрыть [E]",
+    "es": "Cerrar [E]",
+    "pt": "Fechar [E]",
+    "fr": "Fermer [E]",
+    "de": "Schließen [E]",
+    "it": "Chiudi [E]",
+    "ja": "閉じる [E]",
+    "ko": "닫기 [E]",
+    "zh-hans": "关闭 [E]",
+    "zh-hant": "關閉 [E]",
+    "id": "Tutup [E]",
+    "th": "ปิด [E]",
+    "tr": "Kapat [E]",
+    "vi": "Đóng [E]",
+    "pl": "Zamknij [E]",
+    "ar": "الإغلاق [E]"
+   }
+  },
+  "station-available\u0001\u0001{n} Available": {
+   "example": "",
+   "translations": {
+    "ru": "{n} Доступно",
+    "es": "{n} Disponible",
+    "pt": "{n} Disponível",
+    "fr": "{n} Disponible",
+    "de": "{n} Verfügbar",
+    "it": "{n} Disponibili",
+    "ja": "{n} 利用可能",
+    "ko": "{n} 사용 가능",
+    "zh-hans": "{n} 可用",
+    "zh-hant": "{n} 可用",
+    "id": "{n} Tersedia",
+    "th": "{n} ว่างอยู่",
+    "tr": "{n} Mevcut",
+    "vi": "{n} Có sẵn",
+    "pl": "{n} Dostępne",
+    "ar": "{n} متاح"
+   }
+  },
+  "eat-button\u0001\u0001EAT": {
+   "example": "",
+   "translations": {
+    "ru": "ЕСТЬ",
+    "es": "COMER",
+    "pt": "COMER",
+    "fr": "MANGER",
+    "de": "ESSEN",
+    "it": "MANGIARE",
+    "ja": "食べる",
+    "ko": "먹기",
+    "zh-hans": "吃",
+    "zh-hant": "吃",
+    "id": "MAKAN",
+    "th": "กิน",
+    "tr": "YE",
+    "vi": "ĂN",
+    "pl": "JEŚĆ",
+    "ar": "أكل"
+   }
+  },
+  "gym-tap\u0001\u0001TAP!": {
+   "example": "",
+   "translations": {
+    "ru": "Нажмите!",
+    "es": "¡TOCA!",
+    "pt": "TOQUE!",
+    "fr": "TAPOTER !",
+    "de": "TIPPEN!",
+    "it": "TAP!",
+    "ja": "タップ！",
+    "ko": "탭!",
+    "zh-hans": "点击！",
+    "zh-hant": "點擊！",
+    "id": "TAP!",
+    "th": "แตะ!",
+    "tr": "DOKUN!",
+    "vi": "CHẠM!",
+    "pl": "STUKNIJ!",
+    "ar": "اضغط!"
+   }
+  },
+  "gym-fat-left\u0001\u0001{n}% FAT": {
+   "example": "",
+   "translations": {
+    "ru": "{n}% жира",
+    "es": "{n}% GRASA",
+    "pt": "{n}% GORDURA",
+    "fr": "{n}% de graisse",
+    "de": "{n}% Fett",
+    "it": "{n}% GRASSO",
+    "ja": "{n}% 脂肪",
+    "ko": "{n}% 지방",
+    "zh-hans": "{n}% 脂肪",
+    "zh-hant": "{n}% 脂肪",
+    "id": "{n}% Lemak ",
+    "th": "{n}% ไขมัน",
+    "tr": "{n}% Yağ",
+    "vi": "{n}% Mỡ",
+    "pl": "{n}% tłuszczu",
+    "ar": "{n}% الدهون"
+   }
+  },
+  "hud-burn-fat\u0001\u0001TO CHECKPOINT": {
+   "example": "",
+   "translations": {
+    "ru": "К КОНТРОЛЬНОЙ ТОЧКЕ",
+    "es": "AL PUNTO DE CONTROL",
+    "pt": "PARA O CHECKPOINT",
+    "fr": "AU POINT DE CONTRLE",
+    "de": "ZUM CHECKPOINT",
+    "it": "AL CHECKPOINT",
+    "ja": "チェックポイントへ",
+    "ko": "체크포인트로",
+    "zh-hans": "前往检查点",
+    "zh-hant": "前往檢查點",
+    "id": "KE POS PEMERIKSAAN",
+    "th": "ไปยังจุดตรวจ",
+    "tr": "KONTROL NOKTASINA",
+    "vi": "ĐẾN ĐIỂM KIỂM TRA",
+    "pl": "DO PUNKTU KONTROLNEGO",
+    "ar": "إلى نقطة التفتيش"
+   }
+  },
+  "btn-equip\u0001\u0001Equip": {
+   "example": "",
+   "translations": {
+    "ru": "Надеть",
+    "es": "Equipar",
+    "pt": "Equipar",
+    "fr": "Équiper",
+    "de": "Ausrüsten",
+    "it": "Equipaggia",
+    "ja": "装備する",
+    "ko": "장착",
+    "zh-hans": "装备",
+    "zh-hant": "裝備",
+    "id": "Pakai",
+    "th": "สวมใส่",
+    "tr": "Takın",
+    "vi": "Trang bị",
+    "pl": "Wyposaż",
+    "ar": "تجهيز"
+   }
+  },
+  "btn-unequip\u0001\u0001Unequip": {
+   "example": "",
+   "translations": {
+    "ru": "Разоружить",
+    "es": "Desequipar",
+    "pt": "Desequipar",
+    "fr": "Déséquiper",
+    "de": "Ablegen",
+    "it": "Disequipaggia",
+    "ja": "装備を外す",
+    "ko": "장착 해제",
+    "zh-hans": "卸下装备",
+    "zh-hant": "卸下裝備",
+    "id": "Lepaskan Perlengkapan",
+    "th": "ถอดออก",
+    "tr": "Takını Kaldır",
+    "vi": "Bỏ trang bị",
+    "pl": "Zdejmij wyposażenie",
+    "ar": "نزع المعدات"
+   }
+  },
+  "btn-equip-best\u0001\u0001Equip Best": {
+   "example": "",
+   "translations": {
+    "ru": "Надеть лучшее",
+    "es": "Equipar mejor",
+    "pt": "Equipar Melhor",
+    "fr": "Équiper le mieux",
+    "de": "Bestes ausrüsten",
+    "it": "Equipaggia al meglio",
+    "ja": "ベストを装備する",
+    "ko": "베스트 장착",
+    "zh-hans": "装备最佳",
+    "zh-hant": "裝備最佳",
+    "id": "Lengkapi Terbaik",
+    "th": "สวมใส่ที่ดีที่สุด",
+    "tr": "En İyisini Donatın",
+    "vi": "Trang bị tốt nhất",
+    "pl": "Wyposaż najlepsze",
+    "ar": "تجهيز الأفضل"
+   }
+  },
+  "label-select-pet\u0001\u0001Pick a squishy": {
+   "example": "",
+   "translations": {
+    "ru": "Выберите мягкого",
+    "es": "Elige un squishy",
+    "pt": "Escolha um squishy",
+    "fr": "Choisissez un squishy",
+    "de": "Wähle einen Squishy",
+    "it": "Scegli un squishy",
+    "ja": "スクイシーを選んでください",
+    "ko": "스 퀴시를 선택하세요",
+    "zh-hans": "选择一个柔软的东西 ",
+    "zh-hant": "選擇一個軟軟的東西",
+    "id": "Pilih yang lembut",
+    "th": "เลือกสควิชี่",
+    "tr": "Bir yumuşacık seçin",
+    "vi": "Chọn một thứ mềm mại",
+    "pl": "Wybierz squishy",
+    "ar": "اختر لعبة رقيقة."
+   }
+  },
+  "reveal-new\u0001\u0001NEW SQUISHY!": {
+   "example": "",
+   "translations": {
+    "ru": "НОВЫЙ МЯГКИЙ!",
+    "es": "NUEVO SQUISHY!",
+    "pt": "NOVO SQUISHY!",
+    "fr": "NOUVEAU SQUISHY !",
+    "de": "NEUER SQUISHY!",
+    "it": "NUOVO SQUISHY!",
+    "ja": "新しいスクイシー！",
+    "ko": "새로운 스 퀴시!",
+    "zh-hans": "新的软萌玩具！",
+    "zh-hant": "新的軟萌玩具！",
+    "id": "SQUISHY BARU!",
+    "th": "SQUISHY ใหม่!",
+    "tr": "YENI YUMUŞAK!",
+    "vi": "SQUISHY MỚI!",
+    "pl": "NOWY SQUISHY!",
+    "ar": "اللينة الجديدة!"
+   }
+  },
+  "reveal-copies\u0001\u0001Level {n}": {
+   "example": "",
+   "translations": {
+    "ru": "Уровень {n}",
+    "es": "Nivel {n}",
+    "pt": "Nível {n}",
+    "fr": "Niveau {n}",
+    "de": "Stufe {n}",
+    "it": "Livello {n}",
+    "ja": "レベル {n}",
+    "ko": "레벨 {n}",
+    "zh-hans": "等级 {n}",
+    "zh-hant": "等級 {n}",
+    "id": "Tingkat {n}",
+    "th": "เลเวล {n}",
+    "tr": "Seviye {n}",
+    "vi": "Cấp {n}",
+    "pl": "Poziom {n}",
+    "ar": "المستوى {n}"
+   }
+  },
+  "reveal-continue\u0001\u0001Tap to continue": {
+   "example": "",
+   "translations": {
+    "ru": "Нажмите, чтобы продолжить",
+    "es": "Toca para continuar",
+    "pt": "Toque para continuar",
+    "fr": "Tapez pour continuer",
+    "de": "Tippen, um fortzufahren",
+    "it": "Tocca per continuare",
+    "ja": "タップして続ける",
+    "ko": "계속하려면 탭하세요.",
+    "zh-hans": "点击继续",
+    "zh-hant": "點擊繼續",
+    "id": "Ketuk untuk melanjutkan",
+    "th": "แตะเพื่อดำเนินการต่อ",
+    "tr": "Devam etmek için dokunun",
+    "vi": "Nhấn để tiếp tục",
+    "pl": "Stuknij, aby kontynuować",
+    "ar": "اضغط للمتابعة"
+   }
+  },
+  "pet-crumb-mouse\u0001\u0001Vanilla Cup": {
+   "example": "",
+   "translations": {
+    "ru": "Ванильный кубок",
+    "es": "Taza de vainilla",
+    "pt": "Copo de Baunilha",
+    "fr": "Coupe de vanille",
+    "de": "Vanillebecher",
+    "it": "Tazza di vaniglia",
+    "ja": "バニラカップ",
+    "ko": "바닐라 컵",
+    "zh-hans": "香草杯",
+    "zh-hant": "香草杯",
+    "id": "Cangkir Vanila",
+    "th": "ถ้วยวานิลลา",
+    "tr": "Vanilya Kupası",
+    "vi": "Cốc Vanilla",
+    "pl": "Filiżanka wanilii",
+    "ar": "كوب الفانيليا"
+   }
+  },
+  "pet-sugar-chick\u0001\u0001Wink Cup": {
+   "example": "",
+   "translations": {
+    "ru": "Кубок подмигивания ",
+    "es": "Copa de guiño",
+    "pt": "Copo de Aceno",
+    "fr": "Coupe Wink",
+    "de": "Wink-Cup",
+    "it": "Tazza Wink",
+    "ja": "ウインクカップ",
+    "ko": "윙크 컵",
+    "zh-hans": "眨眼杯",
+    "zh-hant": "眨眼杯",
+    "id": "Cangkir Wink ",
+    "th": "วิงค์ คัพ",
+    "tr": "Göz Kırpma Kupası",
+    "vi": "Cốc nháy mắt",
+    "pl": "Kubek Wink",
+    "ar": "كوب الغمز "
+   }
+  },
+  "pet-jelly-slug\u0001\u0001Calm Cup": {
+   "example": "",
+   "translations": {
+    "ru": "Кубок спокойствия",
+    "es": "Taza de calma",
+    "pt": "Copo Calmo",
+    "fr": "Coupe du calme",
+    "de": "Ruhiger Pokal",
+    "it": "Tazza calma",
+    "ja": "カルムカップ",
+    "ko": "칼름 컵",
+    "zh-hans": "平静杯",
+    "zh-hant": "冷靜杯",
+    "id": "Cangkir Tenang",
+    "th": "ถ้วยสงบ ",
+    "tr": "Sakinlik Kupası",
+    "vi": "Cốc bình tĩnh",
+    "pl": "Spokojny kubek",
+    "ar": "كوب الهدوء "
+   }
+  },
+  "pet-berry-gummy\u0001\u0001Aqua Drop": {
+   "example": "",
+   "translations": {
+    "ru": "Капля воды",
+    "es": "Gota de agua",
+    "pt": "Gota de água",
+    "fr": "Goutte d'eau",
+    "de": "Aqua-Tropfen",
+    "it": "Goccia d'acqua",
+    "ja": "アクアドロップ",
+    "ko": "아쿠아 드롭",
+    "zh-hans": "水滴",
+    "zh-hant": "水滴",
+    "id": "Tetes Aqua",
+    "th": "อควาดรอป",
+    "tr": "Aqua Damlası",
+    "vi": "Giọt nước",
+    "pl": "Kropla wodna",
+    "ar": "قطرة المياه"
+   }
+  },
+  "pet-lime-gummy\u0001\u0001Mint Drop": {
+   "example": "",
+   "translations": {
+    "ru": "Капля мяты",
+    "es": "Gota de menta",
+    "pt": "Gota de Menta",
+    "fr": "Goutte de menthe",
+    "de": "Minztropfen",
+    "it": "Goccia di menta",
+    "ja": "ミントドロップ",
+    "ko": "민트 드롭",
+    "zh-hans": "薄荷滴",
+    "zh-hant": "薄荷滴",
+    "id": "Tetes Mint",
+    "th": "มินท์ดรอป",
+    "tr": "Naneli Damla",
+    "vi": "Giọt bạc hà",
+    "pl": "Miętowa kropla",
+    "ar": "قطرة النعناع "
+   }
+  },
+  "pet-lemon-gummy\u0001\u0001Blush": {
+   "example": "",
+   "translations": {
+    "ru": "Румянец",
+    "es": "Rubor",
+    "pt": "Blush",
+    "fr": "Fard à joues",
+    "de": "Erröten",
+    "it": "Fardello",
+    "ja": "ブラッシュ",
+    "ko": "블러시",
+    "zh-hans": "腮红",
+    "zh-hant": "紅暈",
+    "id": "Perona pipi",
+    "th": "บลัช",
+    "tr": "Allık",
+    "vi": "Phấn mặt",
+    "pl": "Róż",
+    "ar": "الخفر"
+   }
+  },
+  "pet-loop-pop\u0001\u0001Ocean Drop": {
+   "example": "",
+   "translations": {
+    "ru": "Океанская капля",
+    "es": "Gota de océano",
+    "pt": "Gota do Oceano",
+    "fr": "Goutte d'océan",
+    "de": "Ozean-Tropfen",
+    "it": "Goccia dell'oceano",
+    "ja": "オーシャンドロップ",
+    "ko": "오션 드롭",
+    "zh-hans": "海洋滴",
+    "zh-hant": "海洋滴",
+    "id": "Tetesan Laut",
+    "th": "หยดมหาสมุทร",
+    "tr": "Okyanus Damlası",
+    "vi": "Giọt biển",
+    "pl": "Kropla oceanu",
+    "ar": "قطرة المحيط"
+   }
+  },
+  "pet-frosting-cat\u0001\u0001Lilac Drop": {
+   "example": "",
+   "translations": {
+    "ru": "Лилиановая капля",
+    "es": "Gota lila",
+    "pt": "Gota de lilás",
+    "fr": "Goutte lilas",
+    "de": "Lila Tropfen",
+    "it": "Goccia lilla",
+    "ja": "ライラックドロップ",
+    "ko": "라일락 드롭",
+    "zh-hans": "淡紫色水滴",
+    "zh-hant": "淡紫色水滴",
+    "id": "Tetes Lilac",
+    "th": "หยดสีม่วง",
+    "tr": "Lila Damla",
+    "vi": "Giọt màu lilac",
+    "pl": "Liliowa kropla",
+    "ar": "قطرة الألوان الزهرية"
+   }
+  },
+  "pet-cocoa-pup\u0001\u0001Sunset Drop": {
+   "example": "",
+   "translations": {
+    "ru": "Закатное падение",
+    "es": "Gota de atardecer",
+    "pt": "Queda do Pôr do Sol",
+    "fr": "Goutte de coucher de soleil",
+    "de": "Sonnenuntergang-Tropfen",
+    "it": "Goccia del tramonto",
+    "ja": "サンセットドロップ",
+    "ko": "선셋 드롭",
+    "zh-hans": "日落滴",
+    "zh-hant": "日落滴",
+    "id": "Tetes Matahari Terbenam",
+    "th": "ซันเซ็ทดรอป",
+    "tr": "Günbatımı Damlası",
+    "vi": "Giọ mặt trời hoàng hôn",
+    "pl": "Zachodzący słońce ",
+    "ar": "قطر الغروب "
+   }
+  },
+  "pet-candy-crab\u0001\u0001Stone Loaf": {
+   "example": "",
+   "translations": {
+    "ru": "Каменный буханчик",
+    "es": "Pan de piedra",
+    "pt": "Pão de Pedra",
+    "fr": "Pain de pierre",
+    "de": "Steinbrot ",
+    "it": "Pagnotta di Pietra",
+    "ja": "ストーンローフ",
+    "ko": "스톤 로프",
+    "zh-hans": "石头面包",
+    "zh-hant": "石頭麵包",
+    "id": "Roti Batu",
+    "th": "ก้อนหิน",
+    "tr": "Taş Ekmeği",
+    "vi": "Khối đá",
+    "pl": "Kamienny bochenek ",
+    "ar": "خبز الحجرة "
+   }
+  },
+  "pet-top-muffin\u0001\u0001Peach Glow": {
+   "example": "",
+   "translations": {
+    "ru": "Персиковое свечение",
+    "es": "Brillo de durazno",
+    "pt": "Brilho de Pêssego",
+    "fr": "Éclat de pêche",
+    "de": "Pfirsich-Glanz",
+    "it": "Bagliore di pesca",
+    "ja": "ピーチグロー",
+    "ko": "피치 글로우",
+    "zh-hans": "桃子光辉",
+    "zh-hant": "桃色光澤",
+    "id": "Cahaya Persik",
+    "th": "แสงพีช",
+    "tr": "Şeftali Parıltısı",
+    "vi": "Ánh sáng đào",
+    "pl": "Brzoskwinowy blask",
+    "ar": "توهج المشمش"
+   }
+  },
+  "pet-flake-crescent\u0001\u0001Cream Wink": {
+   "example": "",
+   "translations": {
+    "ru": "Кремовая подмигивашка",
+    "es": "Guinzo de crema ",
+    "pt": "Aceno de Creme ",
+    "fr": "Clin d'œil crème",
+    "de": "Creme-Wink",
+    "it": "Occhiolino crema ",
+    "ja": "クリームウインク",
+    "ko": "크림 윙크",
+    "zh-hans": "奶油眨眼 ",
+    "zh-hant": "奶油眨眼",
+    "id": "Kedipan Krim ",
+    "th": "ขยิบตาครีม",
+    "tr": "Krem Göz Kırpma",
+    "vi": "Nháy mắt kem",
+    "pl": "Kremowe mruganie",
+    "ar": "غمزة الكريمي"
+   }
+  },
+  "pet-blue-drop\u0001\u0001Mint Glow": {
+   "example": "",
+   "translations": {
+    "ru": "Мятное свечение",
+    "es": "Brillo de menta",
+    "pt": "Brilho de Menta",
+    "fr": "Éclat de menthe",
+    "de": "Minzglanz",
+    "it": "Bagliore di menta",
+    "ja": "ミントグロウ",
+    "ko": "민트 글로우",
+    "zh-hans": "薄荷光辉",
+    "zh-hant": "薄荷光澤",
+    "id": "Cahaya Mint",
+    "th": "มินท์โกลว์",
+    "tr": "Naneli Parıltı",
+    "vi": "Ánh sáng bạc hà",
+    "pl": "Miętowy blask",
+    "ar": "التوهج النعناعي"
+   }
+  },
+  "pet-peppermint-stick\u0001\u0001Grape Drop": {
+   "example": "",
+   "translations": {
+    "ru": "Капля винограда",
+    "es": "Caída de uvas",
+    "pt": "Queda de Uvas",
+    "fr": "Chute de raisin",
+    "de": "Traubentropfen",
+    "it": "Goccia d'uva",
+    "ja": "グレープドロップ",
+    "ko": "포도 드롭",
+    "zh-hans": "葡萄滴",
+    "zh-hant": "葡萄滴",
+    "id": "Tetes Anggur",
+    "th": "หยดองุ่น",
+    "tr": "Üzüm Damlası",
+    "vi": "Giọt nho",
+    "pl": "Kropla winogron",
+    "ar": "قطرة العنب "
+   }
+  },
+  "pet-caramel-fox\u0001\u0001Plum Sparkle": {
+   "example": "",
+   "translations": {
+    "ru": "Блеск сливы",
+    "es": "Brillo de ciruela",
+    "pt": "Brilho de Ameixa",
+    "fr": "Étincelle de prune",
+    "de": "Pflaumenglanz",
+    "it": "Scintilla di prugna",
+    "ja": "プラムスパークル",
+    "ko": "플럼 스파클",
+    "zh-hans": "紫色闪光",
+    "zh-hant": "紫色閃光",
+    "id": "Kilauan Plum",
+    "th": "ประกายพลัม",
+    "tr": "Kiraz Parıltısı",
+    "vi": "Lấp lánh mận",
+    "pl": "Świecidełko śliwki",
+    "ar": "بريق البرقوق "
+   }
+  },
+  "pet-waffle-owl\u0001\u0001Sun Hat": {
+   "example": "",
+   "translations": {
+    "ru": "Солнечная шляпа",
+    "es": "Sombrero de sol",
+    "pt": "Chapéu de Sol",
+    "fr": "Chapeau de soleil",
+    "de": "Sonnenhut",
+    "it": "Cappello da sole",
+    "ja": "サンハット",
+    "ko": "선 햇",
+    "zh-hans": "太阳帽",
+    "zh-hant": "太陽帽",
+    "id": "Topi Matahari",
+    "th": "หมวกกันแดด",
+    "tr": "Güneş Şapkası",
+    "vi": "Mũ Nắng",
+    "pl": "Czapka przeciwsłoneczna",
+    "ar": "قبعة الشمس "
+   }
+  },
+  "pet-rose-macaron\u0001\u0001Leaf Sprout": {
+   "example": "",
+   "translations": {
+    "ru": "Лиственный росток",
+    "es": "Brote de hoja",
+    "pt": "Broto de Folha",
+    "fr": "Pousse de feuille",
+    "de": "Blatt-Keim",
+    "it": "Cespuglio di foglie ",
+    "ja": "葉の芽",
+    "ko": "나뭇잎 싹",
+    "zh-hans": "叶子萌芽 ",
+    "zh-hant": "葉芽",
+    "id": "Tunas Daun",
+    "th": "ต้นใบไม้ ",
+    "tr": "Yaprak Filizi",
+    "vi": "Mầm lá cây",
+    "pl": "Pączek liści",
+    "ar": "بادعة الأوراق "
+   }
+  },
+  "pet-sky-macaron\u0001\u0001Bonsai": {
+   "example": "",
+   "translations": {
+    "ru": "Бонсай",
+    "es": "Bonsái",
+    "pt": "Bonsai",
+    "fr": "Bonsaï",
+    "de": "Bonsai",
+    "it": "Bonsai",
+    "ja": "盆栽",
+    "ko": "본사이",
+    "zh-hans": "盆栽",
+    "zh-hant": "盆栽",
+    "id": "Bonsai",
+    "th": "บอนไซ",
+    "tr": "Bonsai",
+    "vi": "Bonsai",
+    "pl": "Bonsai",
+    "ar": "بونساي"
+   }
+  },
+  "pet-swirl-roll\u0001\u0001Sky Beam": {
+   "example": "",
+   "translations": {
+    "ru": "Небесный луч ",
+    "es": "Rayo del cielo",
+    "pt": "Raio do Céu",
+    "fr": "Rayon du ciel",
+    "de": "Himmelsstrahl ",
+    "it": "Raggio del cielo",
+    "ja": "スカイビーム",
+    "ko": "스카이 빔",
+    "zh-hans": "天空光束",
+    "zh-hant": "天空光束",
+    "id": "Sinar Langit",
+    "th": "สกายบีม",
+    "tr": "Gök Işını",
+    "vi": "Tia bầu trời",
+    "pl": "Promień nieba",
+    "ar": "شعاع السماء "
+   }
+  },
+  "pet-stack-cakes\u0001\u0001Pastel Arc": {
+   "example": "",
+   "translations": {
+    "ru": "Пастельная дуга",
+    "es": "Arco de pastel",
+    "pt": "Arco Pastel",
+    "fr": "Arc pastel",
+    "de": "Pastellbogen",
+    "it": "Arco pastello",
+    "ja": "パステルアーク",
+    "ko": "파스텔 아크",
+    "zh-hans": "柔和弧线 ",
+    "zh-hant": "粉彩弧線",
+    "id": "Busur Pastel",
+    "th": "อาร์คพาสเทล ",
+    "tr": "Pastel Kemer ",
+    "vi": "Cầu vồng pastel",
+    "pl": "Pastelowy łuk",
+    "ar": "القوس الباستيل "
+   }
+  },
+  "pet-gummy-dragon\u0001\u0001Cool Shades": {
+   "example": "",
+   "translations": {
+    "ru": "Крутые оттенки",
+    "es": "Sombras frescas",
+    "pt": "Tons Frios",
+    "fr": "Lunettes cool",
+    "de": "Coole Farbtöne",
+    "it": "Tonalità fredde",
+    "ja": "クールなサングラス",
+    "ko": "쿨 쉐이드",
+    "zh-hans": "酷炫墨镜",
+    "zh-hant": "酷炫墨鏡",
+    "id": "Nuansa Keren",
+    "th": "แว่นตาสุดเท่",
+    "tr": "Havalı Gölgeler",
+    "vi": "Kính râm thời trang",
+    "pl": "Fajne odcienie",
+    "ar": "الظلال الرائعة"
+   }
+  },
+  "pet-eclair-unicorn\u0001\u0001Ancient Bonsai": {
+   "example": "",
+   "translations": {
+    "ru": "Древний бонсай",
+    "es": "Bonsái antiguo",
+    "pt": "Bonsai Antigo",
+    "fr": "Bonsaï ancien",
+    "de": "Uralter Bonsai",
+    "it": "Bonsai antichi",
+    "ja": "古代の盆栽",
+    "ko": "고대 본사이",
+    "zh-hans": "古代盆栽",
+    "zh-hant": "古代盆栽",
+    "id": "Bonsai Kuno ",
+    "th": "บอนไซโบราณ",
+    "tr": "Antik Bonsai",
+    "vi": "Cây bonsai cổ xưa",
+    "pl": "Starożytny bonsai",
+    "ar": "بونساي القديم"
+   }
+  },
+  "pet-slice-supreme\u0001\u0001Ember": {
+   "example": "",
+   "translations": {
+    "ru": "Эмбер",
+    "es": "Ember",
+    "pt": "Ember",
+    "fr": "Braise",
+    "de": "Glut",
+    "it": "Ember",
+    "ja": "エンバー",
+    "ko": "엠버",
+    "zh-hans": "余烬",
+    "zh-hant": "火花",
+    "id": "Ember",
+    "th": "Ember",
+    "tr": "Ateş parçası",
+    "vi": "Ember",
+    "pl": "Ember",
+    "ar": "اللهب"
+   }
+  },
+  "pet-crunch-taco\u0001\u0001Visor": {
+   "example": "",
+   "translations": {
+    "ru": "Визор",
+    "es": "Visor ",
+    "pt": "Visor",
+    "fr": "Visière",
+    "de": "Visier",
+    "it": "Visiera ",
+    "ja": "バイザー",
+    "ko": "바이저",
+    "zh-hans": "遮阳帽",
+    "zh-hant": "遮陽板",
+    "id": "Visor ",
+    "th": "ที่กันแดด",
+    "tr": "Gözlük",
+    "vi": "Tấm che",
+    "pl": "Wizor",
+    "ar": "الشاشة "
+   }
+  },
+  "pet-triple-scoop\u0001\u0001Thunderhead": {
+   "example": "",
+   "translations": {
+    "ru": "Громовая голова",
+    "es": "Cabeza de trueno",
+    "pt": "Cabeça de Trovão",
+    "fr": "Tête de tonnerre",
+    "de": "Donnerkopf",
+    "it": "Testa di tuono",
+    "ja": "雷の頭",
+    "ko": "썬더헤드",
+    "zh-hans": "雷电头",
+    "zh-hant": "雷頭",
+    "id": "Kepala Guntur",
+    "th": "ธันเดอร์เฮด",
+    "tr": "Yıldırım Kafası",
+    "vi": "Đầu sét",
+    "pl": "Głowa pioruna",
+    "ar": "رأس البرق"
+   }
+  },
+  "pet-golden-whale\u0001\u0001King": {
+   "example": "",
+   "translations": {
+    "ru": "Король",
+    "es": "Rey",
+    "pt": "Rei",
+    "fr": "Roi",
+    "de": "König",
+    "it": "Re",
+    "ja": "キング",
+    "ko": "킹",
+    "zh-hans": "国王",
+    "zh-hant": "國王",
+    "id": "Raja",
+    "th": "ราชา",
+    "tr": "Kral",
+    "vi": "Vua",
+    "pl": "Król",
+    "ar": "ملك"
+   }
+  },
+  "pet-the-cake\u0001\u0001Angel Cup": {
+   "example": "",
+   "translations": {
+    "ru": "Кубок ангела",
+    "es": "Copa de Ángel",
+    "pt": "Copo de Anjo",
+    "fr": "Coupe d'ange",
+    "de": "Engel-Cup",
+    "it": "Tazza dell'angelo",
+    "ja": "エンジェルカップ",
+    "ko": "엔젤 컵",
+    "zh-hans": "天使杯",
+    "zh-hant": "天使杯",
+    "id": "Piala Malaikat",
+    "th": "แองเจิล คัพ",
+    "tr": "Melek Kupası",
+    "vi": "Cúp Thiên thần",
+    "pl": "Kubek Anioła",
+    "ar": "كأس الملاك "
+   }
+  },
+  "pet-cloud-floss\u0001\u0001Prism": {
+   "example": "",
+   "translations": {
+    "ru": "Призма",
+    "es": "Prisma ",
+    "pt": "Prisma",
+    "fr": "Prisme",
+    "de": "Prisma",
+    "it": "Prisma",
+    "ja": "プリズム",
+    "ko": "프리즘",
+    "zh-hans": "棱镜",
+    "zh-hant": "棱鏡",
+    "id": "Prism ",
+    "th": "ปริซึม",
+    "tr": "Prizm",
+    "vi": "Lăng kính",
+    "pl": "Pryzmat",
+    "ar": "المنشور "
+   }
+  },
+  "pet-ruby-berry\u0001\u0001Void Cup": {
+   "example": "",
+   "translations": {
+    "ru": "Кубок пустоты",
+    "es": "Copa del Vacío",
+    "pt": "Copo do Vazio",
+    "fr": "Coupe du vide",
+    "de": "Void-Cup ",
+    "it": "Tazza del Vuoto",
+    "ja": "ヴォイドカップ",
+    "ko": "공허의 컵",
+    "zh-hans": "虚空杯",
+    "zh-hant": "虛空杯",
+    "id": "Piala Void",
+    "th": "ถ้วย Void",
+    "tr": "Boşluk Kupası",
+    "vi": "Cúp Void",
+    "pl": "Puchar Pustki",
+    "ar": "كأس الفراغ "
+   }
+  },
+  "pet-void-muffin\u0001\u0001DEMON": {
+   "example": "",
+   "translations": {
+    "ru": "ДЕМОН",
+    "es": "DEMONIO",
+    "pt": "DEMÔNIO",
+    "fr": "DÉMON",
+    "de": "DEMON",
+    "it": "DEMONE",
+    "ja": "デーモン",
+    "ko": "악마",
+    "zh-hans": "恶魔",
+    "zh-hant": "惡魔",
+    "id": "SETAN",
+    "th": "ปีศาจ",
+    "tr": "ŞEYTAN",
+    "vi": "QUỷ DỮ",
+    "pl": "DEMON",
+    "ar": "شيطان"
+   }
+  },
+  "pet-snow-drop\u0001\u0001Snow Drop": {
+   "example": "",
+   "translations": {
+    "ru": "Капля снега",
+    "es": "Gota de nieve",
+    "pt": "Gota de Neve",
+    "fr": "Goutte de neige",
+    "de": "Schneetropfen",
+    "it": "Goccia di neve",
+    "ja": "雪の滴",
+    "ko": "눈 방울",
+    "zh-hans": "雪滴",
+    "zh-hant": "雪滴",
+    "id": "Tetesan Salju",
+    "th": "หยดหิมะ",
+    "tr": "Kar Damlası",
+    "vi": "Giọt tuyết",
+    "pl": "Kropla śniegu",
+    "ar": "قطرة الثلج"
+   }
+  },
+  "pet-stripe-shell\u0001\u0001Stripe Shell": {
+   "example": "",
+   "translations": {
+    "ru": "Полосатая оболочка",
+    "es": "Concha de rayas",
+    "pt": "Concha de Listras",
+    "fr": "Coquille rayée",
+    "de": "Streifenschale",
+    "it": "Conchiglia a strisce",
+    "ja": "ストライプシェル",
+    "ko": "스트라이프 쉘",
+    "zh-hans": "条纹贝壳",
+    "zh-hant": "條紋殼",
+    "id": "Cangkang Garis",
+    "th": "เปลือกลาย",
+    "tr": "Çizgili Kabuk",
+    "vi": "Vỏ sọc",
+    "pl": "Skorupa paskowa",
+    "ar": "قشرة الخطوط "
+   }
+  },
+  "pet-butter-cup\u0001\u0001Butter Cup": {
+   "example": "",
+   "translations": {
+    "ru": "Масляный кубок",
+    "es": "Taza de mantequilla",
+    "pt": "Copo de Manteiga",
+    "fr": "Coupe de beurre",
+    "de": "Butterbecher",
+    "it": "Tazza di burro",
+    "ja": "バターカップ",
+    "ko": "버터 컵",
+    "zh-hans": "黄油杯",
+    "zh-hant": "奶油杯",
+    "id": "Cangkir Mentega",
+    "th": "ถ้วยเนยสด",
+    "tr": "Tereyağı Kupası",
+    "vi": "Cốc Bơ",
+    "pl": "Kubek masła",
+    "ar": "كوب الزبدة "
+   }
+  },
+  "pet-lavender-drop\u0001\u0001Lavender Drop": {
+   "example": "",
+   "translations": {
+    "ru": "Лавандовая капля",
+    "es": "Gota de lavanda",
+    "pt": "Gota de Lavanda",
+    "fr": "Goutte de lavande",
+    "de": "Lavendeltropfen",
+    "it": "Goccia di lavanda",
+    "ja": "ラベンダードロップ",
+    "ko": "라벤더 드롭",
+    "zh-hans": "薰衣草滴",
+    "zh-hant": "薰衣草滴",
+    "id": "Tetes Lavender",
+    "th": "หยดลาเวนเดอร์",
+    "tr": "Lavanta Damlası",
+    "vi": "Giọt hoa lavender",
+    "pl": "Kropla lawendy",
+    "ar": "قطر اللافندر"
+   }
+  },
+  "pet-lime-glow\u0001\u0001Lime Glow": {
+   "example": "",
+   "translations": {
+    "ru": "Лаймовое свечение",
+    "es": "Brillo de lima",
+    "pt": "Brilho de Limão",
+    "fr": "Éclat de lime",
+    "de": "Limettenglut",
+    "it": "Bagliore di lime",
+    "ja": "ライムグロウ",
+    "ko": "라임 글로우",
+    "zh-hans": "柠檬光辉",
+    "zh-hant": "檸檬光澤",
+    "id": "Cahaya Limau",
+    "th": "แสงมะนาว",
+    "tr": "Limon Parıltısı",
+    "vi": "Ánh sáng chanh",
+    "pl": "Limonkowy blask",
+    "ar": "توهج الليمون"
+   }
+  },
+  "pet-amber-drop\u0001\u0001Amber Drop": {
+   "example": "",
+   "translations": {
+    "ru": "Янтарная капля",
+    "es": "Gota de ámbar",
+    "pt": "Gota de Âmbar",
+    "fr": "Goutte d'ambre",
+    "de": "Bernstein-Tropfen",
+    "it": "Goccia d'ambra",
+    "ja": "琥珀の滴",
+    "ko": "琥珀 드롭",
+    "zh-hans": "琥珀滴",
+    "zh-hant": "琥珀滴",
+    "id": "Tetes Amber",
+    "th": "แอมเบอร์ดรอป",
+    "tr": "Kehribar Damlası",
+    "vi": "Giọt hổ phách",
+    "pl": "Bursztynowa kropla",
+    "ar": "قطرة العنبر "
+   }
+  },
+  "pet-blossom\u0001\u0001Blossom": {
+   "example": "",
+   "translations": {
+    "ru": "Цвести",
+    "es": "Flor",
+    "pt": "Flor",
+    "fr": "Fleur",
+    "de": "Blüte",
+    "it": "Fiore",
+    "ja": "花",
+    "ko": "블로섬",
+    "zh-hans": "花朵",
+    "zh-hant": "花朵",
+    "id": "Bunga",
+    "th": "ดอกบาน",
+    "tr": "Çiçek",
+    "vi": "Hoa nở",
+    "pl": "Kwiat",
+    "ar": "الزهرة"
+   }
+  },
+  "pet-sombrero\u0001\u0001Siesta": {
+   "example": "",
+   "translations": {
+    "ru": "Сиеста ",
+    "es": "Siesta",
+    "pt": "Siesta",
+    "fr": "Sieste ",
+    "de": "Siesta",
+    "it": "Siesta",
+    "ja": "シエスタ",
+    "ko": "시에스타",
+    "zh-hans": "午睡",
+    "zh-hant": "午睡",
+    "id": "Siesta",
+    "th": "Siesta",
+    "tr": "Siesta",
+    "vi": "Giấc ngủ trưa",
+    "pl": "Siesta",
+    "ar": "الاستراحة "
+   }
+  },
+  "pet-viking-helm\u0001\u0001Raider": {
+   "example": "",
+   "translations": {
+    "ru": "Разбойник",
+    "es": "Asaltante",
+    "pt": "Invasor",
+    "fr": "Assaillant",
+    "de": "Räuber",
+    "it": "Assalitore ",
+    "ja": "レイダー",
+    "ko": "레이더",
+    "zh-hans": "掠袭者 ",
+    "zh-hant": "入侵者",
+    "id": "Perampok",
+    "th": "ไรเดอร์",
+    "tr": "Soyguncu",
+    "vi": "Kẻ cướp biển",
+    "pl": "Najeźdźca",
+    "ar": "المهاجم "
+   }
+  },
+  "pet-green-blade\u0001\u0001Green Blade": {
+   "example": "",
+   "translations": {
+    "ru": "Зеленый клинок",
+    "es": "Hoja verde",
+    "pt": "Lâmina Verde",
+    "fr": "Lame verte",
+    "de": "Grüne Klinge",
+    "it": "Lama verde",
+    "ja": "グリーンブレード",
+    "ko": "그린 블레이드",
+    "zh-hans": "绿色之刃",
+    "zh-hant": "綠色劍刃",
+    "id": "Pedang Hijau",
+    "th": "ใบมีดสีเขียว",
+    "tr": "Yeşil Bıçak",
+    "vi": "Lưỡi xanh lá cây",
+    "pl": "Zielone Ostrze",
+    "ar": "الشفرة الخضراء "
+   }
+  },
+  "pet-suit\u0001\u0001The Boss": {
+   "example": "",
+   "translations": {
+    "ru": "Босс",
+    "es": "El Jefe",
+    "pt": "O Chefe",
+    "fr": "Le patron",
+    "de": "Der Boss",
+    "it": "Il Boss",
+    "ja": "ボス",
+    "ko": "보스",
+    "zh-hans": "头目 ",
+    "zh-hant": "老闆 ",
+    "id": "Bos",
+    "th": "บอส",
+    "tr": "Patron",
+    "vi": "Ông chủ",
+    "pl": "Szef",
+    "ar": "الزعيم "
+   }
+  },
+  "pet-officer\u0001\u0001Officer": {
+   "example": "",
+   "translations": {
+    "ru": "Офицер",
+    "es": "Oficial",
+    "pt": "Oficial",
+    "fr": "Officier",
+    "de": "Offizier",
+    "it": "Ufficiale",
+    "ja": "役員",
+    "ko": "장교",
+    "zh-hans": "军官",
+    "zh-hant": "官員",
+    "id": "Petugas",
+    "th": "นายร้อย",
+    "tr": "Memur",
+    "vi": "Sĩ quan",
+    "pl": "Oficer",
+    "ar": "ضابط"
+   }
+  },
+  "pet-firefighter\u0001\u0001Firefighter": {
+   "example": "",
+   "translations": {
+    "ru": "Пожарник",
+    "es": "Bombero",
+    "pt": "Bombeiro",
+    "fr": "Pompier",
+    "de": "Feuerwehrmann",
+    "it": "Pompiere ",
+    "ja": "消防士",
+    "ko": "소방관",
+    "zh-hans": "消防员 ",
+    "zh-hant": "消防員",
+    "id": "Pemadam Kebakaran",
+    "th": "นักดับเพลิง",
+    "tr": "İtfaiyeci",
+    "vi": "Lính cứu hỏa",
+    "pl": "Strażak",
+    "ar": "رجل الاطفاء"
+   }
+  },
+  "pet-hazard-core\u0001\u0001Hazard Core": {
+   "example": "",
+   "translations": {
+    "ru": "Опасное ядро",
+    "es": "Núcleo de peligro",
+    "pt": "Núcleo de Perigo",
+    "fr": "Noyau de danger",
+    "de": "Gefahrenkern",
+    "it": "Nucleo di pericolo",
+    "ja": "ハザードコア",
+    "ko": "위험 코어",
+    "zh-hans": "危险核心",
+    "zh-hant": "危險核心",
+    "id": "Inti Bahaya ",
+    "th": "แกนอันตราย",
+    "tr": "Tehlike Çekirdeği",
+    "vi": "Lõi nguy hiểm",
+    "pl": "Rdzeń zagrożeń",
+    "ar": "جوهر الخطر "
+   }
+  },
+  "pet-ember-rage\u0001\u0001Ember Rage": {
+   "example": "",
+   "translations": {
+    "ru": "Ярость Эмбера",
+    "es": "Furia de Ember",
+    "pt": "Fúria de Ember",
+    "fr": "Colère d'Ember",
+    "de": "Ember-Wut",
+    "it": "Furia di Ember",
+    "ja": "エンバーの怒り",
+    "ko": "엠버의 분노",
+    "zh-hans": "炽热愤怒",
+    "zh-hant": "火焰之怒",
+    "id": "Kemarahan Ember",
+    "th": "Ember Rage",
+    "tr": "Ateş Öfkesi",
+    "vi": "Cơn Thịnh Nộ Của Ember",
+    "pl": "Gniew Ember",
+    "ar": "غضب الإمبير "
+   }
+  },
+  "pet-alien\u0001\u0001Visitor": {
+   "example": "",
+   "translations": {
+    "ru": "Гость",
+    "es": "Visitante",
+    "pt": "Visitante",
+    "fr": "Visiteur",
+    "de": "Besucher",
+    "it": "Visitatore",
+    "ja": "訪問者",
+    "ko": "방문자",
+    "zh-hans": "访客",
+    "zh-hant": "訪客",
+    "id": "Pengunjung",
+    "th": "ผู้เยี่ยมชม",
+    "tr": "Ziyaretçi",
+    "vi": "Khách ghé thăm",
+    "pl": "Gość",
+    "ar": "زائر "
+   }
+  },
+  "pet-nebula-drop\u0001\u0001Nebula": {
+   "example": "",
+   "translations": {
+    "ru": "Туманность",
+    "es": "Nebulosa",
+    "pt": "Nebula",
+    "fr": "Nébuleuse",
+    "de": "Nebel",
+    "it": "Nebulosa",
+    "ja": "ネビュラ",
+    "ko": "성운",
+    "zh-hans": "星云",
+    "zh-hant": "星雲",
+    "id": "Nebula",
+    "th": "เนบิวลา",
+    "tr": "Nebülöz",
+    "vi": "Tinh vân",
+    "pl": "Mgławica",
+    "ar": "السديم"
+   }
+  },
+  "pet-galaxy-ring\u0001\u0001COSMOS": {
+   "example": "",
+   "translations": {
+    "ru": "КОСМОС",
+    "es": "COSMOS",
+    "pt": "COSMOS",
+    "fr": "COSMOS",
+    "de": "KOSMOS",
+    "it": "COSMO",
+    "ja": "宇宙",
+    "ko": "宇宙",
+    "zh-hans": "宇宙",
+    "zh-hant": "宇宙",
+    "id": "KOSMOS",
+    "th": "คอสโมส",
+    "tr": "KOZMOS",
+    "vi": "VŨ TRỤ",
+    "pl": "KOSMOS",
+    "ar": "الكون"
+   }
+  },
+  "stat-calories\u0001\u0001Calories": {
+   "example": "",
+   "translations": {
+    "ru": "Калории",
+    "es": "Calorías",
+    "pt": "Calorias",
+    "fr": "Calories",
+    "de": "Kalorien",
+    "it": "Calorie",
+    "ja": "カロリー",
+    "ko": "칼로리",
+    "zh-hans": "卡路里",
+    "zh-hant": "卡路里",
+    "id": "Kalori",
+    "th": "แคลอรี่",
+    "tr": "Kaloriler",
+    "vi": "Calo",
+    "pl": "Kalorie",
+    "ar": "السعرات الحرارية"
+   }
+  },
+  "stat-eat-speed\u0001\u0001Eat Speed": {
+   "example": "",
+   "translations": {
+    "ru": "Скорость еды",
+    "es": "Velocidad de Comida",
+    "pt": "Velocidade de Comer",
+    "fr": "Vitesse de manger",
+    "de": "Essgeschwindigkeit",
+    "it": "Velocità di Mangiamento",
+    "ja": "食事速度",
+    "ko": "먹는 속도",
+    "zh-hans": "进食速度",
+    "zh-hant": "進食速度",
+    "id": "Kecepatan Makan",
+    "th": "ความเร็วการกิน",
+    "tr": "Yeme Hızı",
+    "vi": "Tốc độ ăn",
+    "pl": "Prędkość jedzenia",
+    "ar": "سرعة الأكل "
+   }
+  },
+  "stat-gems\u0001\u0001Gems": {
+   "example": "",
+   "translations": {
+    "ru": "Самоцветы",
+    "es": "Gemas ",
+    "pt": "Joias",
+    "fr": "Gemmes",
+    "de": "Edelsteine ",
+    "it": "Gemme ",
+    "ja": "ジェム",
+    "ko": "보석",
+    "zh-hans": "宝石",
+    "zh-hant": "寶石",
+    "id": "Permata ",
+    "th": "อัญมณี",
+    "tr": "Mücevherler",
+    "vi": "Đá quý",
+    "pl": "Klejnoty",
+    "ar": "الأحجار الكريمة"
+   }
+  },
+  "rarity-common\u0001\u0001Common": {
+   "example": "",
+   "translations": {
+    "ru": "Обычный",
+    "es": "Común ",
+    "pt": "Comum ",
+    "fr": "Commun",
+    "de": "Gewöhnlich",
+    "it": "Comune ",
+    "ja": "普通",
+    "ko": "일반",
+    "zh-hans": "常见",
+    "zh-hant": "常見",
+    "id": "Umum ",
+    "th": "ธรรมดา",
+    "tr": "Sıradan",
+    "vi": "Thông thường",
+    "pl": "Zwykły",
+    "ar": "شائع "
+   }
+  },
+  "rarity-uncommon\u0001\u0001Uncommon": {
+   "example": "",
+   "translations": {
+    "ru": "Необычный",
+    "es": "Poco común",
+    "pt": "Incomum",
+    "fr": "Peu commun",
+    "de": "Ungewöhnlich",
+    "it": "Non comune",
+    "ja": "珍しい",
+    "ko": "드문",
+    "zh-hans": "罕见",
+    "zh-hant": "罕見",
+    "id": "Tidak biasa",
+    "th": "พิเศษ",
+    "tr": "Sıradan Olmayan",
+    "vi": "Không phổ biến",
+    "pl": "Niezwykły",
+    "ar": "غير شائع"
+   }
+  },
+  "rarity-rare\u0001\u0001Rare": {
+   "example": "",
+   "translations": {
+    "ru": "Редкий",
+    "es": "Raro ",
+    "pt": "Raro",
+    "fr": "Rare",
+    "de": "Selten",
+    "it": "Raro",
+    "ja": "レア",
+    "ko": "레어",
+    "zh-hans": "稀有",
+    "zh-hant": "稀有",
+    "id": "Langka",
+    "th": "หายาก",
+    "tr": "Nadir",
+    "vi": "Hiếm",
+    "pl": "Rzadki",
+    "ar": "نادر"
+   }
+  },
+  "rarity-epic\u0001\u0001Epic": {
+   "example": "",
+   "translations": {
+    "ru": "Эпический",
+    "es": "Épico",
+    "pt": "Épico",
+    "fr": "Épique",
+    "de": "Episch",
+    "it": "Epico",
+    "ja": "エピック",
+    "ko": "에픽",
+    "zh-hans": "史诗级",
+    "zh-hant": "史詩級",
+    "id": "Epik",
+    "th": "อีปิค",
+    "tr": "Epik",
+    "vi": "Hoành tráng",
+    "pl": "Epicki",
+    "ar": "ملحمي"
+   }
+  },
+  "rarity-legendary\u0001\u0001Legendary": {
+   "example": "",
+   "translations": {
+    "ru": "Легендарный",
+    "es": "Legendario ",
+    "pt": "Lendário ",
+    "fr": "Légendaire",
+    "de": "Legendär",
+    "it": "Leggendario",
+    "ja": "レジェンド",
+    "ko": "레전더리",
+    "zh-hans": "传说级",
+    "zh-hant": "傳奇級",
+    "id": "Legendaris",
+    "th": "ตํานาน",
+    "tr": "Efsanevi",
+    "vi": "Huyền thoại",
+    "pl": "Legendarny",
+    "ar": "الأسطوري"
+   }
+  },
+  "rarity-secret\u0001\u0001Secret": {
+   "example": "",
+   "translations": {
+    "ru": "Секрет",
+    "es": "Secreto ",
+    "pt": "Segredo",
+    "fr": "Secret",
+    "de": "Geheimnis",
+    "it": "Segreto",
+    "ja": "秘密",
+    "ko": "비밀",
+    "zh-hans": "秘密",
+    "zh-hant": "秘密",
+    "id": "Rahasia",
+    "th": "ความลับ",
+    "tr": "Gizli",
+    "vi": "Bí mật",
+    "pl": "Sekret",
+    "ar": "سري"
+   }
+  },
+  "biome-factory\u0001\u0001Cake Factory": {
+   "example": "",
+   "translations": {
+    "ru": "Завод тортов",
+    "es": "Fábrica de Pasteles",
+    "pt": "Fábrica de Bolos",
+    "fr": "Usine de gâteaux",
+    "de": "Kuchenfabrik",
+    "it": "Fabbrica di torte",
+    "ja": "ケーキ工場",
+    "ko": "케이크 공장",
+    "zh-hans": "蛋糕工厂 ",
+    "zh-hant": "蛋糕工廠",
+    "id": "Pabrik Kue",
+    "th": "โรงงานเค้ก",
+    "tr": "Kek Fabrikası",
+    "vi": "Nhà máy bánh",
+    "pl": "Fabryka ciast",
+    "ar": "مصنع الكعك "
+   }
+  },
+  "biome-donut\u0001\u0001Donut Plant": {
+   "example": "",
+   "translations": {
+    "ru": "Растение пончиков",
+    "es": "Planta de Rosquilla ",
+    "pt": "Planta de Rosquinhas",
+    "fr": "Plante de beignet",
+    "de": "Donut-Pflanze ",
+    "it": "Pianta di ciambelle ",
+    "ja": "ドーナツプラント",
+    "ko": "도넛 식물",
+    "zh-hans": "甜甜圈植物",
+    "zh-hant": "甜甜圈植物",
+    "id": "Tanaman Donat",
+    "th": "ต้นโดนัท ",
+    "tr": "Donat Bitkisi",
+    "vi": "Cây Donut ",
+    "pl": "Roślina pączków",
+    "ar": "نبات الدونات "
+   }
+  },
+  "biome-candy\u0001\u0001Candy World": {
+   "example": "",
+   "translations": {
+    "ru": "Мир конфет",
+    "es": "Mundo de caramelo",
+    "pt": "Mundo dos Doces",
+    "fr": "Monde des bonbons",
+    "de": "Süßigkeitenwelt",
+    "it": "Mondo delle caramelle",
+    "ja": "キャンディワールド",
+    "ko": "캔디 월드",
+    "zh-hans": "糖果世界",
+    "zh-hant": "糖果世界",
+    "id": "Dunia Permen",
+    "th": "โลกขนมหวาน",
+    "tr": "Şeker Dünyası",
+    "vi": "Thế giới kẹo ngọt",
+    "pl": "Świat cukierków",
+    "ar": "عالم الحلوى "
+   }
+  },
+  "label-music\u0001\u0001Music": {
+   "example": "",
+   "translations": {
+    "ru": "музыка",
+    "es": "Música",
+    "pt": "Música",
+    "fr": "Musique",
+    "de": "Musik",
+    "it": "Musica",
+    "ja": "音楽",
+    "ko": "음악",
+    "zh-hans": "音乐",
+    "zh-hant": "音樂",
+    "id": "Musik",
+    "th": "ดนตรี",
+    "tr": "Müzik",
+    "vi": "Nhạc",
+    "pl": "Muzyka",
+    "ar": "موسيقى "
+   }
+  },
+  "label-sound-effects\u0001\u0001Sound Effects": {
+   "example": "",
+   "translations": {
+    "ru": "Звуковые эффекты",
+    "es": "Efectos de Sonido ",
+    "pt": "Efeitos Sonoros",
+    "fr": "Effets sonores",
+    "de": "Soundeffekte",
+    "it": "Effetti sonori",
+    "ja": "効果音",
+    "ko": "사운드 효과",
+    "zh-hans": "音效",
+    "zh-hant": "音效",
+    "id": "Efek Suara",
+    "th": "เสียงเอฟเฟค",
+    "tr": "Ses Efektleri",
+    "vi": "Hiệu ứng âm thanh",
+    "pl": "Efekty dźwiękowe",
+    "ar": "المؤثرات الصوتية"
+   }
+  },
+  "footer-daily-claim\u0001\u0001Claim today's reward!": {
+   "example": "",
+   "translations": {
+    "ru": "Получите сегодняшнюю награду!",
+    "es": "¡Reclama la recompensa de hoy!",
+    "pt": "Resgate a recompensa de hoje!",
+    "fr": "Réclamez la récompense du jour !",
+    "de": "Nimm die heutige Belohnung ein!",
+    "it": "Reclama la ricompensa di oggi!",
+    "ja": "今日の報酬を受け取ろう！",
+    "ko": "오늘의 보상을 획득하세요!",
+    "zh-hans": "领取今天的奖励！",
+    "zh-hant": "領取今天的獎勵吧！",
+    "id": "Klaim hadiah hari ini!",
+    "th": "รับรางวัลของวันนี้!",
+    "tr": "Günlük ödülü alın!",
+    "vi": "Nhận phần thưởng hôm nay!",
+    "pl": "Odbierz dzisiejszą nagrodę!",
+    "ar": "احصل على مكافأة اليوم!"
+   }
+  },
+  "footer-daily-tomorrow\u0001\u0001Come back tomorrow for the next reward!": {
+   "example": "",
+   "translations": {
+    "ru": "Вернитесь завтра за следующей наградой!",
+    "es": "Vuelve mañana para la siguiente recompensa.",
+    "pt": "Volte amanhã para a próxima recompensa!",
+    "fr": "Reviens demain pour la prochaine récompense !",
+    "de": "Komm morgen wieder, um die nächste Belohnung zu erhalten!",
+    "it": "Torna domattina per la prossima ricompensa!",
+    "ja": "明日また来て、次の報酬を手に入れよう！",
+    "ko": "내일도 접속해 다음 보상을 받으세요!",
+    "zh-hans": "明天再来领取下一个奖励吧！",
+    "zh-hant": "明天再來領取下一個獎勵吧！",
+    "id": "Kembalilah besok untuk hadiah berikutnya!",
+    "th": "กลับมาในวันพรุ่งนี้เพื่อรับรางวัลถัดไป!",
+    "tr": "Bir sonraki ödül için yarın tekrar gelin!",
+    "vi": "Quay lại vào ngày mai để nhận phần thưởng tiếp theo!",
+    "pl": "Wróć jutro po następną nagrodę!",
+    "ar": "عُد غدًا للحصول على المكافأة التالية!"
+   }
+  },
+  "shop-section-featured\u0001\u0001Featured": {
+   "example": "",
+   "translations": {
+    "ru": "Избранное",
+    "es": "Destacado",
+    "pt": "Em Destaque",
+    "fr": "En vedette",
+    "de": "Empfohlen",
+    "it": "In evidenza",
+    "ja": "特集",
+    "ko": "추천",
+    "zh-hans": "精选",
+    "zh-hant": "精選",
+    "id": "Unggulan",
+    "th": "โดดเด่น",
+    "tr": "Öne çıkan",
+    "vi": "Nổi bật",
+    "pl": "Wyróżnione",
+    "ar": "مميز"
+   }
+  },
+  "shop-section-passes\u0001\u0001Game Passes": {
+   "example": "",
+   "translations": {
+    "ru": "Игровые пропуска",
+    "es": "Pases de juego",
+    "pt": "Passes de Jogo",
+    "fr": "Passes de jeu",
+    "de": "Spielpässe",
+    "it": "Pass di gioco",
+    "ja": "ゲームパス",
+    "ko": "게임 패스",
+    "zh-hans": "游戏通行证 ",
+    "zh-hant": "遊戲通行證",
+    "id": "Pass Game",
+    "th": "เกมพาส",
+    "tr": "Oyun Kartları",
+    "vi": "Thẻ trò chơi",
+    "pl": "Przepustki gry",
+    "ar": "تذاكر اللعبة "
+   }
+  },
+  "shop-section-gold\u0001\u0001Gems": {
+   "example": "",
+   "translations": {
+    "ru": "Самоцветы",
+    "es": "Gemas ",
+    "pt": "Joias",
+    "fr": "Gemmes",
+    "de": "Edelsteine ",
+    "it": "Gemme ",
+    "ja": "ジェム",
+    "ko": "보석",
+    "zh-hans": "宝石",
+    "zh-hant": "寶石",
+    "id": "Permata ",
+    "th": "อัญมณี",
+    "tr": "Mücevherler",
+    "vi": "Đá quý",
+    "pl": "Klejnoty",
+    "ar": "الأحجار الكريمة"
+   }
+  },
+  "shop-section-gems\u0001\u0001Gems": {
+   "example": "",
+   "translations": {
+    "ru": "Самоцветы",
+    "es": "Gemas ",
+    "pt": "Joias",
+    "fr": "Gemmes",
+    "de": "Edelsteine ",
+    "it": "Gemme ",
+    "ja": "ジェム",
+    "ko": "보석",
+    "zh-hans": "宝石",
+    "zh-hant": "寶石",
+    "id": "Permata ",
+    "th": "อัญมณี",
+    "tr": "Mücevherler",
+    "vi": "Đá quý",
+    "pl": "Klejnoty",
+    "ar": "الأحجار الكريمة"
+   }
+  },
+  "shop-section-boosts\u0001\u0001Boosts": {
+   "example": "",
+   "translations": {
+    "ru": "Усиливает",
+    "es": "Impulsos ",
+    "pt": "Impulsos ",
+    "fr": "Boosts",
+    "de": "Boosts",
+    "it": "Potenziamenti",
+    "ja": "ブースト",
+    "ko": "부스트",
+    "zh-hans": "加成 ",
+    "zh-hant": "加成 ",
+    "id": "Peningkatan ",
+    "th": "บูสต์",
+    "tr": "Takviyeler",
+    "vi": "Tăng cường",
+    "pl": "Wzmocnienia",
+    "ar": "التعزيزات "
+   }
+  },
+  "shop-section-free\u0001\u0001Free Stuff": {
+   "example": "",
+   "translations": {
+    "ru": "Бесплатные вещи",
+    "es": "Cosas Gratis",
+    "pt": "Coisas Grátis",
+    "fr": "Choses gratuites",
+    "de": "Gratis Sachen",
+    "it": "Cose Gratis",
+    "ja": "無料のもの",
+    "ko": "무료 물건",
+    "zh-hans": "免费物品 ",
+    "zh-hant": "免費物品",
+    "id": "Barang Gratis",
+    "th": "ของฟรี",
+    "tr": "Ücretsiz Eşyalar",
+    "vi": "Đồ miễn phí",
+    "pl": "Darmowe rzeczy",
+    "ar": "أشياء مجانية"
+   }
+  },
+  "shop-tab-featured\u0001\u0001Offers": {
+   "example": "",
+   "translations": {
+    "ru": "Предложения",
+    "es": "Ofertas",
+    "pt": "Ofertas",
+    "fr": "Offres",
+    "de": "Angebote",
+    "it": "Offerte",
+    "ja": "オファー",
+    "ko": "오퍼",
+    "zh-hans": "优惠",
+    "zh-hant": "優惠",
+    "id": "Penawaran",
+    "th": "ข้อเสนอ",
+    "tr": "Teklifler",
+    "vi": "Ưu đãi",
+    "pl": "Oferty",
+    "ar": "العروض"
+   }
+  },
+  "shop-tab-passes\u0001\u0001Passes": {
+   "example": "",
+   "translations": {
+    "ru": "Пропуска",
+    "es": "Pases",
+    "pt": "Passes",
+    "fr": "Passes",
+    "de": "Pässe",
+    "it": "Passi",
+    "ja": "パス",
+    "ko": "패스",
+    "zh-hans": "通行证",
+    "zh-hant": "通行證",
+    "id": "Pass",
+    "th": "บัตรผ่าน",
+    "tr": "Kartlar",
+    "vi": "Thẻ",
+    "pl": "Przepustki",
+    "ar": "التذاكر "
+   }
+  },
+  "shop-tab-boosts\u0001\u0001Boosts": {
+   "example": "",
+   "translations": {
+    "ru": "Усиливает",
+    "es": "Impulsos ",
+    "pt": "Impulsos ",
+    "fr": "Boosts",
+    "de": "Boosts",
+    "it": "Potenziamenti",
+    "ja": "ブースト",
+    "ko": "부스트",
+    "zh-hans": "加成 ",
+    "zh-hant": "加成 ",
+    "id": "Peningkatan ",
+    "th": "บูสต์",
+    "tr": "Takviyeler",
+    "vi": "Tăng cường",
+    "pl": "Wzmocnienia",
+    "ar": "التعزيزات "
+   }
+  },
+  "shop-tab-gems\u0001\u0001Gems": {
+   "example": "",
+   "translations": {
+    "ru": "Самоцветы",
+    "es": "Gemas ",
+    "pt": "Joias",
+    "fr": "Gemmes",
+    "de": "Edelsteine ",
+    "it": "Gemme ",
+    "ja": "ジェム",
+    "ko": "보석",
+    "zh-hans": "宝石",
+    "zh-hant": "寶石",
+    "id": "Permata ",
+    "th": "อัญมณี",
+    "tr": "Mücevherler",
+    "vi": "Đá quý",
+    "pl": "Klejnoty",
+    "ar": "الأحجار الكريمة"
+   }
+  },
+  "btn-soon\u0001\u0001SOON": {
+   "example": "",
+   "translations": {
+    "ru": "СКОРО",
+    "es": "PRONTO",
+    "pt": "EM BREVE",
+    "fr": "BIENTÔT",
+    "de": "BALD",
+    "it": "PRESTO",
+    "ja": "まもなく",
+    "ko": "곧",
+    "zh-hans": "很快",
+    "zh-hant": "很快",
+    "id": "SEGERA",
+    "th": "เร็วๆนี้",
+    "tr": "YAKINDA",
+    "vi": "SỚM",
+    "pl": "WKRÓTCE",
+    "ar": "قريبا"
+   }
+  },
+  "ribbon-best-value\u0001\u0001BEST VALUE": {
+   "example": "",
+   "translations": {
+    "ru": "ЛУЧШАЯ ЦЕНА",
+    "es": "MEJOR VALOR ",
+    "pt": "MELHOR VALOR",
+    "fr": "MEILLEURE VALEUR",
+    "de": "BESTER WERT ",
+    "it": "MIGLIOR VALORE",
+    "ja": "最高の価値",
+    "ko": "최고의 가치",
+    "zh-hans": "最佳价值 ",
+    "zh-hant": "最超值價",
+    "id": "Nilai Terbaik",
+    "th": "คุ้มค่าที่สุด",
+    "tr": "EN İYİ DEĞER",
+    "vi": "GIÁ TRỊ TỐT NHẤT",
+    "pl": "NAJLEPSZA WARTOŚĆ",
+    "ar": "أفضل قيمة"
+   }
+  },
+  "ribbon-one-time\u0001\u0001ONE TIME": {
+   "example": "",
+   "translations": {
+    "ru": "ОДИН РАЗ",
+    "es": "Una vez",
+    "pt": "UMA VEZ",
+    "fr": "UNE FOIS",
+    "de": "EINMAL",
+    "it": "UNA VOLTA",
+    "ja": "一度",
+    "ko": "1회",
+    "zh-hans": "一次",
+    "zh-hant": "一次",
+    "id": "SATU KALI",
+    "th": "ครั้งเดียว",
+    "tr": "BİR KERE",
+    "vi": "MỘT LẦN",
+    "pl": "Raz",
+    "ar": "مرة واحدة"
+   }
+  },
+  "label-group-reward\u0001\u0001Group Reward": {
+   "example": "",
+   "translations": {
+    "ru": "Награда группы",
+    "es": "Recompensa de grupo",
+    "pt": "Recompensa de Grupo",
+    "fr": "Récompense de groupe",
+    "de": "Gruppenbelohnung",
+    "it": "Ricompensa di gruppo",
+    "ja": "グループ報酬",
+    "ko": "그룹 보상",
+    "zh-hans": "小组奖励",
+    "zh-hant": "群組獎勵",
+    "id": "Hadiah Grup",
+    "th": "รางวัลกลุ่ม",
+    "tr": "Grup Ödülü",
+    "vi": "Phần thưởng nhóm",
+    "pl": "Nagroda grupowa",
+    "ar": "مكافأة المجموعة"
+   }
+  },
+  "sub-group-reward\u0001\u0001Like + join for a free boost!": {
+   "example": "",
+   "translations": {
+    "ru": "Поставьте лайк и присоединитесь, чтобы получить бесплатное усиление!",
+    "es": "Dale un me gusta y únete para un impulso gratuito.",
+    "pt": "Curta + junte-se para um impulso gratuito!",
+    "fr": "Aimez et rejoignez pour un boost gratuit !",
+    "de": "Like + tritt für einen kostenlosen Boost bei!",
+    "it": "Metti un like e unisciti per una spinta gratuita!",
+    "ja": "「いいね」+参加して無料ブーストをゲットしよう！",
+    "ko": "좋아요 + 참여하여 무료 부스트를 받으세요!",
+    "zh-hans": "点赞并加入即可获得免费加成！",
+    "zh-hant": "點贊並加入即可獲得免費加成！",
+    "id": "Sukai + bergabung untuk dorongan gratis!",
+    "th": "กดไลค์ + เข้าร่วมเพื่อรับบูสต์ฟรี!",
+    "tr": "Ücretsiz bir destek için beğenin ve katılın!",
+    "vi": "Thích + tham gia để nhận phép tăng cường miễn phí!",
+    "pl": "Polub i dołącz, aby uzyskać darmowe wzmocnienie!",
+    "ar": "قم بالإعجاب والانضمام للحصول على دفعة مجانية!"
+   }
+  },
+  "sub-group-join-first\u0001\u0001Join the group, then claim again!": {
+   "example": "",
+   "translations": {
+    "ru": "Присоединяйтесь к группе, а затем запросите снова!",
+    "es": "Únete al grupo y reclama de nuevo.",
+    "pt": "Junte-se ao grupo e reivindique novamente!",
+    "fr": "Rejoignez le groupe, puis réclamez à nouveau !",
+    "de": "Tritt der Gruppe bei und beanspruche es erneut!",
+    "it": "Unisciti al gruppo, quindi rivendica di nuovo!",
+    "ja": "グループに参加してから、もう一度請求してください。",
+    "ko": "그룹에 가입한 후 다시 획득하세요!",
+    "zh-hans": "加入群组，然后再次领取！",
+    "zh-hant": "加入群組，再次領取獎勵！",
+    "id": "Bergabunglah dengan grup, lalu klaim lagi!",
+    "th": "เข้าร่วมกลุ่มแล้วรับอีกครั้ง!",
+    "tr": "Gruba katılın, sonra tekrar talep edin!",
+    "vi": "Tham gia nhóm, sau đó nhận lại!",
+    "pl": "Dołącz do grupy, a następnie odbierz ponownie!",
+    "ar": "انضم إلى المجموعة ، ثم اطلب مرة أخرى!"
+   }
+  },
+  "title-invite\u0001\u0001Invite Friends": {
+   "example": "",
+   "translations": {
+    "ru": "Пригласить друзей",
+    "es": "Invitar Amigos",
+    "pt": "Convide amigos",
+    "fr": "Inviter des amis",
+    "de": "Freunde einladen",
+    "it": "Invita Amici",
+    "ja": "友達を招待する",
+    "ko": "친구 초대하기",
+    "zh-hans": "邀请好友",
+    "zh-hant": "邀請朋友",
+    "id": "Undang Teman",
+    "th": "เชิญเพื่อน",
+    "tr": "Arkadaşlarını Davet Et",
+    "vi": "Mời bạn bè",
+    "pl": "Zaproś znajomych",
+    "ar": "دعوة الأصدقاء"
+   }
+  },
+  "invite-headline\u0001\u0001{n} Gems Per Friend!": {
+   "example": "",
+   "translations": {
+    "ru": "{n} драгоценных камней на друга!",
+    "es": "{n} gemas por amigo!",
+    "pt": "{n} Gemas Por Amigo!",
+    "fr": "{n} gemmes par ami !",
+    "de": "{n} Edelsteine pro Freund!",
+    "it": "{n} gemme per amico!",
+    "ja": "友達ごとに{n}ジェム！",
+    "ko": "친구당 {n} 보석!",
+    "zh-hans": "每个朋友 {n} 颗宝石！ ",
+    "zh-hant": "每個朋友可以獲得{n}顆寶石！",
+    "id": "{n} Permata Per Teman!",
+    "th": "{n} อัญมณีต่อเพื่อน!",
+    "tr": "Arkadaş Başına {n} Mücevher!",
+    "vi": "{n} Đá quý cho mỗi người bạn!",
+    "pl": "{n} klejnotów na przyjaciela!",
+    "ar": "{n} الجواهر لكل صديق!"
+   }
+  },
+  "invite-body\u0001\u0001Invite a friend. When they join the game, you get {n} Gems — no limit.": {
+   "example": "",
+   "translations": {
+    "ru": "Пригласите друга. Когда он присоединится к игре, вы получите {n} драгоценных камней - без ограничений.",
+    "es": "Invita a un amigo. Cuando se unen al juego, obtienes {n} gemas, sin límite.",
+    "pt": "Convide um amigo. Quando eles entrarem no jogo, você receberá {n} gemas - sem limite.",
+    "fr": "Invitez un ami. Quand ils rejoignent le jeu, vous obtenez {n} gemmes - pas de limite.",
+    "de": "Lade einen Freund ein. Wenn er dem Spiel beitritt, erhältst du {n} Edelsteine ​​– ohne Limit.",
+    "it": "Invita un amico. Quando si uniscono al gioco, ottieni {n} gemme, senza limite.",
+    "ja": "友達を招待してください。彼らがゲームに参加すると、{n}個のジェムを獲得できます - 制限はありません。",
+    "ko": "친구를 초대하세요. 친구가 게임에 참여하면 {n} 보석을 얻을 수 있습니다. 제한이 없습니다.",
+    "zh-hans": "邀请一个朋友。当他们加入游戏时，你将获得{n}颗宝石 - 没有限制。",
+    "zh-hant": "邀請一位朋友。当他們加入遊戲時，你將獲得{n}顆寶石 - 沒有上限。",
+    "id": "Undang seorang teman. Saat mereka bergabung dengan game, Anda mendapatkan {n} Permata - tidak ada batasan.",
+    "th": "เชิญเพื่อน เมื่อพวกเขาเข้าร่วมเกม คุณจะได้รับ {n} อัญมณี - ไม่มีขีดจำกัด",
+    "tr": "Bir arkadaş davet edin. Oyuna katıldıklarında, {n} mücevher kazanırsınız - sınır yok.",
+    "vi": "Mời một người bạn. Khi họ tham gia trò chơi, bạn nhận được {n} Đá quý - không giới hạn.",
+    "pl": "Zaproś znajomego. Gdy dołączy do gry, otrzymasz {n} klejnotów - bez limitu.",
+    "ar": "قم بدعوة صديق. عندما ينضم إلى اللعبة، ستحصل على {n} من الأحجار الكريمة - لا يوجد حد أقصى."
+   }
+  },
+  "invite-button\u0001\u0001INVITE FRIENDS": {
+   "example": "",
+   "translations": {
+    "ru": "ПРИГЛАСИТЬ ДРУЗЕЙ",
+    "es": "INVITAR AMIGOS",
+    "pt": "CONVIDE AMIGOS",
+    "fr": "INVITER DES AMIS",
+    "de": "FREUNDE EINLADEN",
+    "it": "INVITA AMICI",
+    "ja": "友達を招待する",
+    "ko": "친구 초대",
+    "zh-hans": "邀请好友",
+    "zh-hant": "邀請朋友",
+    "id": "UNDANG TEMAN",
+    "th": "เชิญเพื่อน",
+    "tr": "ARKADAŞLARINI DAVET ET",
+    "vi": "MỜI BẠN BÈ",
+    "pl": "ZAPROŚ ZNAJOMYCH",
+    "ar": "دعوة الأصدقاء"
+   }
+  },
+  "invite-count\u0001\u0001{n} friends joined so far": {
+   "example": "",
+   "translations": {
+    "ru": "{n} друзей уже присоединились",
+    "es": "{n} amigos se han unido hasta ahora",
+    "pt": "{n} amigos entraram até agora",
+    "fr": "{n} amis ont rejoint jusqu'à présent",
+    "de": "{n} Freunde sind bis jetzt beigetreten ",
+    "it": "{n} amici si sono uniti finora",
+    "ja": "これまで{n}人の友達が参加しました",
+    "ko": "지금까지 {n}명의 친구가 참가했어요",
+    "zh-hans": "到目前为止，已有{n}位朋友加入",
+    "zh-hant": "到目前為止，有{n}個朋友加入了遊戲。",
+    "id": "{n} teman telah bergabung sejauh ini",
+    "th": "{n} เพื่อนเข้าร่วมจนถึงตอนนี้",
+    "tr": "Şimdiye kadar {n} arkadaş katıldı",
+    "vi": "{n} bạn bè đã tham gia cho đến nay",
+    "pl": "Do tej pory dołączyło {n} znajomych",
+    "ar": "انضم {n} أصدقاء حتى الآن."
+   }
+  },
+  "invite-count-none\u0001\u0001No friends have joined yet": {
+   "example": "",
+   "translations": {
+    "ru": "Пока что нет друзей, которые присоединились.",
+    "es": "Aún no se ha unido ningún amigo.",
+    "pt": "Nenhum amigo entrou ainda",
+    "fr": "Aucun ami n'a encore rejoint",
+    "de": "Noch sind keine Freunde beigetreten",
+    "it": "Nessun amico si è ancora unito",
+    "ja": "まだ友達が参加していません",
+    "ko": "아직 친구가 없습니다.",
+    "zh-hans": "还没有朋友加入",
+    "zh-hant": "還沒有朋友加入",
+    "id": "Belum ada teman yang bergabung",
+    "th": "ยังไม่มีเพื่อนเข้าร่วม",
+    "tr": "Henüz hiç arkadaş katılmadı.",
+    "vi": "Chưa có bạn bè nào tham gia",
+    "pl": "Nie ma jeszcze żadnych znajomych",
+    "ar": "لم ينضم أصدقاء بعد."
+   }
+  },
+  "invite-sent\u0001\u0001Invites sent! Gems land when they join.": {
+   "example": "",
+   "translations": {
+    "ru": "Приглашения отправлены! Самоцветы появятся, когда они присоединятся.",
+    "es": "¡Invitaciones enviadas! Las gemas llegan cuando se unen.",
+    "pt": "Convites enviados! Gemas chegam quando eles se juntam.",
+    "fr": "Invitations envoyées ! Les gemmes arrivent quand elles rejoignent.",
+    "de": "Einladungen gesendet! Edelsteine ​​kommen, wenn sie beitreten. ",
+    "it": "Inviti inviati! Le gemme vengono assegnate quando si uniscono.",
+    "ja": "招待状を送信しました！参加するとジェムが入手できます。",
+    "ko": "초대장이 전송됐어요! 초대받은 플레이어가 참가하면 보석이 드롭됩니다.",
+    "zh-hans": "邀请已送出！他们加入时会获得宝石。",
+    "zh-hant": "邀請已送出！當他們加入時會獲得寶石。",
+    "id": "Undangan sudah dikirim. Permata akan muncul saat mereka bergabung.",
+    "th": "ส่งคำเชิญแล้ว! อัญมณีจะมาถึงเมื่อพวกเขาเข้าร่วม.",
+    "tr": "Davetler gönderildi. Katıldıklarında mücevherler elde edilir.",
+    "vi": "Lời mời đã được gửi. Kim cương sẽ xuất hiện khi họ tham gia.",
+    "pl": "Zaproszenia wysłane! Klejnoty pojawią się, gdy dołączą.",
+    "ar": "تم إرسال الدعوات! ستحصل على الأحجار الكريمة عندما ينضمون."
+   }
+  },
+  "invite-unavailable\u0001\u0001Invites aren't available right now.": {
+   "example": "",
+   "translations": {
+    "ru": "Приглашения сейчас недоступны.",
+    "es": "Las invitaciones no están disponibles ahora mismo.",
+    "pt": "Convites não estão disponíveis no momento.",
+    "fr": "Les invitations ne sont pas disponibles pour le moment.",
+    "de": "Einladungen sind im Moment nicht verfügbar.",
+    "it": "Gli inviti non sono disponibili al momento.",
+    "ja": "招待は現在利用できません。",
+    "ko": "현재 초대가 이용할 수 없습니다.",
+    "zh-hans": "邀请功能暂时停用。",
+    "zh-hant": "目前無法使用邀請功能。",
+    "id": "Undangan tidak tersedia saat ini.",
+    "th": "คำเชิญยังไม่พร้อมใช้งานในขณะนี้",
+    "tr": "Davetler şu anda kullanılamıyor.",
+    "vi": "Lời mời hiện không có sẵn.",
+    "pl": "Zaproszenia są teraz niedostępne.",
+    "ar": "الدعوات غير متوفرة حاليًا."
+   }
+  },
+  "title-group-reward\u0001\u0001Free Boost": {
+   "example": "",
+   "translations": {
+    "ru": "Бесплатное усиление",
+    "es": "Impulso gratuito",
+    "pt": "Impulso Grátis",
+    "fr": "Boost gratuit",
+    "de": "Kostenloser Boost",
+    "it": "Boost Gratuito",
+    "ja": "無料ブースト",
+    "ko": "무료 부스트",
+    "zh-hans": "免费加成",
+    "zh-hant": "免費加成",
+    "id": "Peningkatan Gratis",
+    "th": "บูสฟรี",
+    "tr": "Ücretsiz Takviye",
+    "vi": "Tăng cường miễn phí",
+    "pl": "Darmowe wzmocnienie",
+    "ar": "دفعة مجانية"
+   }
+  },
+  "group-headline\u0001\u0001Like + Join = Free Boost": {
+   "example": "",
+   "translations": {
+    "ru": "Лайк + Присоединение = Бесплатное усиление",
+    "es": "Me gusta + Unirse = Impulso gratuito ",
+    "pt": "Like + Junte-se = Impulso Grátis",
+    "fr": "J'aime + Rejoindre = Boost gratuit",
+    "de": "Like + Beitreten = Gratis-Boost ",
+    "it": "Mi piace + Unisciti = Boost gratuito",
+    "ja": "「いいね」+参加=無料ブースト",
+    "ko": "좋아요 + 참여 = 무료 부스트",
+    "zh-hans": "点赞+加入=免费加成 ",
+    "zh-hant": "點贊+加入=免費加成",
+    "id": "Like + Bergabung = Boost Gratis",
+    "th": "Like + Join = บูสต์ฟรี",
+    "tr": "Beğen + Katıl = Ücretsiz Takviye",
+    "vi": "Like + Tham gia = Tăng cường miễn phí",
+    "pl": "Polub + Dołącz = Darmowy bonus",
+    "ar": "الإعجاب + الانضمام = دفعة مجانية"
+   }
+  },
+  "group-body\u0001\u0001Like the game and join our community to get a 15 minute x2 Calories boost!": {
+   "example": "",
+   "translations": {
+    "ru": "Поставьте лайк игре и присоединитесь к нашему сообществу, чтобы получить увеличение калорий в 2 раза на 15 минут!",
+    "es": "Dale un me gusta al juego y únete a nuestra comunidad para obtener un aumento de calorías de x2 durante 15 minutos.",
+    "pt": "Curta o jogo e junte-se à nossa comunidade para obter um aumento de x2 calorias por 15 minutos!",
+    "fr": "Aimez le jeu et rejoignez notre communauté pour obtenir un boost de x2 calories pendant 15 minutes !",
+    "de": "Like das Spiel und tritt unserer Community bei, um einen 15-minütigen x2 Kalorien-Boost zu erhalten!",
+    "it": "Dai un like al gioco e unisciti alla nostra community per ottenere un aumento di calorie x2 di 15 minuti!",
+    "ja": "ゲームに「いいね」をして、コミュニティに参加すると、15分間、カロリーが2倍になります！",
+    "ko": "게임에 좋아요를 누르고 커뮤니티에 가입하면 15분 동안 칼로리 2배 부스트를 얻을 수 있어요!",
+    "zh-hans": "点赞游戏并加入我们的社区，可获得15分钟的双倍卡路里加成！ ",
+    "zh-hant": "點贊遊戲並加入我們的社群即可獲得 15 分鐘 2 倍卡路里加成！",
+    "id": "Sukai gamenya dan bergabunglah dengan komunitas kami untuk mendapatkan peningkatan kalori x2 selama 15 menit!",
+    "th": "กดไลค์เกมและเข้าร่วมชุมชนของเราเพื่อรับการเพิ่มแคลอรี่ x2 เป็นเวลา 15 นาที!",
+    "tr": "Oyunu beğenin ve 15 dakikalık x2 kalori takviyesi için topluluğumuza katılın!",
+    "vi": "Thích trò chơi và tham gia cộng đồng của chúng tôi để nhận được tăng cường calo x2 trong 15 phút!",
+    "pl": "Polub grę i dołącz do naszej społeczności, aby uzyskać 15-minutowy wzrost kalorii x2!",
+    "ar": "قم بإعجاب اللعبة والانضمام إلى مجتمعنا للحصول على زيادة السعرات الحرارية x2 لمدة 15 دقيقة!"
+   }
+  },
+  "group-button\u0001\u0001GET REWARD": {
+   "example": "",
+   "translations": {
+    "ru": "ПОЛУЧИТЬ НАГРАДУ",
+    "es": "OBTENER RECOMPENSA",
+    "pt": "RECEBER RECOMPENSA",
+    "fr": "OBTENIR UNE RÉCOMPENSE",
+    "de": "BELOHNUNG ERHALTEN",
+    "it": "OTTIENI UNA RICOMPENSA",
+    "ja": "報酬を得る",
+    "ko": "보상 획득",
+    "zh-hans": "获得奖励",
+    "zh-hant": "獲得獎勵",
+    "id": "DAPATKAN HADIAH",
+    "th": "รับรางวัล",
+    "tr": "ÖDÜL ALIN",
+    "vi": "NHẬN THƯỞNG",
+    "pl": "ZDOBĄDŹ NAGRODĘ",
+    "ar": "الحصول على المكافأة"
+   }
+  },
+  "group-wait\u0001\u0001Like the game and wait {n} seconds.": {
+   "example": "",
+   "translations": {
+    "ru": "Поставьте лайк игре и подождите {n} секунд.",
+    "es": "Dale me gusta al juego y espera {n} segundos.",
+    "pt": "Curta o jogo e espere {n} segundos.",
+    "fr": "Aimez le jeu et attendez {n} secondes.",
+    "de": "Like das Spiel und warte {n} Sekunden.",
+    "it": "Dai un like al gioco e attendi {n} secondi.",
+    "ja": "ゲームを「いいね」して、{n}秒待ちます。",
+    "ko": "게임에 좋아요를 누르고 {n} 초를 기다리세요.",
+    "zh-hans": "点赞游戏并等待{n}秒。",
+    "zh-hant": "點贊遊戲並等待{n}秒。",
+    "id": "Beri like pada game dan tunggu {n} detik.",
+    "th": "กดไลค์เกมและรอ {n} วินาที",
+    "tr": "Oyunu beğenin ve {n} saniye bekleyin.",
+    "vi": "Thích trò chơi và đợi {n} giây.",
+    "pl": "Polub grę i poczekaj {n} sekund.",
+    "ar": "قم بإعجاب اللعبة وانتظر {n} ثواني."
+   }
+  },
+  "group-not-in-group\u0001\u0001Join the community first, then try again.": {
+   "example": "",
+   "translations": {
+    "ru": "Сначала присоединяйтесь к сообществу, а затем попробуйте снова.",
+    "es": "Únete a la comunidad primero e inténtalo de nuevo.",
+    "pt": "Junte-se à comunidade primeiro e tente novamente.",
+    "fr": "Rejoignez d'abord la communauté, puis réessayez.",
+    "de": "Tritt zuerst der Community bei und versuche es dann erneut.",
+    "it": "Unisciti prima alla comunità, quindi riprova.",
+    "ja": "まずコミュニティに参加してから、もう一度お試しください。",
+    "ko": "먼저 커뮤니티에 가입한 후 다시 시도해 주세요.",
+    "zh-hans": "请先加入社区，然后重试。",
+    "zh-hant": "請先加入社群，再試一次。",
+    "id": "Bergabunglah dengan komunitas terlebih dahulu, lalu coba lagi.",
+    "th": "เข้าร่วมชุมชนก่อน แล้วลองอีกครั้ง",
+    "tr": "Önce topluluğa katılın, sonra tekrar deneyin.",
+    "vi": "Tham gia cộng đồng trước, sau đó thử lại.",
+    "pl": "Najpierw dołącz do społeczności, a następnie spróbuj ponownie.",
+    "ar": "انضم إلى المجتمع أولاً، ثم حاول مرة أخرى."
+   }
+  },
+  "group-granted\u0001\u0001Boost activated! Enjoy your x2 Calories.": {
+   "example": "",
+   "translations": {
+    "ru": "Усиление активировано! Наслаждайтесь своими x2 калориями.",
+    "es": "Impulso activado! Disfruta de tus x2 calorías.",
+    "pt": "Impulso ativado! Aproveite suas x2 calorias.",
+    "fr": "Boost activé ! Profitez de vos x2 Calories.",
+    "de": "Boost aktiviert! Genieße deine x2 Kalorien.",
+    "it": "Boost attivato! Goditi le tue x2 calorie.",
+    "ja": "ブーストが有効化されました！ 2倍のカロリーを楽しんでください。",
+    "ko": "부스트가 활성화되었습니다! x2 칼로리를 즐기세요.",
+    "zh-hans": "强化效果已激活！享受你的双倍卡路里吧！ ",
+    "zh-hant": "強化效果已啟用！享受雙倍的卡路里吧！",
+    "id": "Peningkatan diaktifkan! Nikmati x2 Kalori Anda.",
+    "th": "บูสต์เปิดใช้งานแล้ว! เพลิดเพลินไปกับแคลอรี่ x2 ของคุณ.",
+    "tr": "Takviye etkinleştirildi! x2 kalorilerin tadını çıkarın.",
+    "vi": "Boost đã được kích hoạt! Thưởng thức x2 Calo của bạn.",
+    "pl": "Wzmocnienie aktywowane! Ciesz się swoimi x2 kaloriami.",
+    "ar": "تم تفعيل التعزيز! استمتع بـ 2 أضعاف السعرات الحرارية."
+   }
+  },
+  "group-claimed\u0001\u0001Already claimed — thanks for the support!": {
+   "example": "",
+   "translations": {
+    "ru": "Уже получено - спасибо за поддержку!",
+    "es": "Ya reclamado - ¡gracias por el apoyo!",
+    "pt": "Já reivindicado - obrigado pelo apoio!",
+    "fr": "Déjà réclamé - merci pour le soutien !",
+    "de": "Bereits eingelöst - danke für die Unterstützung!",
+    "it": "Già rivendicato - grazie per il supporto!",
+    "ja": "すでに受け取り済みです。サポートありがとうございます！",
+    "ko": "이미 획득했습니다. 응원해 주셔서 감사합니다!",
+    "zh-hans": "已领取 - 感谢您的支持！",
+    "zh-hant": "已領取 - 謝謝您的支持！",
+    "id": "Sudah diklaim - terima kasih atas dukungannya!",
+    "th": "ได้รับแล้ว - ขอบคุณสำหรับการสนับสนุน!",
+    "tr": "Zaten alındı - destek için teşekkürler!",
+    "vi": "Đã nhận được - cảm ơn vì sự hỗ trợ!",
+    "pl": "Już odebrano - dziękujemy za wsparcie!",
+    "ar": "تم الاستلام بالفعل - شكرًا على الدعم!"
+   }
+  },
+  "group-unconfigured\u0001\u0001This reward isn't available right now.": {
+   "example": "",
+   "translations": {
+    "ru": "Эта награда сейчас недоступна.",
+    "es": "Esta recompensa no está disponible ahora mismo.",
+    "pt": "Esta recompensa não está disponível agora.",
+    "fr": "Cette récompense n'est pas disponible pour le moment.",
+    "de": "Diese Belohnung ist im Moment nicht verfügbar.",
+    "it": "Questa ricompensa non è disponibile al momento.",
+    "ja": "この報酬は現在利用できません。",
+    "ko": "이 보상은 현재 사용할 수 없습니다.",
+    "zh-hans": "该奖励目前不可用。",
+    "zh-hant": "這個獎勵目前無法領取。",
+    "id": "Hadiah ini tidak tersedia saat ini.",
+    "th": "รางวัลนี้ยังไม่พร้อมใช้งานในขณะนี้",
+    "tr": "Bu ödül şu anda mevcut değil.",
+    "vi": "Phần thưởng này hiện không có sẵn.",
+    "pl": "Ta nagroda nie jest teraz dostępna.",
+    "ar": "هذه المكافأة غير متاحة حاليًا."
+   }
+  },
+  "btn-free\u0001\u0001FREE": {
+   "example": "",
+   "translations": {
+    "ru": "Бесплатно",
+    "es": "GRATIS",
+    "pt": "GRÁTIS",
+    "fr": "GRATUIT",
+    "de": "KOSTENLOS",
+    "it": "GRATIS",
+    "ja": "無料",
+    "ko": "무료",
+    "zh-hans": "免费",
+    "zh-hant": "免費",
+    "id": "GRATIS",
+    "th": "ฟรี",
+    "tr": "ÜCRETSİZ",
+    "vi": "MIỄN PHÍ",
+    "pl": "DARMOWE",
+    "ar": "مجاني"
+   }
+  },
+  "btn-owned\u0001\u0001Owned": {
+   "example": "",
+   "translations": {
+    "ru": "Приобретено",
+    "es": "En propiedad",
+    "pt": "Possuído",
+    "fr": "Possédé",
+    "de": "In Besitz",
+    "it": "Posseduto",
+    "ja": "所有済み",
+    "ko": "보유 중",
+    "zh-hans": "已拥有",
+    "zh-hant": "已擁有",
+    "id": "Dimiliki",
+    "th": "มีแล้ว",
+    "tr": "Sahip Olunan",
+    "vi": "Sở hữu",
+    "pl": "Posiadany",
+    "ar": "مملوكة"
+   }
+  },
+  "price-robux\u0001\u0001R$ {n}": {
+   "example": "",
+   "translations": {
+    "ru": "R$ {n}",
+    "es": "R$ {n}",
+    "pt": "R$ {n}",
+    "fr": "R$ {n}",
+    "de": "R$ {n}",
+    "it": "R$ {n}",
+    "ja": "R$ {n}",
+    "ko": "R$ {n}",
+    "zh-hans": "R$ {n}",
+    "zh-hant": "R$ {n}",
+    "id": "R$ {n}",
+    "th": "R$ {n}",
+    "tr": "R$ {n}",
+    "vi": "R$ {n}",
+    "pl": "R$ {n}",
+    "ar": "ر$ {n}"
+   }
+  },
+  "price-robux-short\u0001\u0001{n}": {
+   "example": "",
+   "translations": {
+    "ru": "{n}",
+    "es": "{n}",
+    "pt": "{n}",
+    "fr": "{n}",
+    "de": "{n}",
+    "it": "{n}",
+    "ja": "{n}",
+    "ko": "{n}",
+    "zh-hans": "{n}",
+    "zh-hant": "{n}",
+    "id": "{n}",
+    "th": "{n}",
+    "tr": "{n}",
+    "vi": "{n}",
+    "pl": "{n}",
+    "ar": "{n}"
+   }
+  },
+  "price-gems-short\u0001\u0001{n}": {
+   "example": "",
+   "translations": {
+    "ru": "{n}",
+    "es": "{n}",
+    "pt": "{n}",
+    "fr": "{n}",
+    "de": "{n}",
+    "it": "{n}",
+    "ja": "{n}",
+    "ko": "{n}",
+    "zh-hans": "{n}",
+    "zh-hant": "{n}",
+    "id": "{n}",
+    "th": "{n}",
+    "tr": "{n}",
+    "vi": "{n}",
+    "pl": "{n}",
+    "ar": "{n}"
+   }
+  },
+  "placeholder-code\u0001\u0001Enter code...": {
+   "example": "",
+   "translations": {
+    "ru": "Введите код...",
+    "es": "Introduzca el código...",
+    "pt": "Insira o código...",
+    "fr": "Entrez le code...",
+    "de": "Code eingeben...",
+    "it": "Inserisci il codice...",
+    "ja": "コードを入力...",
+    "ko": "코드를 입력하세요...",
+    "zh-hans": "输入代码...",
+    "zh-hant": "輸入代碼...",
+    "id": "Masukkan kode...",
+    "th": "ใส่โค้ด...",
+    "tr": "Kodu girin...",
+    "vi": "Nhập mã...",
+    "pl": "Wpisz kod...",
+    "ar": "ادخل الرمز..."
+   }
+  },
+  "btn-redeem\u0001\u0001Redeem": {
+   "example": "",
+   "translations": {
+    "ru": "Активировать",
+    "es": "Canjear ",
+    "pt": "Resgatar ",
+    "fr": "Échanger",
+    "de": "Einlösen",
+    "it": "Riscatta",
+    "ja": "引き換える",
+    "ko": "교환",
+    "zh-hans": "兑换",
+    "zh-hant": "兌換",
+    "id": "Tukarkan",
+    "th": "แลก",
+    "tr": "Kullan",
+    "vi": "Nhập mã",
+    "pl": "Odbierz",
+    "ar": "استرداد "
+   }
+  },
+  "status-code-ok\u0001\u0001Code redeemed!": {
+   "example": "",
+   "translations": {
+    "ru": "Код активирован!",
+    "es": "Código canjeado!",
+    "pt": "Código resgatado!",
+    "fr": "Code utilisé !",
+    "de": "Code eingelöst!",
+    "it": "Codice riscattato!",
+    "ja": "コードを引き換えました！",
+    "ko": "코드를 사용했습니다!",
+    "zh-hans": "兑换码已兑换！",
+    "zh-hant": "代碼已兌換！",
+    "id": "Kode telah digunakan!",
+    "th": "แลกโค้ดแล้ว!",
+    "tr": "Kod kullanıldı!",
+    "vi": "Mã đã được sử dụng!",
+    "pl": "Kod został wykorzystany!",
+    "ar": "تم استرداد الرمز!"
+   }
+  },
+  "status-code-ok-gold\u0001\u0001Code redeemed! +{n} Gold": {
+   "example": "",
+   "translations": {
+    "ru": "Код активирован! +{n} золота ",
+    "es": "Código canjeado! +{n} Oro ",
+    "pt": "Código resgatado! +{n} Ouro",
+    "fr": "Code utilisé ! +{n} Or",
+    "de": "Code eingelöst! +{n} Gold ",
+    "it": "Codice riscattato! +{n} Oro ",
+    "ja": "コードを引き換えました！+{n} ゴールド",
+    "ko": "코드 교환 완료! +{n} 골드",
+    "zh-hans": "兑换码已兑换！+{n} 金币 ",
+    "zh-hant": "代碼已兌換！+{n} 黃金",
+    "id": "Kode ditebus! +{n} Emas ",
+    "th": "แลกโค้ดแล้ว! +{n} ทอง ",
+    "tr": "Kod kullanıldı! +{n} Altın",
+    "vi": "Mã đã được sử dụng! +{n} Gold",
+    "pl": "Kod wykorzystany! +{n} Złota",
+    "ar": "تم استرداد الرمز! +{n} من الذهب "
+   }
+  },
+  "status-code-invalid\u0001\u0001Invalid code": {
+   "example": "",
+   "translations": {
+    "ru": "Неверный код",
+    "es": "Código no válido",
+    "pt": "Código inválido",
+    "fr": "Code non valide.",
+    "de": "Ungültiger Code",
+    "it": "Codice non valido",
+    "ja": "無効なコード",
+    "ko": "유효하지 않은 코드입니다",
+    "zh-hans": "无效代码",
+    "zh-hant": "無效代碼",
+    "id": "Kode tidak valid",
+    "th": "รหัสไม่ถูกต้อง",
+    "tr": "Geçersiz kod",
+    "vi": "Mã không hợp lệ",
+    "pl": "Niepoprawny kod",
+    "ar": "رمز غير صالح"
+   }
+  },
+  "status-code-expired\u0001\u0001This code has expired": {
+   "example": "",
+   "translations": {
+    "ru": "Время действия кода истекло",
+    "es": "Código expirado ",
+    "pt": "Este código expirou",
+    "fr": "Ce code a expiré",
+    "de": "Dieser Code ist abgelaufen",
+    "it": "Codice scaduto",
+    "ja": "このコードは期限切れです",
+    "ko": "이 코드는 만료되었습니다",
+    "zh-hans": "该兑换码已过期",
+    "zh-hant": "此代碼已過期",
+    "id": "Kode ini sudah kedaluwarsa ",
+    "th": "รหัสนี้หมดอายุแล้ว",
+    "tr": "Bu kodun süresi doldu",
+    "vi": "Mã này đã hết hạn",
+    "pl": "Ten kod wygasł",
+    "ar": "لقد انتهت صلاحية هذا الرمز."
+   }
+  },
+  "status-code-already\u0001\u0001Already redeemed": {
+   "example": "",
+   "translations": {
+    "ru": "Уже активирован",
+    "es": "Ya canjeado",
+    "pt": "Já resgatado",
+    "fr": "Déjà utilisé",
+    "de": "Bereits eingelöst",
+    "it": "Già riscattato",
+    "ja": "すでに利用済みです",
+    "ko": "이미 사용함",
+    "zh-hans": "已兑换",
+    "zh-hant": "已兌換",
+    "id": "Sudah ditebus",
+    "th": "แลกแล้ว",
+    "tr": "Zaten kullanılmış",
+    "vi": "Đã nhận",
+    "pl": "Już wykorzystane",
+    "ar": "تم استرداده بالفعل"
+   }
+  },
+  "status-code-cooldown\u0001\u0001Please wait a moment...": {
+   "example": "",
+   "translations": {
+    "ru": "Пожалуйста, подождите...",
+    "es": "Por favor, espera un momento...",
+    "pt": "Por favor, espere um momento...",
+    "fr": "Veuillez patienter...",
+    "de": "Bitte warte einen Moment ...",
+    "it": "Si prega di attendere un momento...",
+    "ja": "少々お待ちください…",
+    "ko": "잠시만 기다려 주세요...",
+    "zh-hans": "请稍等一下...",
+    "zh-hant": "請稍候一下...",
+    "id": "Harap tunggu sebentar...",
+    "th": "กรุณารอสักครู่...",
+    "tr": "Lütfen bir dakika bekleyin...",
+    "vi": "Vui lòng chờ một chút...",
+    "pl": "Proszę czekać...",
+    "ar": "يرجى الانتظار لبعض الوقت..."
+   }
+  },
+  "tutorial-title\u0001\u0001THE CHALLENGE": {
+   "example": "",
+   "translations": {
+    "ru": "Вызов",
+    "es": "EL DESAFÍO",
+    "pt": "O DESAFIO",
+    "fr": "LE DÉFI",
+    "de": "DIE CHALLENGE",
+    "it": "LA SFIDA",
+    "ja": "挑戦",
+    "ko": "챌린지",
+    "zh-hans": "挑战",
+    "zh-hant": "挑戰",
+    "id": "TANTANGAN",
+    "th": "ชาเลนจ์",
+    "tr": "ZORLUK",
+    "vi": "THỬ THÁCH",
+    "pl": "WYZWANIE",
+    "ar": "التحدي"
+   }
+  },
+  "tutorial-skip\u0001\u0001LET'S GO!": {
+   "example": "",
+   "translations": {
+    "ru": "Поехали!",
+    "es": "¡VAMOS!",
+    "pt": "VAMOS LÁ!",
+    "fr": "ALLONS-Y !",
+    "de": "LOS GEHT'S!",
+    "it": "ANDIAMO!",
+    "ja": "行こう！",
+    "ko": "갑시다!",
+    "zh-hans": "出发吧！",
+    "zh-hant": "來吧！",
+    "id": "AYO PERGI!",
+    "th": "มาลุยกันเลย!",
+    "tr": "BAŞLAYALIM!",
+    "vi": "HÃY BẮT ĐẦU NÀO!",
+    "pl": "RUSZAJMY!",
+    "ar": "دعونا نذهب!"
+   }
+  },
+  "tutorial-eat-title\u0001\u0001EAT THE CAKE!": {
+   "example": "",
+   "translations": {
+    "ru": "Съешьте торт!",
+    "es": "¡COME EL PASTEL!",
+    "pt": "COMA O BOLO!",
+    "fr": "MANGEZ LE GÂTEAU !",
+    "de": "Iss den Kuchen!",
+    "it": "MANGIA LA TORTA!",
+    "ja": "ケーキを食べよう！",
+    "ko": "케이크를 먹어라!",
+    "zh-hans": "吃蛋糕！",
+    "zh-hant": "吃蛋糕吧！",
+    "id": "MAKAN KUE!",
+    "th": "กินเค้ก!",
+    "tr": "Keki yiyin!",
+    "vi": "ĂN BÁNH!",
+    "pl": "Zjedz ciasto!",
+    "ar": "تناول الكيك!"
+   }
+  },
+  "tutorial-eat-body-pc\u0001\u0001Hold the LEFT MOUSE BUTTON to eat what's in front of you.": {
+   "example": "",
+   "translations": {
+    "ru": "Удерживайте левую кнопку мыши, чтобы съесть то, что перед вами.",
+    "es": "Mantén presionado el botón izquierdo del ratón para comer lo que hay frente a ti.",
+    "pt": "Segure o botão esquerdo do mouse para comer o que está na sua frente.",
+    "fr": "Maintenez le bouton gauche de la souris pour manger ce qui se trouve devant vous.",
+    "de": "Halte die linke Maustaste gedrückt, um das zu essen, was vor dir liegt.",
+    "it": "Tieni premuto il pulsante sinistro del mouse per mangiare ciò che hai davanti.",
+    "ja": "マウスの左ボタンを押したままにすると、目の前にあるものを食べることができます。",
+    "ko": "마우스의 왼쪽 버튼을 눌러 눈앞에 있는 물건을 먹으세요.",
+    "zh-hans": "按住鼠标左键，以吃掉你面前的食物。",
+    "zh-hant": "按住滑鼠左鍵，以吃掉你面前的東西。",
+    "id": "Tahan TOMBOL MOUSE KIRI untuk memakan apa yang ada di depan Anda.",
+    "th": "กดปุ่มเมาส์ซ้ายค้างเพื่อกินสิ่งที่อยู่ตรงหน้าคุณ",
+    "tr": "Önünüzdeki şeyleri yemek için sol fare düğmesini basılı tutun.",
+    "vi": "Giữ nút chuột trái để ăn thứ trước mặt bạn.",
+    "pl": "Przytrzymaj lewy przycisk myszy, aby zjeść to, co jest przed tobą.",
+    "ar": "اضغط على زر الماوس الأيسر لتناول ما أمامك."
+   }
+  },
+  "tutorial-eat-body-touch\u0001\u0001Hold the pink EAT button to eat what's in front of you.": {
+   "example": "",
+   "translations": {
+    "ru": "Удерживайте розовую кнопку «Есть», чтобы съесть то, что перед вами.",
+    "es": "Mantén presionado el botón EAT rosa para comer lo que hay frente a ti.",
+    "pt": "Segure o botão EAT rosa para comer o que está na sua frente.",
+    "fr": "Maintenez le bouton EAT rose pour manger ce qui se trouve devant vous.",
+    "de": "Halte den rosa EAT-Button gedrückt, um das zu essen, was vor dir liegt.",
+    "it": "Tieni premuto il pulsante EAT rosa per mangiare ciò che hai davanti.",
+    "ja": "ピンクのEATボタンを長押しすると、目の前にあるものを食べることができます。",
+    "ko": "분홍색 EAT 버튼을 눌러 눈앞에 있는 음식을 먹으세요.",
+    "zh-hans": "按住粉色的进食按钮，吃掉你面前的食物。",
+    "zh-hant": "按住粉紅色的「吃」按鈕，即可吃掉眼前的東西。",
+    "id": "Tahan tombol EAT merah muda untuk memakan apa yang ada di depan Anda.",
+    "th": "กดปุ่ม EAT สีชมพูค้างเพื่อกินสิ่งที่อยู่ตรงหน้าคุณ",
+    "tr": "Önünüzdeki şeyi yemek için pembe YEMEK düğmesini basılı tutun.",
+    "vi": "Giữ nút EAT màu hồng để ăn thứ có trước mặt bạn.",
+    "pl": "Przytrzymaj różowy przycisk JEDZ, aby zjeść to, co jest przed tobą.",
+    "ar": "اضغط على زر الأكل الوردي لتناول ما أمامك."
+   }
+  },
+  "tutorial-eat-ok\u0001\u0001GOT IT!": {
+   "example": "",
+   "translations": {
+    "ru": "ПОНЯЛ!",
+    "es": "¡ENTIENDO!",
+    "pt": "ENTENDEU!",
+    "fr": "J'AI COMPRIS !",
+    "de": "VERSTANDEN!",
+    "it": "HO CAPITO!",
+    "ja": "わかった！",
+    "ko": "알겠어요!",
+    "zh-hans": "明白了！ ",
+    "zh-hant": "知道了！",
+    "id": "MENGERTI!",
+    "th": "รับทราบ!",
+    "tr": "ANLADIM!",
+    "vi": "HIỂU RỒI!",
+    "pl": "ROZUMIEM!",
+    "ar": "فهمت!"
+   }
+  },
+  "tutorial-arrow-upgrades\u0001\u0001UPGRADES": {
+   "example": "",
+   "translations": {
+    "ru": "Улучшения",
+    "es": "MEJORAS ",
+    "pt": "MELHORIAS ",
+    "fr": "AMÉLIORATIONS",
+    "de": "VERBESSERUNGEN",
+    "it": "MIGLIORAMENTI",
+    "ja": "アップグレード",
+    "ko": "업그레이드",
+    "zh-hans": "升级 ",
+    "zh-hant": "升級",
+    "id": "PENINGKATAN",
+    "th": "อัพเกรด",
+    "tr": "YÜKSELTMELER",
+    "vi": "NÂNG CẤP",
+    "pl": "ULEPSZENIA",
+    "ar": "الترقيات "
+   }
+  },
+  "toast-claimed\u0001\u0001Claimed!": {
+   "example": "",
+   "translations": {
+    "ru": "Получено!",
+    "es": "¡Reclamado!",
+    "pt": "Resgatado!",
+    "fr": "Réclamé !",
+    "de": "Eingelöst!",
+    "it": "Reclamato!",
+    "ja": "受け取り済み！",
+    "ko": "획득됨!",
+    "zh-hans": "已领取！",
+    "zh-hant": "已領取！",
+    "id": "Terklaim!",
+    "th": "รับแล้ว!",
+    "tr": "Alındı!",
+    "vi": "Đã nhận!",
+    "pl": "Odebrano!",
+    "ar": "تم الاستلام!"
+   }
+  },
+  "toast-claimed-gold\u0001\u0001+{n} Gold!": {
+   "example": "",
+   "translations": {
+    "ru": "+{n} золота!",
+    "es": "+{n} Oro!",
+    "pt": "+{n} Ouro!",
+    "fr": "+{n} d'or !",
+    "de": "+{n} Gold!",
+    "it": "+{n} Oro!",
+    "ja": "+{n} ゴールド！",
+    "ko": "+{n} 골드!",
+    "zh-hans": "+{n} 金币！",
+    "zh-hant": "+{n} 黃金！",
+    "id": "+{n} Emas!",
+    "th": "+{n} ทอง!",
+    "tr": "+{n} Altın!",
+    "vi": "+{n} Vàng!",
+    "pl": "+{n} Złota!",
+    "ar": "+{n} من الذهب!"
+   }
+  },
+  "\u0001\u0001Burn it off!": {
+   "example": "World ProximityPrompt at the checkpoint gym: the action that burns off belly fat (MapService)",
+   "translations": {
+    "ru": "Сожги его!",
+    "es": "¡Quémalo!",
+    "pt": "Queime-o!",
+    "fr": "Brûlez-le !",
+    "de": "Verbrenne es!",
+    "it": "Brucialo!",
+    "ja": "燃やしてしまおう！",
+    "ko": "태워버려!",
+    "zh-hans": "把它烧掉！",
+    "zh-hant": "把它燒掉！",
+    "id": "Bakar habis!",
+    "th": "เผามันออก!",
+    "tr": "Onu yak!",
+    "vi": "Đốt cháy nó!",
+    "pl": "Spal to!",
+    "ar": "قم بحرقها!"
+   }
+  },
+  "\u0001\u0001Gym": {
+   "example": "World ProximityPrompt object name for the gym machine at the checkpoint (MapService)",
+   "translations": {
+    "ru": "Спортзал",
+    "es": "Gimnasio ",
+    "pt": "Academia",
+    "fr": "Salle de gym",
+    "de": "Fitnessstudio ",
+    "it": "Palestra ",
+    "ja": "ジム",
+    "ko": "헬스장",
+    "zh-hans": "健身房 ",
+    "zh-hant": "健身房",
+    "id": "Gimnasium",
+    "th": "ยิม",
+    "tr": "Spor Salonu",
+    "vi": "Phòng tập gym ",
+    "pl": "Siłownia",
+    "ar": "الصالة الرياضية"
+   }
+  },
+  "\u0001\u0001Upgrades": {
+   "example": "World ProximityPrompt action at the checkpoint upgrade computer — opens the upgrade tree (MapService)",
+   "translations": {
+    "ru": "Улучшения",
+    "es": "Mejoras ",
+    "pt": "Melhorias ",
+    "fr": "Améliorations",
+    "de": "Verbesserungen",
+    "it": "Miglioramenti",
+    "ja": "アップグレード",
+    "ko": "강화",
+    "zh-hans": "升级",
+    "zh-hant": "升級",
+    "id": "Peningkatan ",
+    "th": "อัพเกรด",
+    "tr": "Yükseltmeler",
+    "vi": "Nâng cấp",
+    "pl": "Ulepszenia",
+    "ar": "الترقيات "
+   }
+  },
+  "\u0001\u0001Upgrade Station": {
+   "example": "World ProximityPrompt object name for the upgrade computer at the checkpoint (MapService)",
+   "translations": {
+    "ru": "Станция улучшения ",
+    "es": "Estación de Mejora ",
+    "pt": "Estação de Melhorias ",
+    "fr": "Station de mise à niveau",
+    "de": "Aufwertungsstation",
+    "it": "Stazione di Potenziamento",
+    "ja": "アップグレードステーション",
+    "ko": "업그레이드 스테이션",
+    "zh-hans": "升级站",
+    "zh-hant": "升級站",
+    "id": "Stasiun Upgrade",
+    "th": "สถานีอัพเกรด",
+    "tr": "Yükseltme İstasyonu",
+    "vi": "Trạm Nâng Cấp",
+    "pl": "Stacja Ulepszeń ",
+    "ar": "محطة الترقية"
+   }
+  },
+  "\u0001\u0001Eat this layer": {
+   "example": "World ProximityPrompt action on the paid platform that clears a whole cake layer at once (MapService)",
+   "translations": {
+    "ru": "Съесть этот слой",
+    "es": "Come esta capa",
+    "pt": "Coma esta camada",
+    "fr": "Mangez cette couche",
+    "de": "Iss diese Schicht",
+    "it": "Mangia questo strato",
+    "ja": "この層を食べる",
+    "ko": "이 층을 먹어라",
+    "zh-hans": "吃掉这层",
+    "zh-hant": "吃這一層",
+    "id": "Makan lapisan ini",
+    "th": "กินชั้นนี้",
+    "tr": "Bu katmanı yiyin",
+    "vi": "Ăn lớp này",
+    "pl": "Zjedz tę warstwę",
+    "ar": "تناول هذه الطبقة"
+   }
+  },
+  "\u0001\u0001Layer Eater": {
+   "example": "World ProximityPrompt object name for the paid layer-clearing platform; also a shop product (MapService)",
+   "translations": {
+    "ru": "Поедатель слоёв",
+    "es": "Comedor de capas",
+    "pt": "Comedor de Camadas",
+    "fr": "Mangeur de couches",
+    "de": "Schichtfresser ",
+    "it": "Mangiatore di strati",
+    "ja": "レイヤーイーター",
+    "ko": "레이어 먹기",
+    "zh-hans": "层级吞噬者 ",
+    "zh-hant": "層級吞噬者",
+    "id": "Pemakan Lapisan ",
+    "th": "ผู้กินชั้น ",
+    "tr": "Katman Yiyici",
+    "vi": "Kẻ ăn lớp",
+    "pl": "Pożeracz warstw",
+    "ar": "آكل الطبقات "
+   }
+  },
+  "\u0001\u0001Waiting Players...": {
+   "example": "Lobby matchmaking pad sign: nobody has stepped on the pad yet (MatchConfig.queue.statuses)",
+   "translations": {
+    "ru": "Ожидание игроков...",
+    "es": "Esperando Jugadores...",
+    "pt": "Esperando Jogadores...",
+    "fr": "Joueurs en attente...",
+    "de": "Wartende Spieler...",
+    "it": "Giocatori in attesa...",
+    "ja": "プレイヤーを待っています...",
+    "ko": "대기 중인 플레이어...",
+    "zh-hans": "等待玩家中...",
+    "zh-hant": "等待玩家中...",
+    "id": "Menunggu Pemain...",
+    "th": "กำลังรอผู้เล่น...",
+    "tr": "Bekleyen Oyuncular...",
+    "vi": "Đang chờ người chơi...",
+    "pl": "Oczekujący gracze...",
+    "ar": "في انتظار اللاعبين..."
+   }
+  },
+  "\u0001\u0001Choose Game Mode": {
+   "example": "Lobby matchmaking pad sign: a player is on the pad and is picking difficulty and party size",
+   "translations": {
+    "ru": "Выберите режим игры",
+    "es": "Elegir modo de juego",
+    "pt": "Escolha o Modo de Jogo",
+    "fr": "Choisir le mode de jeu",
+    "de": "Wähle den Spielmodus",
+    "it": "Scegli modalità di gioco",
+    "ja": "ゲームモードを選ぶ",
+    "ko": "게임 모드 선택",
+    "zh-hans": "选择游戏模式",
+    "zh-hant": "選擇遊戲模式",
+    "id": "Pilih Mode Game",
+    "th": "เลือกโหมดเกม",
+    "tr": "Oyun Modunu Seçin",
+    "vi": "Chọn chế độ chơi",
+    "pl": "Wybierz tryb gry",
+    "ar": "اختر وضع اللعبة"
+   }
+  },
+  "\u0001\u0001Teleporting...": {
+   "example": "Lobby matchmaking pad sign: the match is starting and players are being sent to the game place",
+   "translations": {
+    "ru": "Телепортация...",
+    "es": "Teletransportando...",
+    "pt": "Teleportando...",
+    "fr": "Téléportation...",
+    "de": "Teleportiert...",
+    "it": "Teletrasporto...",
+    "ja": "テレポート中...",
+    "ko": "텔레포트 중...",
+    "zh-hans": "传送中……",
+    "zh-hant": "正在傳送中...",
+    "id": "Teleportasi...",
+    "th": "กำลังเทเลพอร์ต...",
+    "tr": "Teleport ediliyor...",
+    "vi": "Dịch chuyển...",
+    "pl": "Teleportowanie...",
+    "ar": "يتم الانتقال..."
+   }
+  },
+  "\u0001\u0001Try Again": {
+   "example": "Lobby matchmaking pad sign: the teleport failed and the pad is ready for another attempt",
+   "translations": {
+    "ru": "Попробуй еще раз",
+    "es": "Intentar de nuevo",
+    "pt": "Tente novamente",
+    "fr": "Réessayer",
+    "de": "Erneut versuchen",
+    "it": "Riprova",
+    "ja": "もう一度挑戦する",
+    "ko": "다시 시도하세요",
+    "zh-hans": "再试一次",
+    "zh-hant": "再試一次",
+    "id": "Coba Lagi",
+    "th": "ลองอีกครั้ง",
+    "tr": "Tekrar Deneyin",
+    "vi": "Thử lại",
+    "pl": "Spróbuj ponownie",
+    "ar": "حاول مرة أخرى"
+   }
+  },
+  "\u0001\u0001Easy": {
+   "example": "Difficulty name on the lobby matchmaking pad sign (easiest of Easy/Medium/Hard)",
+   "translations": {
+    "ru": "Легко",
+    "es": "Fácil",
+    "pt": "Fácil",
+    "fr": "Facile",
+    "de": "Einfach",
+    "it": "Facile",
+    "ja": "簡単",
+    "ko": "쉬운",
+    "zh-hans": "简单",
+    "zh-hant": "簡單",
+    "id": "Mudah",
+    "th": "ง่าย",
+    "tr": "Kolay",
+    "vi": "Dễ",
+    "pl": "Łatwy",
+    "ar": "سهل"
+   }
+  },
+  "\u0001\u0001Medium": {
+   "example": "Difficulty name on the lobby matchmaking pad sign (middle of Easy/Medium/Hard)",
+   "translations": {
+    "ru": "Средний",
+    "es": "Medio",
+    "pt": "Médio",
+    "fr": "Moyen",
+    "de": "Mittel",
+    "it": "Medio",
+    "ja": "ミディアム",
+    "ko": "중간",
+    "zh-hans": "中等",
+    "zh-hant": "中等",
+    "id": "Medium",
+    "th": "ปานกลาง",
+    "tr": "Orta",
+    "vi": "Trung bình",
+    "pl": "Średni",
+    "ar": "متوسط"
+   }
+  },
+  "\u0001\u0001Hard": {
+   "example": "Difficulty name on the lobby matchmaking pad sign (hardest of Easy/Medium/Hard)",
+   "translations": {
+    "ru": "Сложно",
+    "es": "Difícil",
+    "pt": "Difícil",
+    "fr": "Difficile",
+    "de": "Schwer",
+    "it": "Difficile",
+    "ja": "ハード",
+    "ko": "어려움",
+    "zh-hans": "困难",
+    "zh-hant": "難的",
+    "id": "Sulit",
+    "th": "ยาก",
+    "tr": "Zor",
+    "vi": "Khó",
+    "pl": "Trudny",
+    "ar": "صعب"
+   }
+  },
+  "\u0001\u0001You are not in a queue.": {
+   "example": "Matchmaking error: the player acted on a match they had already left",
+   "translations": {
+    "ru": "Вы не в очереди.",
+    "es": "No estás en una cola.",
+    "pt": "Você não está em uma fila.",
+    "fr": "Vous n'êtes pas dans une file d'attente.",
+    "de": "Du befindest dich nicht in einer Warteschlange.",
+    "it": "Non sei in una coda.",
+    "ja": "キューに入っていません。",
+    "ko": "당신은 대기열에 있지 않습니다.",
+    "zh-hans": "你不在队列中。",
+    "zh-hant": "你不在排隊中。",
+    "id": "Anda tidak berada dalam antrian.",
+    "th": "คุณไม่อยู่ในคิว",
+    "tr": "Bir kuyrukta değilsin.",
+    "vi": "Bạn không ở trong hàng đợi.",
+    "pl": "Nie jesteś w kolejce.",
+    "ar": "أنت لست في قائمة الانتظار."
+   }
+  },
+  "\u0001\u0001Only the queue leader can use this selection.": {
+   "example": "Matchmaking error: only the first player on the pad may change the match settings",
+   "translations": {
+    "ru": "Только лидер очереди может использовать этот выбор.",
+    "es": "Solo el líder de la cola puede usar esta selección.",
+    "pt": "Apenas o líder da fila pode usar esta seleção.",
+    "fr": "Seul le leader de file d'attente peut utiliser cette sélection.",
+    "de": "Nur der Warteschlangenleiter kann diese Auswahl verwenden.",
+    "it": "Solo il leader della coda può utilizzare questa selezione.",
+    "ja": "この選択は、キューのリーダーだけが使用できます。",
+    "ko": "이 선택은 큐의 리더만 할 수 있습니다.",
+    "zh-hans": "只有队列队长才能使用此选择。",
+    "zh-hant": "只有隊列隊長才能使用這個選項。",
+    "id": "Hanya pemimpin antrian yang dapat menggunakan pilihan ini.",
+    "th": "เฉพาะผู้นำคิวเท่านั้นที่สามารถใช้การเลือกนี้ได้",
+    "tr": "Sadece kuyruk lideri bu seçimi kullanabilir.",
+    "vi": "Chỉ thủ lĩnh hàng đợi mới có thể sử dụng lựa chọn này.",
+    "pl": "Tylko lider kolejki może użyć tego wyboru.",
+    "ar": "فقط قائد الطابور يمكنه استخدام هذا الاختيار."
+   }
+  },
+  "\u0001\u0001This queue selection expired. Step off and re-enter.": {
+   "example": "Matchmaking error: the match session timed out; the player must step off the pad and back on",
+   "translations": {
+    "ru": "Время действия очереди истекло. Выйдите и войдите снова.",
+    "es": "Esta selección de cola ha expirado. Sal y vuelve a entrar.",
+    "pt": "Esta seleção de fila expirou. Saia e volte a entrar.",
+    "fr": "Cette sélection de file d'attente a expiré. Descendez et entrez à nouveau.",
+    "de": "Diese Warteschlangenauswahl ist abgelaufen. Steig aus und tritt erneut ein.",
+    "it": "La selezione della coda è scaduta. Esci e rientra.",
+    "ja": "このキューの選択は期限切れです。降りてから再入力してください。",
+    "ko": "이 큐 선택은 만료되었습니다. 나가 다시 입장하세요.",
+    "zh-hans": "此队列选择已过期。请离开并重新进入。 ",
+    "zh-hant": "此隊列選擇已過期。請離開並重新進入。",
+    "id": "Pemilihan antrian ini telah kedaluwarsa. Keluar dan masuk kembali.",
+    "th": "การเลือกคิวนี้หมดอายุแล้ว ออกไปแล้วกลับเข้าใหม่อีกครั้ง",
+    "tr": "Bu kuyruk seçimi sona erdi. Adım atlayın ve yeniden girin.",
+    "vi": "Lựa chọn hàng đợi này đã hết hại. Hãy rời khỏi và vào lại.",
+    "pl": "Ten wybór kolejki wygasł. Wysiądź i wejdź ponownie.",
+    "ar": "لقد انتهت صلاحية اختيار الطابور. انزل وادخل مرة أخرى."
+   }
+  },
+  "\u0001\u0001Invalid queue request.": {
+   "example": "Matchmaking error: the request to join or configure a match was malformed",
+   "translations": {
+    "ru": "Неверный запрос очереди.",
+    "es": "Solicitud de cola no válida.",
+    "pt": "Solicitação de fila inválida.",
+    "fr": "Demande de file d'attente non valide.",
+    "de": "Ungültige Warteschlangenanfrage.",
+    "it": "Richiesta di coda non valida.",
+    "ja": "無効なキューリクエストです。",
+    "ko": "잘못된 큐 요청입니다.",
+    "zh-hans": "无效的队列请求。",
+    "zh-hant": "無效的隊列請求。",
+    "id": "Permintaan antrian yang tidak valid.",
+    "th": "คำขอคิวไม่ถูกต้อง",
+    "tr": "Geçersiz kuyruk isteği.",
+    "vi": "Yêu cầu hàng đợi không hợp lệ.",
+    "pl": "Nieprawidłowa prośba o kolejkę.",
+    "ar": "طلب الطابور غير صالح."
+   }
+  },
+  "\u0001\u0001Invalid queue selection.": {
+   "example": "Matchmaking error: the chosen match session is not valid",
+   "translations": {
+    "ru": "Неверный выбор очереди.",
+    "es": "Selección de cola no válida.",
+    "pt": "Seleção de fila inválida.",
+    "fr": "Sélection de file d'attente non valide.",
+    "de": "Ungültige Warteschlangenauswahl.",
+    "it": "Selezione della coda non valida.",
+    "ja": "無効なキュー選択です。",
+    "ko": "잘못된 큐 선택입니다.",
+    "zh-hans": "无效的队列选择。",
+    "zh-hant": "無效的隊列選擇。",
+    "id": "Pemilihan antrian yang tidak valid.",
+    "th": "การเลือกคิวไม่ถูกต้อง",
+    "tr": "Geçersiz kuyruk seçimi.",
+    "vi": "Lựa chọn hàng đợi không hợp lệ.",
+    "pl": "Nieprawidłowy wybór kolejki.",
+    "ar": "اختيار الطابور غير صالح."
+   }
+  },
+  "\u0001\u0001Invalid leave request.": {
+   "example": "Matchmaking error: the request to leave the match queue was malformed",
+   "translations": {
+    "ru": "Неверный запрос на выход.",
+    "es": "Solicitud de salida no válida.",
+    "pt": "Solicitação de saída inválida.",
+    "fr": "Demande de départ non valide.",
+    "de": "Ungültige Abwesenheitsanfrage.",
+    "it": "Richiesta di uscita non valida.",
+    "ja": "無効な退出リクエストです。",
+    "ko": "유효하지 않은 퇴장 요청입니다.",
+    "zh-hans": "无效的离开请求。",
+    "zh-hant": "無效的離開請求。",
+    "id": "Permintaan cuti yang tidak valid.",
+    "th": "คำขอออกไม่ถูกต้อง",
+    "tr": "Geçersiz ayrılma isteği.",
+    "vi": "Yêu cầu rời không hợp lệ.",
+    "pl": "Nieprawidłowa prośba o opuszczenie.",
+    "ar": "طلب المغادرة غير صالح."
+   }
+  },
+  "\u0001\u0001This queue is teleporting.": {
+   "example": "Matchmaking error: the player cannot leave because the match is already sending everyone to the game",
+   "translations": {
+    "ru": "Эта очередь телепортируется.",
+    "es": "Esta cola se está teletransportando.",
+    "pt": "Esta fila está sendo teleportada.",
+    "fr": "Cette file d'attente se téléporte.",
+    "de": "Diese Warteschlange wird teleportiert.",
+    "it": "Questa coda si sta teletrasportando.",
+    "ja": "このキューはテレポートしています。",
+    "ko": "이 큐는 순간이동 중입니다.",
+    "zh-hans": "这个队列正在传送中。",
+    "zh-hant": "這個隊列正在傳送中。",
+    "id": "Antrian ini sedang berteleportasi.",
+    "th": "คิวนี้กำลังเทเลพอร์ตอยู่.",
+    "tr": "Bu kuyruk teleport ediliyor.",
+    "vi": "Hàng đợi này đang dịch chuyển.",
+    "pl": "Ta kolejka jest teleportowana.",
+    "ar": ": يتم نقل هذه الطابورة. "
+   }
+  },
+  "\u0001\u0001Unknown queue action.": {
+   "example": "Matchmaking error: the client asked for a match action the server does not recognise",
+   "translations": {
+    "ru": "Неизвестное действие очереди.",
+    "es": "Acción de cola desconocida.",
+    "pt": "Ação de fila desconhecida.",
+    "fr": "Action de queue inconnue.",
+    "de": "Unbekannte Warteschlangen-Aktion.",
+    "it": "Azione di coda sconosciuta.",
+    "ja": "不明なキューアクションです。",
+    "ko": "알 수 없는 큐 동작입니다.",
+    "zh-hans": "未知的队列操作。",
+    "zh-hant": "未知的排隊動作。",
+    "id": "Aksi antrian yang tidak diketahui.",
+    "th": "ไม่ทราบการดำเนินการคิว ",
+    "tr": "Bilinmeyen kuyruk eylemi.",
+    "vi": "Không biết hành động hàng đợi là gì.",
+    "pl": "Nieznana akcja kolejki.",
+    "ar": "إجراء الطابور غير معروف."
+   }
+  },
+  "\u0001\u0001Choose a valid difficulty.": {
+   "example": "Matchmaking error: the selected difficulty is not one of Easy, Medium or Hard",
+   "translations": {
+    "ru": "Выберите действительную сложность.",
+    "es": "Elige una dificultad válida.",
+    "pt": "Escolha uma dificuldade válida.",
+    "fr": "Choisissez une difficulté valide.",
+    "de": "Wähle eine gültige Schwierigkeit.",
+    "it": "Scegli una difficoltà valida.",
+    "ja": "有効な難易度を選択してください。",
+    "ko": "유효한 난이도를 선택하세요.",
+    "zh-hans": "选择一个有效的难度。 ",
+    "zh-hant": "選擇一個有效的難度。",
+    "id": "Pilih kesulitan yang valid.",
+    "th": "เลือกความยากที่ถูกต้อง",
+    "tr": "Geçerli bir zorluk seçin.",
+    "vi": "Chọn một độ khó hợp lệ.",
+    "pl": "Wybierz poprawną trudność.",
+    "ar": "اختر صعوبة صالحة."
+   }
+  },
+  "\u0001\u0001Choose a valid player count.": {
+   "example": "Matchmaking error: the selected party size is not one the game allows",
+   "translations": {
+    "ru": "Выберите допустимое количество игроков.",
+    "es": "Elige un número de jugadores válido.",
+    "pt": "Escolha uma contagem de jogadores válida.",
+    "fr": "Choisissez un nombre de joueurs valide.",
+    "de": "Wähle eine gültige Spielerzahl.",
+    "it": "Scegli un numero di giocatori valido.",
+    "ja": "有効なプレイヤー数を選択してください。",
+    "ko": "유효한 플레이어 수를 선택하세요.",
+    "zh-hans": "选择一个有效的玩家数量。",
+    "zh-hant": "選擇有效的玩家數量。",
+    "id": "Pilih jumlah pemain yang valid.",
+    "th": "เลือกจำนวนผู้เล่นที่ถูกต้อง",
+    "tr": "Geçerli bir oyuncu sayısı seçin.",
+    "vi": "Chọn một số người chơi hợp lệ.",
+    "pl": "Wybierz poprawną liczbę graczy.",
+    "ar": "اختر عدد اللاعبين الصالح."
+   }
+  },
+  "\u0001\u0001Only the queue leader can configure this match.": {
+   "example": "Matchmaking error: only the first player on the pad may set difficulty and party size",
+   "translations": {
+    "ru": "Только лидер очереди может настроить этот матч.",
+    "es": "Solo el líder de la cola puede configurar esta partida.",
+    "pt": "Apenas o líder da fila pode configurar esta partida.",
+    "fr": "Seul le leader de la file d'attente peut configurer ce match.",
+    "de": "Nur der Warteschlangenleiter kann dieses Match konfigurieren.",
+    "it": "Solo il leader della coda può configurare questa partita.",
+    "ja": "このマッチを設定できるのはキューリーダーだけです。",
+    "ko": "큐의 리더만 이 매치를 구성할 수 있습니다.",
+    "zh-hans": "只有队列队长才能配置此匹配。",
+    "zh-hant": "只有隊列隊長才能設定這場比賽。",
+    "id": "Hanya pemimpin antrian yang dapat mengkonfigurasi pertandingan ini.",
+    "th": "เฉพาะผู้นำคิวเท่านั้นที่สามารถกำหนดค่าการแข่งขันนี้ได้ ",
+    "tr": "Sadece kuyruk lideri bu maçı yapılandırabilir.",
+    "vi": "Chỉ người dẫn đầu hàng đợi mới có thể cấu hình trận đấu này.",
+    "pl": "Tylko lider kolejki może skonfigurować ten mecz.",
+    "ar": "فقط قائد الطابور يمكنه تهيئة هذه المباراة."
+   }
+  },
+  "\u0001\u0001Maximum players cannot be below the current player count.": {
+   "example": "Matchmaking error: the party-size limit was set lower than the number of players already on the pad",
+   "translations": {
+    "ru": "Максимальное количество игроков не может быть меньше текущего количества игроков.",
+    "es": "El número máximo de jugadores no puede ser inferior al número actual de jugadores.",
+    "pt": "O número máximo de jogadores não pode ser inferior ao número atual de jogadores.",
+    "fr": "Le nombre maximum de joueurs ne peut pas être inférieur au nombre actuel de joueurs.",
+    "de": "Die maximale Anzahl von Spielern darf nicht unter der aktuellen Anzahl von Spielern liegen.",
+    "it": "Il numero massimo di giocatori non può essere inferiore al numero attuale di giocatori.",
+    "ja": "最大プレイヤー数は、現在のプレイヤー数以下には設定できません。",
+    "ko": "최대 플레이어 수는 현재 플레이어 수보다 작을 수 없습니다.",
+    "zh-hans": "最大玩家数量不能低于当前的玩家数量。",
+    "zh-hant": "最大玩家數量不能低於當前的玩家數量。",
+    "id": "Jumlah pemain maksimal tidak boleh di bawah jumlah pemain saat ini.",
+    "th": "ผู้เล่นสูงสุดไม่สามารถต่ำกว่าจำนวนผู้เล่นปัจจุบันได้",
+    "tr": "Maksimum oyuncu sayısı mevcut oyuncu sayısının altında olamaz.",
+    "vi": "Số người chơi tối đa không thể thấp hơn số người chơi hiện tại.",
+    "pl": "Maksymalna liczba graczy nie może być niższa od aktualnej liczby graczy.",
+    "ar": "لا يمكن أن يكون الحد الأقصى لعدد اللاعبين أقل من عدد اللاعبين الحالي."
+   }
+  },
+  "\u0001\u0001This queue is already starting.": {
+   "example": "Matchmaking error: the countdown has finished and settings can no longer change",
+   "translations": {
+    "ru": "Эта очередь уже начинается.",
+    "es": "Esta cola ya está empezando.",
+    "pt": "Esta fila já está começando.",
+    "fr": "Cette file d'attente commence déjà.",
+    "de": "Diese Warteschlange beginnt bereits.",
+    "it": "Questa coda sta già iniziando.",
+    "ja": "このキューはすでに開始されています。",
+    "ko": "이 대기열은 이미 시작되고 있습니다.",
+    "zh-hans": "这个队列已经开始了。",
+    "zh-hant": "這個隊列已經開始了。",
+    "id": "Antrian ini sudah dimulai.",
+    "th": "คิวนี้กำลังจะเริ่มแล้ว",
+    "tr": "Bu kuyruk zaten başlıyor.",
+    "vi": "Hàng đợi này đã bắt đầu.",
+    "pl": "Ta kolejka już się zaczyna.",
+    "ar": "هذه الطابورة بدأت بالفعل."
+   }
+  },
+  "\u0001\u0001Invalid queue configuration.": {
+   "example": "Matchmaking error: the combination of difficulty and party size was rejected",
+   "translations": {
+    "ru": "Неверная конфигурация очереди.",
+    "es": "Configuración de cola no válida.",
+    "pt": "Configuração de fila inválida.",
+    "fr": "Configuration de file d'attente non valide.",
+    "de": "Ungültige Warteschlangenkonfiguration.",
+    "it": "Configurazione della coda non valida.",
+    "ja": "無効なキュー構成です。",
+    "ko": "잘못된 큐 구성입니다.",
+    "zh-hans": "无效的队列配置。",
+    "zh-hant": "無效的隊列設定。",
+    "id": "Konfigurasi antrian yang tidak valid.",
+    "th": "การกำหนดค่าคิวไม่ถูกต้อง",
+    "tr": "Geçersiz kuyruk yapılandırması.",
+    "vi": "Cấu hình hàng đợi không hợp lệ.",
+    "pl": "Niepoprawna konfiguracja kolejki.",
+    "ar": "تكوين الطابور غير صالح."
+   }
+  },
+  "\u0001\u0001Starter Pack": {
+   "example": "",
+   "translations": {
+    "ru": "Стартовый набор",
+    "es": "Paquete de inicio ",
+    "pt": "Pacote de Iniciante",
+    "fr": "Kit de départ",
+    "de": "Starterpaket ",
+    "it": "Pacchetto iniziale ",
+    "ja": "スターターパック",
+    "ko": "스타터 팩",
+    "zh-hans": "新手包 ",
+    "zh-hant": "新手禮包",
+    "id": "Paket Pemula ",
+    "th": "แพ็คเริ่มต้น",
+    "tr": "Başlangıç Paketi ",
+    "vi": "Gói Khởi Đầu",
+    "pl": "Pakiet startowy",
+    "ar": "حزمة المبتدئين"
+   }
+  },
+  "\u0001\u0001Over x4 the value": {
+   "example": "",
+   "translations": {
+    "ru": "Более x4 значение",
+    "es": "Más de x4 el valor ",
+    "pt": "Mais de x4 o valor",
+    "fr": "Plus de x4 la valeur",
+    "de": "Über x4 der Wert",
+    "it": "Più di x4 il valore",
+    "ja": "値を4倍以上にする",
+    "ko": "값의 4배 이상",
+    "zh-hans": "超过 x4 的值",
+    "zh-hant": "超過 x4 值",
+    "id": "Lebih dari x4 nilai",
+    "th": "มากกว่า x4 ค่า",
+    "tr": "Değerin x4 katı",
+    "vi": "Vượt quá x4 giá trị",
+    "pl": "Ponad x4 wartość",
+    "ar": "أكثر من 4 أضعاف القيمة"
+   }
+  },
+  "\u0001\u0001x2 Cal": {
+   "example": "",
+   "translations": {
+    "ru": "x2 калорий",
+    "es": "x2 Calorías",
+    "pt": "x2 Cal",
+    "fr": "x2 Calories",
+    "de": "x2 Kalorien",
+    "it": "x2 Calorie",
+    "ja": "x2カロリー",
+    "ko": "x2 칼로리",
+    "zh-hans": "x2 卡路里 ",
+    "zh-hant": "x2 卡路里",
+    "id": "x2 Kalori",
+    "th": "x2 Cal",
+    "tr": "x2 Kalori",
+    "vi": "x2 Cal",
+    "pl": "x2 kalorie",
+    "ar": "×2 السعرات الحرارية"
+   }
+  },
+  "\u0001\u0001Bite+": {
+   "example": "",
+   "translations": {
+    "ru": "Укусить+",
+    "es": "Mordida+",
+    "pt": "Morder+",
+    "fr": "Mordre+",
+    "de": "Beißen+",
+    "it": "Morso+",
+    "ja": "噛む+",
+    "ko": "깨물기+",
+    "zh-hans": "咬+",
+    "zh-hant": "咬+",
+    "id": "Gigit+",
+    "th": "กัด+",
+    "tr": "Isır+",
+    "vi": "Cắn+",
+    "pl": "Ugryzienie+",
+    "ar": "العض+"
+   }
+  },
+  "\u0001\u0001x2 Speed": {
+   "example": "",
+   "translations": {
+    "ru": "x2 Скорость",
+    "es": "x2 Velocidad",
+    "pt": "x2 Velocidade",
+    "fr": "x2 Vitesse",
+    "de": "x2 Geschwindigkeit",
+    "it": "x2 Velocità",
+    "ja": "x2 スピード",
+    "ko": "x2 스피드",
+    "zh-hans": "x2 速度",
+    "zh-hant": "雙倍速度",
+    "id": "x2 Kecepatan",
+    "th": "x2 ความเร็ว",
+    "tr": "x2 Hız",
+    "vi": "x2 Tốc độ",
+    "pl": "x2 Prędkość",
+    "ar": "سرعة x2"
+   }
+  },
+  "\u0001\u0001Eats a whole layer": {
+   "example": "",
+   "translations": {
+    "ru": "Съедает целый слой",
+    "es": "Se come una capa entera ",
+    "pt": "Come uma camada inteira ",
+    "fr": "Mange une couche entière ",
+    "de": "Iss eine ganze Schicht ",
+    "it": "Mangia uno strato intero",
+    "ja": "全体の層を食べる",
+    "ko": "전체 층을 먹어요",
+    "zh-hans": "吃掉一整层",
+    "zh-hant": "吃掉整層",
+    "id": "Memakan seluruh lapisan ",
+    "th": "กินทั้งชั้น ",
+    "tr": "Tüm bir katman yer",
+    "vi": "Ăn cả một lớp",
+    "pl": "Zjada całą warstwę ",
+    "ar": "يأكل طبقة كاملة "
+   }
+  },
+  "\u0001\u0001x2 Calories": {
+   "example": "",
+   "translations": {
+    "ru": "x2 калорий",
+    "es": "x2 Calorías ",
+    "pt": "x2 Calorias",
+    "fr": "x2 Calories",
+    "de": "x2 Kalorien",
+    "it": "x2 Calorie",
+    "ja": "x2カロリー",
+    "ko": "x2 칼로리",
+    "zh-hans": "x2 卡路里",
+    "zh-hant": "雙倍卡路里",
+    "id": "x2 Kalori ",
+    "th": "x2 แคลอรี่",
+    "tr": "x2 Kalori",
+    "vi": "x2 Calo",
+    "pl": "x2 Kalorie",
+    "ar": "×2 السعرات الحرارية"
+   }
+  },
+  "\u0001\u0001x2 cals (15m)": {
+   "example": "",
+   "translations": {
+    "ru": "x2 выстрелов (15 м)",
+    "es": "x2 cals (15m)",
+    "pt": "x2 cals (15m)",
+    "fr": "x2 cal (15m)",
+    "de": "x2 Schüsse (15m)",
+    "it": "x2 calorie (15m)",
+    "ja": "x2カロリー（15m）",
+    "ko": "x2 캘 (15m)",
+    "zh-hans": "x2 口径（15米）",
+    "zh-hant": "x2 口徑（15 公尺）",
+    "id": "x2 kalori (15m)",
+    "th": "x2 แคล (15ม.)",
+    "tr": "x2 kalori (15m)",
+    "vi": "x2 cal (15m)",
+    "pl": "x2 kalibry (15m)",
+    "ar": "×2 الكالوريات (15 مترًا)"
+   }
+  },
+  "\u0001\u0001Extra Bite": {
+   "example": "",
+   "translations": {
+    "ru": "Дополнительный укус",
+    "es": "Mordida extra",
+    "pt": "Mordida Extra",
+    "fr": "Morsure supplémentaire",
+    "de": "Extra-Biss ",
+    "it": "Morso Extra",
+    "ja": "エクストラバイト",
+    "ko": "추가 바이트",
+    "zh-hans": "额外一口",
+    "zh-hant": "額外一口",
+    "id": "Gigitan Ekstra",
+    "th": "กัดพิเศษ",
+    "tr": "Ekstra ısırma ",
+    "vi": "Thêm một miếng",
+    "pl": "Dodatkowe ugryzienie",
+    "ar": "لقمة إضافية"
+   }
+  },
+  "\u0001\u0001+40% bite (15m)": {
+   "example": "",
+   "translations": {
+    "ru": "+40% укуса (15 м)",
+    "es": "+40% mordida (15m)",
+    "pt": "+40% mordida (15m)",
+    "fr": "+40% morsure (15m)",
+    "de": "+40% Biss (15m)",
+    "it": "+40% morso (15m)",
+    "ja": "+40% 噛みつき（15m）",
+    "ko": "+40% 물기 (15m)",
+    "zh-hans": "+40% 咬击伤害（15 米） ",
+    "zh-hant": "+40% 咬擊力（15 公尺）",
+    "id": "+40% gigitan (15m)",
+    "th": "+40% การกัด (15m)",
+    "tr": "+40% ısırma (15m)",
+    "vi": "+40% cú hấm (15m)",
+    "pl": "+40% ugryzienia (15m)",
+    "ar": "+40% العضة (15 مترًا)"
+   }
+  },
+  "\u0001\u0001x2 speed (15m)": {
+   "example": "",
+   "translations": {
+    "ru": "x2 скорость (15м)",
+    "es": "x2 velocidad (15m)",
+    "pt": "x2 velocidade (15m)",
+    "fr": "x2 vitesse (15m)",
+    "de": "x2 Geschwindigkeit (15m)",
+    "it": "x2 velocità (15m)",
+    "ja": "x2スピード（15m）",
+    "ko": "x2 스피드 (15m)",
+    "zh-hans": "x2 速度（15 米） ",
+    "zh-hant": "雙倍速度（15公尺）",
+    "id": "x2 kecepatan (15m)",
+    "th": "x2 ความเร็ว (15 ม.)",
+    "tr": "x2 hız (15m)",
+    "vi": "x2 tốc độ (15m)",
+    "pl": "x2 prędkość (15m)",
+    "ar": "سرعة x2 (15 مترًا)"
+   }
+  },
+  "\u0001\u0001x2 Stomach": {
+   "example": "",
+   "translations": {
+    "ru": "x2 Желудок",
+    "es": "x2 Estómago ",
+    "pt": "x2 Estômago",
+    "fr": "x2 Estomac",
+    "de": "x2 Magen",
+    "it": "x2 Stomaco ",
+    "ja": "x2 胃",
+    "ko": "x2 배\n",
+    "zh-hans": "x2 胃",
+    "zh-hant": "x2 胃",
+    "id": "x2 Perut ",
+    "th": "x2 ท้อง ",
+    "tr": "x2 Mide",
+    "vi": "x2 Dạ dày",
+    "pl": "x2 Brzuch",
+    "ar": "x2 المعدة"
+   }
+  },
+  "\u0001\u0001x2 belly (15m)": {
+   "example": "",
+   "translations": {
+    "ru": "x2 живот (15м)",
+    "es": "x2 barriga (15m)",
+    "pt": "x2 barriga (15m)",
+    "fr": "x2 ventre (15m)",
+    "de": "x2 Bauch (15m)",
+    "it": "x2 pancia (15m)",
+    "ja": "x2腹部（15m）",
+    "ko": "x2 배 (15m)",
+    "zh-hans": "x2 肚子（15米）",
+    "zh-hant": "x2 肚子（15 公尺）",
+    "id": "x2 perut (15m)",
+    "th": "x2 ท้อง (15ม.)",
+    "tr": "x2 göbek (15m)",
+    "vi": "x2 bụng (15m)",
+    "pl": "x2 brzuszek (15m)",
+    "ar": "×2 البطن (15 مترًا)"
+   }
+  },
+  "\u0001\u0001100 Gems": {
+   "example": "",
+   "translations": {
+    "ru": "100 самоцветов",
+    "es": "100 Gemas ",
+    "pt": "100 Joias ",
+    "fr": "100 gemmes",
+    "de": "100 Edelsteine ",
+    "it": "100 gemme",
+    "ja": "100ジェム ",
+    "ko": "100 보석",
+    "zh-hans": "100 颗宝石",
+    "zh-hant": "100 顆寶石",
+    "id": "100 Permata ",
+    "th": "100 อัญมณี",
+    "tr": "100 Mücevher",
+    "vi": "100 đá quý ",
+    "pl": "100 klejnotów",
+    "ar": "100 جواهر "
+   }
+  },
+  "\u0001\u0001Starter stash": {
+   "example": "",
+   "translations": {
+    "ru": "Стартовый запас ",
+    "es": "Botín de principiante",
+    "pt": "Esconderijo inicial ",
+    "fr": "Réserve de départ",
+    "de": "Starter-Versteck ",
+    "it": "Scorte iniziali ",
+    "ja": "スターターの隠れ家",
+    "ko": "스타터 스테시",
+    "zh-hans": "新手藏品 ",
+    "zh-hant": "新手藏身處",
+    "id": "Simpanan awal ",
+    "th": "ที่เก็บของเริ่มต้น",
+    "tr": "Başlangıç ​​depolama",
+    "vi": "Kho khởi đầu",
+    "pl": "Rezerwa startowa",
+    "ar": "المخبأ المبدئي"
+   }
+  },
+  "\u0001\u0001450 Gems": {
+   "example": "",
+   "translations": {
+    "ru": "450 самоцветов",
+    "es": "450 Gemas ",
+    "pt": "450 Gemas",
+    "fr": "450 gemmes",
+    "de": "450 Edelsteine ",
+    "it": "450 gemme",
+    "ja": "450ジェム",
+    "ko": "450 보석",
+    "zh-hans": "450 颗宝石",
+    "zh-hant": "450 顆寶石",
+    "id": "450 Permata",
+    "th": "450 เพชร",
+    "tr": "450 Mücevher",
+    "vi": "450 đá quý ",
+    "pl": "450 klejnotów",
+    "ar": "450 الأحجار الكريمة "
+   }
+  },
+  "\u0001\u0001+12% bonus": {
+   "example": "",
+   "translations": {
+    "ru": "+12% бонус",
+    "es": "+12% de bonificación ",
+    "pt": "+12% de bônus",
+    "fr": "+12% de bonus",
+    "de": "+12% Bonus",
+    "it": "+12% bonus",
+    "ja": "+12% ボーナス",
+    "ko": "+12% 보너스",
+    "zh-hans": "+12% 加成",
+    "zh-hant": "+12% 獎勵",
+    "id": "+12% bonus",
+    "th": "+12% โบนัส",
+    "tr": "+12% bonus",
+    "vi": "+12% tiền thưởng",
+    "pl": "+12% bonusu",
+    "ar": "+12% مكافأة"
+   }
+  },
+  "\u0001\u00011,050 Gems": {
+   "example": "",
+   "translations": {
+    "ru": "1 050 самоцветов",
+    "es": "1,050 Gemas ",
+    "pt": "1.050 Gemas",
+    "fr": "1 050 gemmes",
+    "de": "1.050 Edelsteine ",
+    "it": "1.050 gemme",
+    "ja": "1,050ジェム",
+    "ko": "1,050 보석",
+    "zh-hans": "1,050颗宝石 ",
+    "zh-hant": "1,050 顆寶石",
+    "id": "1.050 Permata ",
+    "th": "1,050 อัญมณี",
+    "tr": "1.050 Mücevher",
+    "vi": "1.050 đá quý ",
+    "pl": "1 050 klejnotów",
+    "ar": "1050 جواهر "
+   }
+  },
+  "\u0001\u0001+17% bonus": {
+   "example": "",
+   "translations": {
+    "ru": "+17% бонус",
+    "es": "+17% de bonificación",
+    "pt": "+17% de bônus",
+    "fr": "+17% de bonus",
+    "de": "+17% Bonus ",
+    "it": "+17% bonus",
+    "ja": "+17% ボーナス",
+    "ko": "+17% 보너스",
+    "zh-hans": "+17% 加成",
+    "zh-hant": "+17% 獎勵",
+    "id": "+17% bonus",
+    "th": "+17% โบนัส",
+    "tr": "+17% bonus",
+    "vi": "+17% tiền thưởng",
+    "pl": "+17% bonusu",
+    "ar": "+17% مكافأة"
+   }
+  },
+  "\u0001\u00012,500 Gems": {
+   "example": "",
+   "translations": {
+    "ru": "2,500 самоцветов ",
+    "es": "2.500 Gemas ",
+    "pt": "2.500 Gemas ",
+    "fr": "2 500 gemmes",
+    "de": "2.500 Edelsteine ",
+    "it": "2.500 gemme ",
+    "ja": "2,500ジェム",
+    "ko": "2,500 보석",
+    "zh-hans": "2,500颗宝石 ",
+    "zh-hant": "2,500顆寶石",
+    "id": "2.500 Permata ",
+    "th": "2,500 อัญมณี",
+    "tr": "2.500 Mücevher",
+    "vi": "2.500 đá quý ",
+    "pl": "2 500 klejnotów",
+    "ar": "2500 الأحجار الكريمة "
+   }
+  },
+  "\u0001\u0001+25% bonus": {
+   "example": "",
+   "translations": {
+    "ru": "+25% бонус",
+    "es": "+25% de bonificación ",
+    "pt": "+25% bônus",
+    "fr": "+25% de bonus",
+    "de": "+25% Bonus ",
+    "it": "+25% bonus",
+    "ja": "+25% ボーナス",
+    "ko": "+25% 보너스",
+    "zh-hans": "+25% 加成",
+    "zh-hant": "+25% 獎勵",
+    "id": "+25% bonus",
+    "th": "+25% โบนัส",
+    "tr": "+25% bonus",
+    "vi": "+25% tiền thưởng",
+    "pl": "+25% bonusu",
+    "ar": "+25% مكافأة"
+   }
+  },
+  "\u0001\u0001All cals x2": {
+   "example": "",
+   "translations": {
+    "ru": "Все калибры x2",
+    "es": "Todas las cals x2",
+    "pt": "Todos os Cals x2 ",
+    "fr": "Tous les Cals x2",
+    "de": "Alle Cals x2",
+    "it": "Tutte le calorie x2",
+    "ja": "すべてのカロリー x2",
+    "ko": "모든 칼로리 x2",
+    "zh-hans": "所有伤害 x2\n ",
+    "zh-hant": "所有卡路里 x2",
+    "id": "Semua kalsium x2",
+    "th": "ทุกแคล x2",
+    "tr": "Tüm atışlar x2",
+    "vi": "Tất cả calorie x2",
+    "pl": "Wszystkie kule x2",
+    "ar": "جميع المكالمات x2"
+   }
+  },
+  "\u0001\u0001x2 Gems": {
+   "example": "",
+   "translations": {
+    "ru": "x2 драгоценных камней",
+    "es": "x2 Gemas ",
+    "pt": "x2 Gemas ",
+    "fr": "x2 gemmes",
+    "de": "x2 Edelsteine ",
+    "it": "x2 gemme ",
+    "ja": "x2 ジェム",
+    "ko": "x2 보석",
+    "zh-hans": "x2 宝石",
+    "zh-hant": "雙倍寶石 ",
+    "id": "x2 Permata ",
+    "th": "x2 เพชร",
+    "tr": "x2 Mücevher",
+    "vi": "x2 Đá quý ",
+    "pl": "x2 Klejnoty ",
+    "ar": "×2 الجواهر "
+   }
+  },
+  "\u0001\u0001Gem finds x2": {
+   "example": "",
+   "translations": {
+    "ru": "Находки драгоценных камней x2",
+    "es": "hallazgos de gemas x2",
+    "pt": "Achados de gemas x2",
+    "fr": "Trouve de gemmes x2",
+    "de": "Gem-Funde x2",
+    "it": "Ritrovamenti di gemme x2",
+    "ja": "ジェムの発見数 x2",
+    "ko": "보석 발견 x2",
+    "zh-hans": "宝石发现量 x2",
+    "zh-hant": "寶石發現數 x2",
+    "id": "Penemuan permata x2 ",
+    "th": "พบอัญมณี x2",
+    "tr": "Mücevher buluşları x2 ",
+    "vi": "Số lượng đá quý tìm thấy x2",
+    "pl": "Znalezione klejnoty x2",
+    "ar": "العثور على الأحجار الكريمة x2"
+   }
+  },
+  "\u0001\u0001Auto-Eat": {
+   "example": "",
+   "translations": {
+    "ru": "Авто-еда",
+    "es": "Auto-Comer",
+    "pt": "Auto-Comer",
+    "fr": "Mange automatique",
+    "de": "Auto-Essen",
+    "it": "Auto-Mangia ",
+    "ja": "自動食事",
+    "ko": "자동 먹기",
+    "zh-hans": "自动进食",
+    "zh-hant": "自動進食",
+    "id": "Makan Otomatis",
+    "th": "กินอัตโนมัติ",
+    "tr": "Otomatik Yemek",
+    "vi": "Tự động ăn",
+    "pl": "Auto-jedzenie",
+    "ar": "الأكل التلقائي"
+   }
+  },
+  "\u0001\u0001Eats for you": {
+   "example": "",
+   "translations": {
+    "ru": "Ест за тебя",
+    "es": "Come por ti ",
+    "pt": "Come por você",
+    "fr": "Mange pour vous",
+    "de": "Essen für dich",
+    "it": "Mangia per te",
+    "ja": "あなたのために食べます",
+    "ko": "당신을 위해 먹어요",
+    "zh-hans": "为你吃饭 ",
+    "zh-hant": "為你吃飯",
+    "id": "Makan untuk Anda",
+    "th": "กินให้คุณ",
+    "tr": "Sizin için yemek yer",
+    "vi": "Ăn cho bạn",
+    "pl": "Jedzie za ciebie",
+    "ar": "يأكل لك"
+   }
+  },
+  "\u0001\u0001Auto-Gym": {
+   "example": "",
+   "translations": {
+    "ru": "Авто-гимнастика ",
+    "es": "Auto-Gimnasio ",
+    "pt": "Auto-Ginásio ",
+    "fr": "Auto-Gym",
+    "de": "Auto-Fitnessstudio ",
+    "it": "Auto-Gym ",
+    "ja": "オートジム",
+    "ko": "자동 헬스장",
+    "zh-hans": "自动健身房 ",
+    "zh-hant": "自動健身房 ",
+    "id": "Gim Otomatis ",
+    "th": "ออโต้-ยิม ",
+    "tr": "Otomatik Spor Salonu",
+    "vi": "Phòng tập tự động ",
+    "pl": "Auto-siłownia",
+    "ar": "الصالة الرياضية التلقائية "
+   }
+  },
+  "\u0001\u0001Trains for you": {
+   "example": "",
+   "translations": {
+    "ru": "Поезда для вас",
+    "es": "Entrena para ti ",
+    "pt": "Treina para você",
+    "fr": "Des trains pour vous",
+    "de": "Züge für dich ",
+    "it": "Treni per te",
+    "ja": "あなたのためのトレーニング",
+    "ko": "당신을 위한 열차",
+    "zh-hans": "为你训练 ",
+    "zh-hant": "為你訓練",
+    "id": "Kereta untuk Anda",
+    "th": "รถไฟสำหรับคุณ",
+    "tr": "Sizin için trenler",
+    "vi": "Xe lửa cho bạn",
+    "pl": "Pociągi dla ciebie",
+    "ar": "القطارات لك"
+   }
+  },
+  "\u0001\u0001Double capacity": {
+   "example": "",
+   "translations": {
+    "ru": "Двойная вместимость",
+    "es": "Doble capacidad ",
+    "pt": "Dupla capacidade",
+    "fr": "Double capacité",
+    "de": "Doppelte Kapazität",
+    "it": "Doppia capacità",
+    "ja": "2倍容量",
+    "ko": "2배 용량",
+    "zh-hans": "双倍容量",
+    "zh-hant": "雙倍容量",
+    "id": "Kapasitas ganda ",
+    "th": "ความจุสองเท่า",
+    "tr": "Çift kapasite",
+    "vi": "Gấp đôi sức chứa",
+    "pl": "Podwójna pojemność",
+    "ar": "السعة المضاعفة"
+   }
+  },
+  "\u0001\u0001VIP": {
+   "example": "",
+   "translations": {
+    "ru": "VIP",
+    "es": "VIP",
+    "pt": "VIP",
+    "fr": "VIP",
+    "de": "VIP",
+    "it": "VIP",
+    "ja": "VIP",
+    "ko": "VIP",
+    "zh-hans": "贵宾",
+    "zh-hant": "貴賓",
+    "id": "VIP",
+    "th": "VIP",
+    "tr": "VIP",
+    "vi": "VIP",
+    "pl": "VIP",
+    "ar": "الكبار"
+   }
+  },
+  "\u0001\u0001Perks + 5 slots": {
+   "example": "",
+   "translations": {
+    "ru": "Преимущества + 5 слотов",
+    "es": "Beneficios + 5 espacios",
+    "pt": "Vantagens + 5 slots",
+    "fr": "Avantages + 5 emplacements",
+    "de": "Vorteile + 5 Slots",
+    "it": "Vantaggi + 5 slot",
+    "ja": "特典+5スロット",
+    "ko": "특전 + 슬롯 5개",
+    "zh-hans": "技能+5个槽位",
+    "zh-hant": "額外技能+5欄位",
+    "id": "Keuntungan + 5 slot",
+    "th": "Perks + 5 ช่อง",
+    "tr": "Avantajlar + 5 slot",
+    "vi": "Lợi ích + 5 chỗ",
+    "pl": "Perki + 5 miejsc",
+    "ar": "المزايا + 5 فتحات "
+   }
+  }
+ }
+}

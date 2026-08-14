@@ -1,0 +1,38 @@
+{
+  "comment": "Source-only (keyless) rows for the cloud localization table: player-facing English that is NOT set through LocaleData.T. These translate by render-time SOURCE MATCHING (AutoLocalize, on by default) or by LocaleData.Tr, so they need no key and no code change — but they DO need to exist here or they ship untranslated. Give every entry an `example`: machine translation renders game jargon literally without context. Duplicates of a LocaleData source are harmless (harvest dedupes, keyed row wins) and are kept here so this file reads as the full inventory of non-keyed strings. Re-run `python tools/robloxloc/robloxloc.py push` after editing.",
+  "removed": [
+    "2026-08-13 — 'Cake Guardian' (CakeConfig.bossName). Its ONLY render was the world-space nameplate above the boss, which was deleted with that model's HP bar (features/food-burst.md). The name is now a server LOG string; the player-facing wording moved to LocaleData's keyed 'cake-boss' ('CAKE MONSTER! {timer}s'). Its cloud row is now dead, but `push --prune` ALONE will not clear it: the prune list is built from the CSV's orphan=yes column, and only `pull` writes that column. Run `pull` FIRST, then `push --prune`."
+  ],
+  "entries": [
+    { "source": "Burn it off!", "example": "World ProximityPrompt at the checkpoint gym: the action that burns off belly fat (MapService)" },
+    { "source": "Gym", "example": "World ProximityPrompt object name for the gym machine at the checkpoint (MapService)" },
+    { "source": "Upgrades", "example": "World ProximityPrompt action at the checkpoint upgrade computer — opens the upgrade tree (MapService)" },
+    { "source": "Upgrade Station", "example": "World ProximityPrompt object name for the upgrade computer at the checkpoint (MapService)" },
+    { "source": "Eat this layer", "example": "World ProximityPrompt action on the paid platform that clears a whole cake layer at once (MapService)" },
+    { "source": "Layer Eater", "example": "World ProximityPrompt object name for the paid layer-clearing platform; also a shop product (MapService)" },
+
+    { "source": "Waiting Players...", "example": "Lobby matchmaking pad sign: nobody has stepped on the pad yet (MatchConfig.queue.statuses)" },
+    { "source": "Choose Game Mode", "example": "Lobby matchmaking pad sign: a player is on the pad and is picking difficulty and party size" },
+    { "source": "Teleporting...", "example": "Lobby matchmaking pad sign: the match is starting and players are being sent to the game place" },
+    { "source": "Try Again", "example": "Lobby matchmaking pad sign: the teleport failed and the pad is ready for another attempt" },
+
+    { "source": "Easy", "example": "Difficulty name on the lobby matchmaking pad sign (easiest of Easy/Medium/Hard)" },
+    { "source": "Medium", "example": "Difficulty name on the lobby matchmaking pad sign (middle of Easy/Medium/Hard)" },
+    { "source": "Hard", "example": "Difficulty name on the lobby matchmaking pad sign (hardest of Easy/Medium/Hard)" },
+
+    { "source": "You are not in a queue.", "example": "Matchmaking error: the player acted on a match they had already left" },
+    { "source": "Only the queue leader can use this selection.", "example": "Matchmaking error: only the first player on the pad may change the match settings" },
+    { "source": "This queue selection expired. Step off and re-enter.", "example": "Matchmaking error: the match session timed out; the player must step off the pad and back on" },
+    { "source": "Invalid queue request.", "example": "Matchmaking error: the request to join or configure a match was malformed" },
+    { "source": "Invalid queue selection.", "example": "Matchmaking error: the chosen match session is not valid" },
+    { "source": "Invalid leave request.", "example": "Matchmaking error: the request to leave the match queue was malformed" },
+    { "source": "This queue is teleporting.", "example": "Matchmaking error: the player cannot leave because the match is already sending everyone to the game" },
+    { "source": "Unknown queue action.", "example": "Matchmaking error: the client asked for a match action the server does not recognise" },
+    { "source": "Choose a valid difficulty.", "example": "Matchmaking error: the selected difficulty is not one of Easy, Medium or Hard" },
+    { "source": "Choose a valid player count.", "example": "Matchmaking error: the selected party size is not one the game allows" },
+    { "source": "Only the queue leader can configure this match.", "example": "Matchmaking error: only the first player on the pad may set difficulty and party size" },
+    { "source": "Maximum players cannot be below the current player count.", "example": "Matchmaking error: the party-size limit was set lower than the number of players already on the pad" },
+    { "source": "This queue is already starting.", "example": "Matchmaking error: the countdown has finished and settings can no longer change" },
+    { "source": "Invalid queue configuration.", "example": "Matchmaking error: the combination of difficulty and party size was rejected" }
+  ]
+}
