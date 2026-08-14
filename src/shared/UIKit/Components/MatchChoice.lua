@@ -43,6 +43,10 @@ local function MatchChoice(props)
 	local scaleRef, handlers = Interaction.usePressable({
 		enabled = enabled,
 		onActivated = props.onActivated,
+		-- The pressable is the child named HitTarget, not the outer
+		-- Difficulty_*/Players_* CanvasGroup. Pass the semantic id explicitly or
+		-- every option collapses into one analytics bucket called HitTarget.
+		analyticsId = props.analyticsId or props.name,
 	})
 
 	return React.createElement("CanvasGroup", {

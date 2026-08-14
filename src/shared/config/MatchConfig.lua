@@ -9,7 +9,7 @@
 
 local MatchConfig = {}
 
-MatchConfig.protocolVersion = 1
+MatchConfig.protocolVersion = 2
 
 -- Difficulty tuning (2026-07-30 rebalance, docs/features/cake-cycle.md, ADR-0013).
 --   workMultiplier     — how much EATING WORK the cake is worth. Buys extra
@@ -41,6 +41,11 @@ MatchConfig.difficulties = {
 	easy = {
 		labelKey = "match-difficulty-easy",
 		worldLabel = "Easy",
+		ui = {
+			["icon-name"] = "UiHeart",
+			["accent"] = "easy",
+			["description-key"] = "match-difficulty-easy-detail",
+		},
 		workMultiplier = 1.08,
 		caloriesMultiplier = 1,
 		bossHpMultiplier = 0.75,
@@ -49,6 +54,11 @@ MatchConfig.difficulties = {
 	medium = {
 		labelKey = "match-difficulty-medium",
 		worldLabel = "Medium",
+		ui = {
+			["icon-name"] = "UiFire",
+			["accent"] = "medium",
+			["description-key"] = "match-difficulty-medium-detail",
+		},
 		workMultiplier = 1.27,
 		caloriesMultiplier = 1.25,
 		bossHpMultiplier = 1,
@@ -57,6 +67,11 @@ MatchConfig.difficulties = {
 	hard = {
 		labelKey = "match-difficulty-hard",
 		worldLabel = "Hard",
+		ui = {
+			["icon-name"] = "UiBomb",
+			["accent"] = "hard",
+			["description-key"] = "match-difficulty-hard-detail",
+		},
 		workMultiplier = 1.49,
 		caloriesMultiplier = 1.55,
 		bossHpMultiplier = 1.25,

@@ -203,13 +203,29 @@ function LobbySubsClient.Start(data, modules, subscriptions)
 			if character == nil or not hit:IsDescendantOf(character) then
 				return
 			end
+			local openPanel = AppRoot.GetOpenPanel()
+			local matchmakingState = if openPanel == "Matchmaking"
+				then lobbyData["matchmaking"]
+				else nil
+			-- World movement can continue while a modal is open. Match the pointer
+			-- scrim: chocolate may open Shop from the world, but it never replaces an
+			-- unrelated modal underneath the player's hands/controller focus.
+			if openPanel ~= nil and openPanel ~= "Matchmaking" then
+				return
+			end
+			-- Walking onto chocolate is a panel-replacement gesture. During launch
+			-- busy it must obey the same no-close contract as X and the scrim, or a
+			-- rejected late leave hides a countdown that is still running.
+			if type(matchmakingState) == "table" and matchmakingState.busy == true then
+				return
+			end
 			local now = os.clock()
 			if now - lobbyData["last-shop-open-at"] < config.client.shopOpenDebounceSeconds then
 				return
 			end
 			lobbyData["last-shop-open-at"] = now
-			if AppRoot.GetOpenPanel() == "Matchmaking" then
-				local state = lobbyData["matchmaking"]
+			if openPanel == "Matchmaking" then
+				local state = matchmakingState
 				if type(state) == "table" and type(state.sessionKey) == "string" and state.sessionKey ~= "" then
 					request:FireServer("leave", state.sessionKey)
 				else
