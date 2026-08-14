@@ -189,6 +189,16 @@ function RewardGrantSubs.Start(data, services, subscriptions)
 		if services.EconomyService.AddGems(player.UserId, amount) == nil then
 			return nil
 		end
+		-- The ONLY gem INCOME path in the game, which is what makes the lifetime
+		-- counter behind the Top Gems board (features/leaderboards.md) exact with
+		-- one line. The other AddGems call site is ShopSubs' refund of a failed
+		-- gem purchase — deliberately NOT counted: the original spend never
+		-- decremented this, so crediting the refund would mint lifetime gems.
+		if services.ProgressService ~= nil then
+			services.ProgressService.AddStat(player.UserId, "lifetimeGems", amount)
+		else
+			Log.Once(SCOPE, "no-progress-service", "ProgressService missing -- lifetime gems are NOT being counted")
+		end
 		sendCurrency(player)
 		beatSource(
 			player,

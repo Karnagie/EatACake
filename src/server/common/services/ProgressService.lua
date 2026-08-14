@@ -13,6 +13,11 @@
 	path is unchanged and re-introducing an unlock rule stays a one-liner.
 ]]
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Log = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Log"))
+
+local SCOPE = "ProgressService"
+
 local ProgressService = {}
 
 local profileData
@@ -37,6 +42,13 @@ function ProgressService.AddStat(userId: number, key: string, amount: number)
 	local section = progress(userId)
 	if section and type(section[key]) == "number" then
 		section[key] += amount
+		return
+	end
+	if section ~= nil then
+		-- A typo'd key, or a field reconcile did not fill, silently stops
+		-- counting a stat that something downstream depends on — `lifetimeGems`
+		-- feeds a public leaderboard (R8: never return silently from a failure).
+		Log.Once(SCOPE, `unknown-stat-{tostring(key)}`, `progress.{tostring(key)} is not a number -- that lifetime stat is NOT being counted`)
 	end
 end
 
@@ -54,6 +66,20 @@ function ProgressService.CountFindKinds(userId: number): number
 		n += 1
 	end
 	return n
+end
+
+--API
+-- Lifetime cakes FINISHED — the counter CakeCycleSubs increments on a boss win.
+-- Exposed as the NUMBER, not only as a flag, because the lobby cake catalogue
+-- compares it against each cake's own `unlockCakesEaten` threshold
+-- (features/cake-select.md); a bare flag would silently unlock a cake whose
+-- threshold was later raised.
+function ProgressService.CakesEaten(userId: number): number
+	local section = progress(userId)
+	if section == nil or type(section.cakesEaten) ~= "number" then
+		return 0
+	end
+	return section.cakesEaten
 end
 
 --API
@@ -76,6 +102,26 @@ function ProgressService.MarkFindDiscovered(userId: number, findId: string): boo
 end
 
 --API
+-- Records how long a finished cake took, in MILLISECONDS. Keeps the BEST
+-- (smallest) value ever, so it is safe to call on every clear; 0 in the profile
+-- means "never finished a cake" and is what the leaderboard treats as no score
+-- (docs/features/leaderboards.md).
+-- Returns true only when this run became the player's new record.
+function ProgressService.RecordCakeTime(userId: number, millis: number): boolean
+	local section = progress(userId)
+	if section == nil or type(millis) ~= "number" or millis ~= millis or millis <= 0 or millis == math.huge then
+		return false
+	end
+	local value = math.floor(millis)
+	local best = section.bestCakeMillis
+	if type(best) ~= "number" or best <= 0 or value < best then
+		section.bestCakeMillis = value
+		return true
+	end
+	return false
+end
+
+--API
 -- Always 0 now that rebirth is removed; kept for the leaderstat + summary.
 function ProgressService.GetRebirths(userId: number): number?
 	local section = progress(userId)
@@ -95,6 +141,9 @@ end
 
 --API
 -- Snapshot for the client (HUD stats + leaderboards).
+-- ⚠ The three GLOBAL leaderboards read their value straight off this table by
+-- the `statKey` in `GlobalLeaderboardData.boards` — renaming a field here
+-- silently empties a board (docs/features/leaderboards.md).
 function ProgressService.Summary(userId: number)
 	local section = progress(userId)
 	if not section then
@@ -103,7 +152,9 @@ function ProgressService.Summary(userId: number)
 	return {
 		rebirths = section.rebirths,
 		lifetimeCalories = section.lifetimeCalories,
+		lifetimeGems = section.lifetimeGems,
 		cakesEaten = section.cakesEaten,
+		bestCakeMillis = section.bestCakeMillis,
 		findsCollected = section.findsCollected,
 		findKindsFound = ProgressService.CountFindKinds(userId),
 		biggestBelly = section.biggestBelly,

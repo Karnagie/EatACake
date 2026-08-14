@@ -134,6 +134,11 @@ No direct `DataStoreService` usage anywhere else on the codebase. No
 `Steal = true`. Critical moments (Robux purchases) call
 `PersistenceService.Save(userId)` right after mutating; grant purchases only
 after checking the profile is loaded (`IsLoaded`).
+**Sole exemption (ADR-0022):** `GlobalLeaderboardService` owns the
+`OrderedDataStore`s behind the in-world leaderboards — cross-server RANKING has
+no ProfileStore answer. No profile data lives there: the stores are a
+write-only projection of three profile numbers, keyed by userId, never read back
+into a profile. Any other module reaching for `DataStoreService` is still a bug.
 
 ---
 

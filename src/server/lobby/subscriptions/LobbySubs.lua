@@ -5,6 +5,11 @@
 	After the clone is built, delegates queue-pad event wiring to
 	LobbyQueueSubs.Bind(map). LobbyQueueSubs starts earlier alphabetically, so its
 	remote/removal/reconciliation subscriptions are ready before binding.
+
+	The three authored leaderboard screens ride the same clone and are bound the
+	same way (LobbyLeaderboardSubs.Bind, features/leaderboards.md). They are
+	COSMETIC: a board that fails to bind warns and stays blank, and must never
+	stop the queue pads — the hub is playable without them.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -38,6 +43,18 @@ function LobbySubs.Start(data, services, subscriptions)
 	if map_or_error == nil then
 		Log.Warn("LobbySubs", "LobbyMapService.Build returned no map -- queue binding skipped")
 		return
+	end
+
+	-- Before the queue bind, and never gated on it: the boards are decoration and
+	-- a hub with broken pads should still show them (and vice versa).
+	local boards = subscriptions.LobbyLeaderboardSubs
+	if boards == nil or type(boards.Bind) ~= "function" then
+		Log.Warn("LobbySubs", "LobbyLeaderboardSubs.Bind missing -- the in-world leaderboards will stay blank")
+	else
+		local boards_ok, boards_err = pcall(boards.Bind, map_or_error)
+		if not boards_ok then
+			Log.Warn("LobbySubs", `LobbyLeaderboardSubs.Bind failed -- {boards_err}`)
+		end
 	end
 
 	local bind_ok, bound_or_error = pcall(subscriptions.LobbyQueueSubs.Bind, map_or_error)

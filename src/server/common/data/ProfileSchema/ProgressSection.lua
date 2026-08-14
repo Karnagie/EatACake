@@ -5,6 +5,14 @@
 	  activeBoosts — array of { id, stat, mult, expiresAt (unix) }; offline
 	                 time counts down (standard for timed boosts)
 	  lifetime*    — leaderboard fodder
+	  lifetimeGems — gems ever COLLECTED (income only: finds, rewards, referrals,
+	                 gem packs). NOT the spendable balance `economy.gems`, and
+	                 deliberately never decremented — a spend or a refund does not
+	                 un-earn anything (docs/features/leaderboards.md).
+	  bestCakeMillis — fastest single cake, ms, 0 = no run finished yet. MINIMUM,
+	                 written only when beaten. Milliseconds because the value is
+	                 mirrored 1:1 into an OrderedDataStore, which stores integers
+	                 (ADR-0022) — the UNITS are part of the store contract.
 	  foundKinds   — set of buried-find ids ever collected { [findId] = true }.
 	                 Drives the FIRST-DISCOVERY moment (features/treasures.md):
 	                 the first time you ever dig up each of the 9 kinds is called
@@ -27,7 +35,9 @@ return {
 		rebirths = 0,
 		activeBoosts = {},
 		lifetimeCalories = 0,
+		lifetimeGems = 0,
 		cakesEaten = 0,
+		bestCakeMillis = 0,
 		findsCollected = 0,
 		foundKinds = {},
 		biggestBelly = 0,
@@ -37,7 +47,9 @@ return {
 	sanitize = function(section)
 		section.rebirths = math.floor(sanitizeNumber(section.rebirths))
 		section.lifetimeCalories = sanitizeNumber(section.lifetimeCalories)
+		section.lifetimeGems = math.floor(sanitizeNumber(section.lifetimeGems))
 		section.cakesEaten = math.floor(sanitizeNumber(section.cakesEaten))
+		section.bestCakeMillis = math.floor(sanitizeNumber(section.bestCakeMillis))
 		section.findsCollected = math.floor(sanitizeNumber(section.findsCollected))
 		section.biggestBelly = sanitizeNumber(section.biggestBelly)
 		if type(section.foundKinds) ~= "table" then
