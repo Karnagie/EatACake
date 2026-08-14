@@ -77,7 +77,7 @@ function CakeFieldService.ResetCake(composition, footprint, rareKind: string?, b
 	state.biome = biome
 	state.cakeIndex += 1
 	state.floorUnits = GridUtil.StudsToUnits(composition[1].top) -- core band top
-	-- Layer gate: eating starts on the TOP band (frosting); bites clamp to
+	-- Layer gate: eating starts on the TOP band (frosting on classic); bites clamp to
 	-- its bottom until it's consumed, then the active floor drops (ScanStats).
 	state.activeBandIndex = #composition
 	state.activeFloorUnits =
@@ -104,18 +104,46 @@ function CakeFieldService.ResetCake(composition, footprint, rareKind: string?, b
 		layerLookup[s] = layer
 	end
 
-	-- Fill heights: full cylinder at total height with gentle surface noise
-	-- (stays under frosting repose so nothing avalanches at spawn).
-	local topUnits = GridUtil.StudsToUnits(topStuds)
+	-- Fill heights one terrace at a time. A cell rises only through the highest
+	-- band whose local footprint contains it; classic bands all carry the global
+	-- footprint, while the rainbow variant narrows each group toward the top.
+	-- Gentle noise is applied only to that cell's exposed surface band.
 	local edibleUnits = 0
+	table.clear(bandInitialVolume)
+	local bandInitialUnits = table.create(#composition, 0)
 	for z = 0, size - 1 do
 		for x = 0, size - 1 do
 			local i = GridUtil.Index(size, x, z)
 			if GridUtil.InCake(size, footprint, x, z) then
-				local noise = math.noise(x / 7, z / 7, state.cakeIndex) * 0.6
-				local h = math.max(state.floorUnits, topUnits + GridUtil.StudsToUnits(math.abs(noise)) - GridUtil.StudsToUnits(0.3))
+				local exposedIndex = 1
+				for bandIndex = #composition, 1, -1 do
+					local bandFootprint = composition[bandIndex].footprint or footprint
+					if GridUtil.InCake(size, bandFootprint, x, z) then
+						exposedIndex = bandIndex
+						break
+					end
+				end
+				local exposedBand = composition[exposedIndex]
+				local noise = if exposedIndex > 1 then math.noise(x / 7, z / 7, state.cakeIndex) * 0.6 else 0
+				local hStuds = math.max(exposedBand.bottom, exposedBand.top + math.abs(noise) - 0.3)
+				-- A lower terrace is also the exact floor at which the narrower
+				-- group above finishes. Never let its spawn noise poke through that
+				-- boundary or the layer gate would keep seeing the cleared upper band.
+				if exposedIndex < #composition then
+					hStuds = math.min(hStuds, exposedBand.top)
+				end
+				local h = GridUtil.StudsToUnits(hStuds)
 				GridUtil.WriteHeight(field, i, h)
 				edibleUnits += h - state.floorUnits
+				for bandIndex = 1, #composition do
+					local band = composition[bandIndex]
+					local bandFootprint = band.footprint or footprint
+					if GridUtil.InCake(size, bandFootprint, x, z) then
+						local bottomUnits = GridUtil.StudsToUnits(band.bottom)
+						local topUnits = GridUtil.StudsToUnits(band.top)
+						bandInitialUnits[bandIndex] += math.clamp(h - bottomUnits, 0, topUnits - bottomUnits)
+					end
+				end
 			else
 				GridUtil.WriteHeight(field, i, 0)
 			end
@@ -123,19 +151,11 @@ function CakeFieldService.ResetCake(composition, footprint, rareKind: string?, b
 	end
 	state.edibleVolume = GridUtil.UnitsToStuds(edibleUnits) * grid.cell * grid.cell
 
-	-- Per-band initial volumes (flat-fill approximation is fine for the
-	-- 10% auto-sweep threshold).
-	table.clear(bandInitialVolume)
-	local cakeArea = 0
-	for z = 0, size - 1 do
-		for x = 0, size - 1 do
-			if GridUtil.InCake(size, footprint, x, z) then
-				cakeArea += grid.cell * grid.cell
-			end
-		end
-	end
-	for bandIdx, band in ipairs(composition) do
-		bandInitialVolume[bandIdx] = (band.top - band.bottom) * cakeArea
+	-- Exact initial volume per band/mask. The old full-cylinder approximation
+	-- would make a narrow terrace look partly eaten at spawn and auto-sweep early.
+	local cellArea = grid.cell * grid.cell
+	for bandIndex = 1, #composition do
+		bandInitialVolume[bandIndex] = GridUtil.UnitsToStuds(bandInitialUnits[bandIndex]) * cellArea
 	end
 
 	Log.Sum(
@@ -347,10 +367,14 @@ function CakeFieldService.Snapshot(): (buffer, { [string]: any })
 	local field = state.field :: buffer
 	local copy = buffer.create(buffer.len(field))
 	buffer.copy(copy, 0, field, 0)
+	local variant = cakeCfg.variants and cakeCfg.variants[state.cakeId] or {}
 	return copy, {
 		cakeIndex = state.cakeIndex,
+		cakeId = state.cakeId,
 		footprint = state.footprint,
 		composition = state.composition,
+		waxEnabled = variant.waxEnabled ~= false,
+		crustEnabled = variant.crustEnabled ~= false,
 		rareKind = state.rareKind,
 		biome = state.biome,
 		phase = state.phase,
@@ -403,11 +427,12 @@ function CakeFieldService.ScanStats()
 	local sweptBand = false
 	if topBandIndex > 1 then -- never sweep the core band
 		local band = state.composition[topBandIndex]
+		local bandFootprint = band.footprint or footprint
 		local bandBottomUnits = GridUtil.StudsToUnits(band.bottom)
 		local aboveUnits = 0
 		for z = 0, size - 1 do
 			for x = 0, size - 1 do
-				if GridUtil.InCake(size, footprint, x, z) then
+				if GridUtil.InCake(size, bandFootprint, x, z) then
 					local h = GridUtil.ReadHeight(field, GridUtil.Index(size, x, z))
 					if h > bandBottomUnits then
 						aboveUnits += h - bandBottomUnits
@@ -419,7 +444,7 @@ function CakeFieldService.ScanStats()
 		if aboveVolume > 0 and aboveVolume < bandInitialVolume[topBandIndex] * cakeCfg.sim.autoSweepFraction then
 			for z = 0, size - 1 do
 				for x = 0, size - 1 do
-					if GridUtil.InCake(size, footprint, x, z) then
+					if GridUtil.InCake(size, bandFootprint, x, z) then
 						local i = GridUtil.Index(size, x, z)
 						local h = GridUtil.ReadHeight(field, i)
 						if h > bandBottomUnits then
@@ -458,6 +483,7 @@ function CakeFieldService.ScanStats()
 	-- an absolute stud rule swallows a thin band (see CakeConfig.sim
 	-- .sweepBandFraction for the measurement). nil/0 = the old absolute rules.
 	local activeBand = state.composition[activeIndex]
+	local activeFootprint = (activeBand and activeBand.footprint) or footprint
 	local bandThickness = activeBand and (activeBand.top - activeBand.bottom) or math.huge
 	local sweepFraction = cakeCfg.sim.sweepBandFraction
 	local function sweepStuds(studs: number): number
@@ -470,7 +496,7 @@ function CakeFieldService.ScanStats()
 	if sliverCeil > floorU then
 		for z = 0, size - 1 do
 			for x = 0, size - 1 do
-				if GridUtil.InCake(size, footprint, x, z) then
+				if GridUtil.InCake(size, activeFootprint, x, z) then
 					local i = GridUtil.Index(size, x, z)
 					local h = GridUtil.ReadHeight(field, i)
 					if h > floorU and h <= sliverCeil then
@@ -507,18 +533,18 @@ function CakeFieldService.ScanStats()
 		local collapse = {}
 		for z = 0, size - 1 do
 			for x = 0, size - 1 do
-				if GridUtil.InCake(size, footprint, x, z) then
+				if GridUtil.InCake(size, activeFootprint, x, z) then
 					local i = GridUtil.Index(size, x, z)
 					local h = GridUtil.ReadHeight(field, i)
 					if h > floorU then
 						-- In-cake neighbour whose surface is a CRATER (near the active floor).
-						local left = x > 0 and GridUtil.InCake(size, footprint, x - 1, z)
+						local left = x > 0 and GridUtil.InCake(size, activeFootprint, x - 1, z)
 							and GridUtil.ReadHeight(field, i - 1) <= clearedCeilU
-						local right = x < size - 1 and GridUtil.InCake(size, footprint, x + 1, z)
+						local right = x < size - 1 and GridUtil.InCake(size, activeFootprint, x + 1, z)
 							and GridUtil.ReadHeight(field, i + 1) <= clearedCeilU
-						local back = z > 0 and GridUtil.InCake(size, footprint, x, z - 1)
+						local back = z > 0 and GridUtil.InCake(size, activeFootprint, x, z - 1)
 							and GridUtil.ReadHeight(field, i - size) <= clearedCeilU
-						local front = z < size - 1 and GridUtil.InCake(size, footprint, x, z + 1)
+						local front = z < size - 1 and GridUtil.InCake(size, activeFootprint, x, z + 1)
 							and GridUtil.ReadHeight(field, i + size) <= clearedCeilU
 						local cleared = (left and 1 or 0) + (right and 1 or 0) + (back and 1 or 0) + (front and 1 or 0)
 						if cleared > 0 then
@@ -595,11 +621,12 @@ local function topBandFromField(): (number, number)
 	if band == nil then
 		return index, 0
 	end
+	local bandFootprint = band.footprint or footprint
 	local floorUnits = math.max(state.floorUnits, GridUtil.StudsToUnits(band.bottom))
 	local aboveUnits = 0
 	for z = 0, size - 1 do
 		for x = 0, size - 1 do
-			if GridUtil.InCake(size, footprint, x, z) then
+			if GridUtil.InCake(size, bandFootprint, x, z) then
 				local h = GridUtil.ReadHeight(field, GridUtil.Index(size, x, z))
 				if h > floorUnits then
 					aboveUnits += h - floorUnits
@@ -646,11 +673,12 @@ function CakeFieldService.ClearActiveBand(): (number, any?, any?)
 	if band == nil or index <= 1 then
 		return 0, nil, nil
 	end
+	local bandFootprint = band.footprint or footprint
 	local floorUnits = math.max(state.floorUnits, GridUtil.StudsToUnits(band.bottom))
 	local removedUnits = 0
 	for z = 0, size - 1 do
 		for x = 0, size - 1 do
-			if GridUtil.InCake(size, footprint, x, z) then
+			if GridUtil.InCake(size, bandFootprint, x, z) then
 				local i = GridUtil.Index(size, x, z)
 				local h = GridUtil.ReadHeight(field, i)
 				if h > floorUnits then

@@ -19,8 +19,8 @@ dropped server-side and the metric silently never appears.
 So: **never write a literal event name.** Add a key to
 `AnalyticsConfig.events` / `.flowSteps` / `.funnels` and pass the key.
 `AnalyticsConfig.Validate()` runs at boot and logs occupancy; an unknown key
-warns instead of inventing a name. Current occupancy: **41/100 events,
-8/10 funnels, 31/100 steps** on the longest funnel.
+warns instead of inventing a name. Current occupancy: **43/100 events,
+9/10 funnels, 42/100 steps** on the longest funnel (`CakeLayers`).
 
 ## The initial player flow
 
@@ -77,7 +77,7 @@ happened.
 | `ui_dead_press` | pressed a DISABLED control, or one the input lock swallowed: they tried, the game said nothing |
 | `queue_error` / `match_reject` / `teleport_fail` | the refusal, by reason |
 
-## The other funnels (8 of 10 used, 2 free on purpose)
+## The other funnels (9 of 10 used, 1 free on purpose)
 
 | Key | Name | Session id | Steps |
 |---|---|---|---|
@@ -85,6 +85,7 @@ happened.
 | `queue` | `Matchmaking` | per pad visit (`visit`) | enter → selector → difficulty → party → start → countdown → launch → sent |
 | `tutorial` | `Tutorial` | analytics session | slides → skip → eat → bite → belly → path → arrived → upgrades → done |
 | `match` | `Match` | round id | arrive → start → bite → layer → gym → upgrade → half → boss → win → return |
+| `layers` | `CakeLayers` | per CAKE (`visit`) | `l1` … `l42` — **step N = "cleared N layers"** |
 | `shop` | `Shop` | per visit | open → tab → card → prompt → bought |
 | `upgrades` | `Upgrades` | per visit | open → select → attempt → bought |
 | `gym` | `GymBurn` | per visit | near → start → tap → banked |
@@ -93,6 +94,39 @@ happened.
 Landing on a `visit` funnel's **first step opens a new attempt** automatically
 (`Session.Funnel`) — otherwise the first shop visit's seen-set would suppress
 every later one and the conversion rate would be nonsense.
+
+## How deep do they get — the `CakeLayers` funnel
+
+Every other progress signal is coarse (`match`'s half/boss/win) or a bare
+counter (`layer_cleared`), and neither says WHERE a run ends. This one does: the
+funnel's own bar chart is the distribution of **layers cleared per cake**, so
+the cliff in it is the layer players stop on — including the four **mini-boss
+zone gates** (`features/cake-cycle.md`), which is the only place a player is
+blocked rather than merely tired.
+
+- Fired by `CakeSimulationSubs` at the 1 Hz layer gate, alongside the existing
+  `first-layer` / `match:layer` beats, **for every authorized participant** (the
+  cake is shared, so a cleared layer is cleared for everyone).
+- **Depth = `#composition - activeBandIndex`.** Band 1 is the inedible core and
+  the gate counts down from the frosting, so depth walks `1 … edibleLayers` and
+  hits its last value exactly when the boss spawns. Verified against the real
+  roll + gate (28/28 on a solo-easy cake).
+- A gate move that crosses several bands at once (a paid `eatlayer` clear, a
+  wide scoop through thin frosting) **fills in the skipped depths**, capped at
+  `MAX_LAYER_BEATS_PER_SCAN` (8) with a warn — a funnel with a hole in it reads
+  as a data error, not as a jump.
+- Steps are **generated** from `AnalyticsConfig.maxLayerDepth` (42), not
+  hand-written. Analytics owns that number rather than reading
+  `CakeConfig.composition.maxLayers`, because a step NUMBER is a permanent
+  contract with 90 days of recorded data — but `CakeSimulationSubs` compares the
+  two at boot and warns if a cake could ever roll deeper than the funnel is long.
+- `layer_cleared` now carries **`depth`, the cake's total edible layers, and the
+  flavour-zone index** in its three fields (it had the default
+  cohort/platform/place triple, which the funnel already provides). The cake's
+  total is the denominator that tells a real cliff apart from a cake that simply
+  ENDED: a solo-easy cake is ~28 layers, a hard 4-player one reaches the 42 cap,
+  so steps past ~28 are unreachable for most attempts. Break the funnel down by
+  difficulty (its third field) before reading its tail.
 
 ## Architecture
 
@@ -195,14 +229,15 @@ still sending.
 ### Every tap, with no per-button wiring
 `UIKit.SetTrackHandler` is injected once by `AnalyticsSubsClient` — the same
 shape as the audio layer's `SetSoundHandler`. `Interaction.usePressable` reports
-on the aggregate press edge (so multi-touch and drag-off are one tap), and
-identifies the control by `config.analyticsId` or, failing that, by the pressed
-Instance's own **Name** (with the parent prefixed when the name is generic).
+mouse/touch on the aggregate pointer-down edge (so multi-touch and drag-off are
+one tap), and controller/keyboard UI activation once at `GuiButton.Activated`.
+It identifies the control by `config.analyticsId` or, failing that, by the
+pressed Instance's own **Name** (with the parent prefixed when the name is generic).
 Components outside `usePressable` (Toggle, PetCard, DayCard, the hex tree, the
 reveal overlay) pass an id to `Interaction.Cue("press", id)`.
 
-A **disabled** button reports too, via `InputBegan` — which fires regardless of
-`Active`, unlike `Activated`/`MouseButton1Click`, and that difference IS the
+A **disabled** button reports pointer attempts too, via `InputBegan` — which fires regardless of
+`Active`, unlike `Activated`, and that difference IS the
 signal being recorded. No `Active` value is changed, so nothing sinks
 differently.
 
@@ -228,9 +263,10 @@ SCENARIO_FILE=analytics_scenario.lua python tools/headless-sim/build_sim.py && l
 python tools/headless-sim/catalog_xcheck.py
 ```
 The scenario runs the REAL Sink/Session/Ingest against a stubbed
-AnalyticsService: **66 checks** covering the budget, priority reserves,
+AnalyticsService: **76 checks** covering the budget, priority reserves,
 coalescing, the trust boundary, teleport continuity, stalls/abandonment,
-recurring-funnel attempts, economy validation, the unpublished-place shutdown,
+recurring-funnel attempts, the layer-depth funnel (step number == depth, one
+attempt per cake), economy validation, the unpublished-place shutdown,
 and every defect adversarial review found on 2026-08-02. The stub **validates
 the custom-fields dictionary shape**, because handing `LogCustomEvent` a
 positional array throws — and three throws disable the sink. See
@@ -249,6 +285,22 @@ positional array throws — and three throws disable the sink. See
   `onPanelChanged`: `AudioSubsClient` already owns that key, `SetCallbacks`
   merges by key with last-writer-wins, and Audio sorts AFTER Analytics — taking
   it would silently unplug the panel whoosh.
+  ⚠ That poll is ALSO why `upgrades-open` and the `upgrades` funnel's `open` step
+  are opener-agnostic for free: they fire on the panel turning "Upgrades",
+  whatever opened it (prompt, HUD button, anything later).
+- **A panel RE-OPENED inside `client.panelReopenSeconds` (5 s) reports nothing**
+  (2026-08-13). A panel used to cost a walk — the upgrade tree's only opener was a
+  ProximityPrompt at the checkpoint. It is now a HUD icon that *breathes to
+  attract taps*, next to two others, in front of children. One toggle costs three
+  beats that do NOT coalesce (`panel` open + `panel` close + the funnel step;
+  only `press`/`dead-press`/`error` are COUNTABLE, and `Funnel` is deliberately
+  not deduped because a second shop visit is a second attempt), so ~2 toggles/s
+  passes the 240 beats/min admission and every REAL beat that player produces for
+  the rest of the minute is refused. The first open always reports; the window is
+  measured from the last REPORTED open, so a mash cannot walk the deadline
+  forward one tap at a time; and a close is emitted only when its open was, so
+  opens and closes always pair. Measured live: three open/close cycles of the
+  tree in ~2.4 s produced exactly one open, one funnel step and one close.
 - **Never coalesce a measurement.** `flow_step`, `ui_hold`, `gym_banked` and the
   place-minutes events carry a real value; merging them sums nonsense (two 6 s
   holds would report one impossible 12 s press).

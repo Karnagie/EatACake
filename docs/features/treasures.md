@@ -23,6 +23,12 @@ pays in the one currency the shop spends: you EARN gems and then CHOOSE a boost
 Amounts ride `TreasureConfig.finds[].reward` and span 2 gems (common berry) to 70
 (legendary trapped-pet).
 
+The chosen cake may multiply every descriptor before grant. `cake-classic` is
+1×; `cake-rainbow` is **1.5×**. `CakeCycleService.ScaleFindReward` combines that
+variant multiplier with co-op scaling, floors once, and returns a copy so the
+shared `TreasureConfig` descriptor is never mutated. Difficulty and random rare
+skins do not multiply finds.
+
 ⚠ **The payout amounts, the weights and `spawn` are ONE balance set.** A solo
 cake's 40 finds are worth **~496 gems ≈ exactly one boost** — the price lives in
 `features/boosts.md`. (A flat roll expects ~347; `spawn.depthRarityBias` carries
@@ -35,10 +41,13 @@ and height are fixed for any population), and a find is consumed by whoever
 reaches it first — so 4 players collect ~10 finds each out of the same 40.
 Without a per-head term a co-op player needed FOUR cakes for one boost. Gems
 therefore carry the same rule calories already had:
-`CakeConfig.composition.coopFinds` (0.62) → `CakeStateData.findPayoutScale`,
+`CakeConfig.composition.coopFinds` (0.62) plus the selected variant's
+`findRewardMultiplier` → `CakeStateData.findPayoutScale`,
 applied by `CakeCycleService.ScaleFindReward` (`features/cake-cycle.md`).
 
-| party | gems per player per cake |
+Classic baseline (rainbow applies its 1.5× descriptor multiplier on top):
+
+| party | classic gems per player per cake |
 |---|---|
 | solo | 496 |
 | 2p | 402 |
@@ -133,6 +142,11 @@ site, and a debug function that hands out rewards is exactly what gets wired to 
 remote by accident later. Re-firing with a smaller value carves
 further, which is how the escalation gets measured rather than eyeballed.
 
+The separate cake-cycle hook `DebugClearLayer` can uncover many finds at once.
+It arms `CakeStateData.debugSuppressFindRewards` before changing the field, so
+those finds retain their shared pop/collect visuals but skip gems, discovery,
+progress, analytics and persistence until a new cake resets the latch.
+
 Measured this way (2026-07-29, a common `candy-gem`, template baseline
 `Fill=0.850`): keep 50% → `0.814`, keep 15% → `0.502`, keep 6% → `0.410`;
 `Outline` held at `0.100` throughout, correct for common.
@@ -173,7 +187,10 @@ every layer — a 40-minute cake never has a dry stretch. Each find's TOP is sun
 ~8.5 studs tall against 3.5-25 stud bands: a find usually spans a band boundary,
 so you see its crown in one layer and only free it in the next (the layer gate
 decides *when*, which is the point). `SpawnForCake` clamps every find's BOTTOM
-above the inedible core, so no find is ever unreachable.
+above the inedible core, so no find is ever unreachable. XZ placement is sampled
+inside the assigned band's own footprint (with the model margin inset), and the
+later coverage scan uses that same footprint. This keeps finds inside narrow
+rainbow terraces instead of burying them in empty air beyond that colour group.
 
 ## Config / state
 `Shared/config/TreasureConfig` — `finds` (weights, rarity, rewards, colors,

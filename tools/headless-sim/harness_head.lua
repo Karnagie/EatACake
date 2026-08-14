@@ -41,7 +41,10 @@ local PlayersService = {
 		return nil
 	end,
 }
-local RunServiceStub = { Heartbeat = { Wait = function() return 1 / 60 end } }
+local RunServiceStub = {
+	Heartbeat = { Wait = function() return 1 / 60 end },
+	IsStudio = function() return false end,
+}
 
 -- ── analytics recorder ──────────────────────────────────────────────────
 -- Records what the game ASKED AnalyticsService to log, so a scenario can

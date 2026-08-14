@@ -1,6 +1,7 @@
 --[[
 	CakeCycleSubs -- cake lifecycle orchestration: map/cake construction, match
-	beginning, boss resolution, rewards, and cycle-state broadcasts.
+	beginning, ZONE-GATE mini-bosses, boss resolution, rewards, and cycle-state
+	broadcasts.
 
 	CakeSubs owns player input. CakeSimulationSubs owns the Heartbeat fabric and
 	calls this module for rare transitions. GameRoundSubs begins the one reserved
@@ -89,54 +90,18 @@ local function loadedCakePlayers(): { Player }
 	return loaded
 end
 
+-- ⚠ This was a PER-RECIPIENT fire while the boss advertised a pre-rolled squishy
+-- ("FIGHTING FOR ..."). That preview was REMOVED 2026-08-07 by request — the
+-- prize is a surprise again — so the payload is identical for everyone and this
+-- is a plain broadcast outside a reserved match, exactly like fireSnapshot.
 local function fireCycle(payload)
-	local matchMode = matchExpectedCount() ~= nil
-	-- The boss PRIZE is per-player (each fighter has their own pre-rolled squishy),
-	-- so once prizes exist this update stops being one broadcast payload. A
-	-- shallow clone per recipient rather than mutating one shared table: cheap
-	-- (<=4 players at 4 Hz) and it cannot leak one player's prize to another if a
-	-- future change makes the fire path yield.
-	local prizes = state.pendingPetRolls
-	local perPlayer = next(prizes) ~= nil
-	if not matchMode and not perPlayer then
+	if matchExpectedCount() == nil then
 		uCycle:FireAllClients(payload)
 		return
 	end
-	local recipients = if matchMode then loadedCakePlayers() else Players:GetPlayers()
-	for _, player in ipairs(recipients) do
-		if perPlayer then
-			local personal = table.clone(payload)
-			personal.pendingPet = prizes[player.UserId]
-			uCycle:FireClient(player, personal)
-		else
-			uCycle:FireClient(player, payload)
-		end
-	end
-end
-
--- Decide (but do NOT grant) the squishy each fighter is playing for. Called when
--- the boss phase opens so the HUD can advertise the prize — the fight used to be
--- a blind tap race with no visible stake. Committed by rewardPlayers on a win.
-local function prepareBossPrizes()
-	table.clear(state.pendingPetRolls)
-	local minRarity = if state.rareKind == "rainbow" then cakeCfg.composition.rare.rainbow.guaranteedRarity else nil
-	local shown = 0
 	for _, player in ipairs(loadedCakePlayers()) do
-		local preview = services_.PetService.Preview(player.UserId, "cycle", minRarity)
-		if preview ~= nil then
-			state.pendingPetRolls[player.UserId] = preview
-			shown += 1
-		else
-			-- Not fatal: the win path falls back to a fresh roll, they just fight
-			-- without seeing the prize.
-			Log.Warn(
-				SCOPE,
-				`boss prize could not be pre-rolled for {player.Name} (profile not loaded) — `
-					.. `no prize shown; a fresh roll is granted on the win instead`
-			)
-		end
+		uCycle:FireClient(player, payload)
 	end
-	Log.Sum(SCOPE, `boss prizes pre-rolled for {shown} player(s){if minRarity then ` (floored to {minRarity}+)` else ""}`)
 end
 
 local function fireSnapshot(bufferValue, metadata)
@@ -151,28 +116,39 @@ end
 
 local function rewardPlayers(players: { Player })
 	local minRarity = if state.rareKind == "rainbow" then cakeCfg.composition.rare.rainbow.guaranteedRarity else nil
+	-- How long this cake took, for the Top Speed Runners board
+	-- (features/leaderboards.md). Measured ONCE for the whole cake — the clock
+	-- belongs to the cake, not to a player — and awarded only to the spawn
+	-- roster. A zero/absent stamp means the cake was never stamped (a cycle that
+	-- somehow reached a win without SpawnNewCake), so no time is recorded at all
+	-- rather than a fake one.
+	local elapsedMillis = nil
+	if state.debugSuppressFindRewards == true then
+		-- ⚠ A DebugClearLayer cake reaches the boss in ~1 minute instead of ~35,
+		-- and `bestCakeMillis` is a MINIMUM published to an ASCENDING ordered
+		-- store — nothing in the game can ever displace that row again, and the
+		-- only remedy is bumping `storeVersion`, which wipes all three boards
+		-- (ADR-0022). The same latch already suppresses find/analytics writes for
+		-- a debug-skipped cake (CakeSimulationSubs); the speedrun clock joins it.
+		-- `cakesEaten` deliberately still counts: it is monotonic, self-corrects
+		-- with real runs, and QA relies on it to unlock the rainbow cake.
+		Log.Warn(SCOPE, "DebugClearLayer cake -- speedrun time NOT recorded (a debug clear would set an unbeatable record)")
+	elseif type(state.cakeStartedAt) == "number" and state.cakeStartedAt > 0 then
+		elapsedMillis = math.floor((os.clock() - state.cakeStartedAt) * 1000)
+		if elapsedMillis <= 0 then
+			elapsedMillis = nil
+		end
+	else
+		Log.Once(SCOPE, "no-cake-clock", "cake cleared with no spawn stamp -- no speedrun time recorded")
+	end
 	for _, player in ipairs(players) do
 		local userId = player.UserId
 		if services_.PersistenceService.IsLoaded(userId) then
-			-- COMMIT the prize the boss HUD has been showing this player, so the
-			-- squishy they fought for is the squishy they get. Fresh roll only as a
-			-- fallback: no preview exists for someone whose profile finished loading
-			-- after the boss opened, or who arrived mid-fight.
-			local pending = state.pendingPetRolls[userId]
-			local roll = nil
-			if pending ~= nil then
-				roll = services_.PetService.Grant(userId, pending.petId)
-				if roll == nil then
-					Log.Warn(
-						SCOPE,
-						`advertised boss prize '{pending.petId}' could not be granted to {player.Name} `
-							.. `(id missing from PetConfig?) — rolling a fresh one instead`
-					)
-				end
-			end
-			if roll == nil then
-				roll = services_.PetService.Roll(userId, "cycle", minRarity)
-			end
+			-- Rolled AT THE WIN, not advertised during the fight: the prize preview
+			-- was removed 2026-08-07 by request. `PetService.Roll` is still
+			-- `Preview + Grant` internally (features/pets.md) — that split stays,
+			-- it just has no second caller any more.
+			local roll = services_.PetService.Roll(userId, "cycle", minRarity)
 			if roll then
 				roll.source = "cake"
 				if PetSubs then
@@ -183,6 +159,11 @@ local function rewardPlayers(players: { Player })
 				end
 			end
 			services_.ProgressService.AddStat(userId, "cakesEaten", 1)
+			if elapsedMillis ~= nil and type(state.cakeStartRoster) == "table" and state.cakeStartRoster[userId] then
+				if services_.ProgressService.RecordCakeTime(userId, elapsedMillis) then
+					Log.Info(SCOPE, `{player.Name}: new best cake time {string.format("%.1f", elapsedMillis / 1000)}s`)
+				end
+			end
 			-- A cake-clear reward is a high-value milestone. Persist it now even in
 			-- match mode; the later intentional unload is a separate final save.
 			services_.PersistenceService.Save(userId)
@@ -212,12 +193,24 @@ function CakeCycleSubs.BroadcastCycle(announce: string?)
 		Log.Once(SCOPE, "broadcast-before-start", "BroadcastCycle called before Start -- update dropped")
 		return
 	end
+	local mini = state.miniBoss
 	fireCycle({
 		phase = state.phase,
 		progress = state.progress,
 		timer = math.max(0, math.floor(state.phaseTimer * 10) / 10),
 		boss = state.boss and { hp = state.boss.hp, maxHp = state.boss.maxHp } or nil,
+		-- The ZONE GATE (features/cake-cycle.md). `model` is the authored rig name
+		-- the client clones out of ReplicatedStorage.Assets.MiniBosses; `zoneKey`
+		-- names the zone it is guarding, for the HUD/announce.
+		miniBoss = mini and {
+			hp = mini.hp,
+			maxHp = mini.maxHp,
+			index = mini.index,
+			model = mini.model,
+			zoneKey = mini.zoneKey,
+		} or nil,
 		rareKind = state.rareKind,
+		cakeId = state.cakeId,
 		biome = state.biome,
 		activeBandIndex = state.activeBandIndex,
 		-- Per-cake find goal for the HUD ("FINDS 7/40"). The cake % bar is hidden
@@ -225,9 +218,6 @@ function CakeCycleSubs.BroadcastCycle(announce: string?)
 		-- progress signal the player gets during the loop.
 		finds = findCounts(),
 		announce = announce,
-		-- `pendingPet = { petId, rarity }` is attached PER RECIPIENT by fireCycle
-		-- (each fighter has their own pre-rolled prize), so it is deliberately not
-		-- set here.
 	})
 end
 
@@ -239,17 +229,43 @@ function CakeCycleSubs.SpawnNewCake(fixedPlayerCount: number?)
 	end
 
 	local cakePlayers = loadedCakePlayers()
-	-- A fresh cake has no boss and therefore no advertised prize (belt-and-braces:
-	-- FinishBoss already clears these, but the endless fallback can reach a new
-	-- cake without one).
-	table.clear(state.pendingPetRolls)
+	-- SPEEDRUN clock (features/leaderboards.md). The roster is snapshotted with
+	-- the stamp because only these players ran the WHOLE cake: in a reserved
+	-- match `beginMatchIfReady` has already waited for every arriving profile, so
+	-- this is the final roster; in the endless fallback it excludes anyone who
+	-- walks in on a half-eaten cake.
+	state.cakeStartedAt = os.clock()
+	if type(state.cakeStartRoster) == "table" then
+		table.clear(state.cakeStartRoster)
+	else
+		state.cakeStartRoster = {}
+	end
+	for _, player in ipairs(cakePlayers) do
+		state.cakeStartRoster[player.UserId] = true
+	end
+	-- A fresh cake starts with no live gate (belt-and-braces: FinishMiniBoss
+	-- already clears it, but the endless fallback can reach a new cake from any
+	-- phase). `zones` / `miniBossesDefeated` are re-rolled by RollComposition.
+	state.miniBoss = nil
+	if type(state.pendingMiniBossZones) == "table" then
+		table.clear(state.pendingMiniBossZones)
+	else
+		state.pendingMiniBossZones = {}
+	end
+	-- DebugClearLayer may uncover/collect finds while QA skips through a cake.
+	-- Its no-profile-write latch is cake-scoped; a normally spawned cake must
+	-- always restore production reward behaviour.
+	state.debugSuppressFindRewards = false
 	-- Biome used to be unlocked by the highest-rebirth player present; rebirth is
 	-- gone (2026-07-26) so every cake takes the first biome. Kept as a call so
 	-- re-introducing an unlock rule stays a one-liner (ProgressService.BiomeFor).
 	local biome = services_.ProgressService.BiomeFor(0)
 	local playerCount = math.max(1, fixedPlayerCount or #cakePlayers)
 	local composition, footprint, rareKind = services_.CakeCycleService.RollComposition(biome, playerCount)
-	if rareKind == nil and os.time() - state.lastRareEventAt >= 3600 then
+	local variant = cakeCfg.variants and cakeCfg.variants[state.cakeId] or {}
+	local environmentName = variant.environmentName or "Environment"
+	services_.MapService.UseEnvironment(environmentName)
+	if variant.rareEnabled ~= false and rareKind == nil and os.time() - state.lastRareEventAt >= 3600 then
 		rareKind = "golden"
 	end
 	if rareKind ~= nil then
@@ -257,15 +273,42 @@ function CakeCycleSubs.SpawnNewCake(fixedPlayerCount: number?)
 	end
 
 	services_.CakeFieldService.ResetCake(composition, footprint, rareKind, biome)
+	-- ⚠ REFRESH THE COARSE SAFETY NET *BEFORE* PLACING ANYONE ON THE CAKE.
+	-- `ResetCake` writes the selected cake's full height but changes nothing collidable, and
+	-- the only other caller of `UpdateHeights` is the 5 Hz clock in
+	-- CakeSimulationSubs — which sits BELOW that Heartbeat's
+	-- `roundSimulationEnabled()` early-return, and so does its accumulator. That
+	-- gate is `match-started`, which `GameRoundService.CompleteStart` sets only
+	-- AFTER `BeginMatch` (i.e. after this function) returns. So at a reserved-match
+	-- start the 256 slabs are provably still their build pose (1-stud plates with
+	-- their tops at `grid.origin.y`) for a FULL `1/collisionHz` after the lift
+	-- below drops characters at cake height — nothing to stand on for 200 ms, on
+	-- top of however long the client's cold EditableMesh pool build takes before
+	-- its own columns exist. That window is the bug: players free-fall into the
+	-- cake and `columnsRebuild` then closes 1024 solid columns around them.
+	-- A freshly reset cake is near-flat, so the min-of-block slab lands within
+	-- ~0.3 studs of the true surface: an exact floor at exactly the instant it is
+	-- needed. Zero the accumulator too: the slabs are current as of right now, so
+	-- the 5 Hz clock should start a fresh period rather than fire again instantly.
+	services_.CakeCollisionService.UpdateHeights()
+	state.simulationAccumulators.collision = 0
 	services_.TreasureService.SpawnForCake()
 	services_.MapService.ApplyBiome(biome)
-	services_.MapService.SetCheckpointHeight(cakeCfg.grid.origin.y + composition[#composition].top)
+	local topBand = composition[#composition]
+	services_.MapService.SetCheckpointHeight(cakeCfg.grid.origin.y + topBand.top, topBand.footprint or footprint)
 	services_.CakeCycleService.BeginEating()
 
 	-- Lift characters out of the materialized cake, and carry checkpoint users
 	-- with the plate when it jumps to the fresh top layer.
 	local grid = cakeCfg.grid
-	local topY = grid.origin.y + composition[#composition].top + 3
+	-- Two DIFFERENT heights, deliberately split (they used to be one `+ 3`):
+	--   surfaceY = the crust. The "are they inside the new cake?" PREDICATE, so a
+	--     player already standing on fresh crust is not re-hopped every new cake.
+	--   liftY    = where we actually put them. `+ 3` was the HumanoidRootPart
+	--     offset of an R15 rig, i.e. feet flush ON the crust with ZERO clearance —
+	--     the wrong constant for a target that has no collider under it yet.
+	local surfaceY = grid.origin.y + composition[#composition].top
+	local liftY = surfaceY + cakeCfg.composition.liftClearanceStuds
 	-- "Inside the new cake" = the footprint's own rounded-rect SDF in WORLD studs,
 	-- grown by a body width so someone hugging the rim is lifted too. This is
 	-- GridUtil.InCake's test, but it deliberately does NOT go through the cell
@@ -283,14 +326,27 @@ function CakeCycleSubs.SpawnNewCake(fixedPlayerCount: number?)
 	for _, player in ipairs(cakePlayers) do
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
-		if root then
+		-- An ANCHORED root is owned by something that re-asserts its CFrame (the
+		-- gym treadmill mount, BodySubs) — teleporting it just fights that loop for
+		-- one tick. Let the owner carry the player instead.
+		if root and not root.Anchored then
 			local qx = math.max(math.abs(root.Position.X - grid.origin.x) - edgeX, 0)
 			local qz = math.max(math.abs(root.Position.Z - grid.origin.z) - edgeZ, 0)
-			if qx * qx + qz * qz <= liftR * liftR and root.Position.Y < topY then
-				root.CFrame = CFrame.new(root.Position.X, topY, root.Position.Z)
+			if qx * qx + qz * qz <= liftR * liftR and root.Position.Y < surfaceY then
+				-- ⚠ Zero the assembly first. A bare CFrame write KEEPS velocity, and
+				-- during the arrival window there is no cake at all — every character
+				-- is mid-fall from the spawn pad at up to terminal speed. Placed at
+				-- cake height still carrying ~150 studs/s down, they punch straight
+				-- through on the next physics step. (BodySubs.mountTreadmill already
+				-- does this; the lift never did — that is the "sometimes".)
+				root.AssemblyLinearVelocity = Vector3.zero
+				root.AssemblyAngularVelocity = Vector3.zero
+				root.CFrame = CFrame.new(root.Position.X, liftY, root.Position.Z)
 			elseif services_.MapService.IsOverCheckpoint(root.Position) then
 				local checkpoint = services_.MapService.GetCheckpointCFrame()
 				if checkpoint then
+					root.AssemblyLinearVelocity = Vector3.zero
+					root.AssemblyAngularVelocity = Vector3.zero
 					root.CFrame = checkpoint
 				end
 			end
@@ -317,18 +373,98 @@ function CakeCycleSubs.BeginMatch(difficulty: string, expectedCount: number): bo
 	return CakeCycleSubs.SpawnNewCake(expectedCount)
 end
 
+local function announceMiniBossStart()
+	local fighters = loadedCakePlayers()
+	beatCycle(
+		fighters,
+		nil,
+		"miniboss-start",
+		tostring(state.miniBoss and state.miniBoss.index or 0),
+		tostring(state.miniBoss and state.miniBoss.model)
+	)
+	CakeCycleSubs.BroadcastCycle("miniboss-spawned")
+end
+
 --API
--- eating -> boss. Wraps the service transition so the PRIZE is decided in the
--- same step: the boss HUD advertises the squishy each fighter is playing for
--- (features/cake-cycle.md), and rewardPlayers commits exactly that one on a win.
--- CakeSimulationSubs calls this instead of CakeCycleService.BeginBoss directly.
+-- eating -> miniboss, at a flavour-ZONE boundary (features/cake-cycle.md).
+-- `zoneIndex` is the zone the layer gate has just stepped INTO; that zone's
+-- `bossModel` is the rig that bursts out of the cake to guard it. Every bite is
+-- blocked until it dies, which is what makes a zone a real chapter break.
+function CakeCycleSubs.BeginMiniBoss(zoneIndex: number): boolean
+	if state == nil or services_ == nil then
+		Log.Warn(SCOPE, "BeginMiniBoss called before Start -- zone gate skipped")
+		return false
+	end
+	if state.phase ~= "eating" then
+		-- The boss/reward transition won the race for this scan tick. Not an
+		-- error, but it must not be silent: a swallowed gate means a zone opened
+		-- unguarded.
+		Log.Once(SCOPE, "miniboss-late", `zone gate for zone #{zoneIndex} arrived in phase '{state.phase}' -- skipped`)
+		return false
+	end
+	if not services_.CakeCycleService.BeginMiniBoss(CakeCycleSubs.BossPlayerCount(), zoneIndex) then
+		return false
+	end
+	announceMiniBossStart()
+	return true
+end
+
+--API
+-- Starts the oldest boundary captured by QueueCrossedMiniBosses. A multi-zone
+-- scan enters the first gate immediately; FinishMiniBoss chains the remainder
+-- without reopening the already-cleared deeper zones between fights.
+function CakeCycleSubs.BeginNextMiniBoss(): boolean
+	if state == nil or services_ == nil then
+		Log.Warn(SCOPE, "BeginNextMiniBoss called before Start -- queued zone gate not started")
+		return false
+	end
+	if state.phase ~= "eating" then
+		Log.Once(SCOPE, "queued-miniboss-wrong-phase", `queued zone gate arrived in phase '{state.phase}' -- start deferred`)
+		return false
+	end
+	if not services_.CakeCycleService.BeginNextMiniBoss(CakeCycleSubs.BossPlayerCount()) then
+		return false
+	end
+	announceMiniBossStart()
+	return true
+end
+
+--API
+-- miniboss -> eating. The gate is down; the zone below is now edible.
+function CakeCycleSubs.FinishMiniBoss(): boolean
+	if state == nil or services_ == nil then
+		Log.Warn(SCOPE, "FinishMiniBoss called before Start -- ignored")
+		return false
+	end
+	if state.phase ~= "miniboss" or state.miniBoss == nil then
+		return false
+	end
+	local index = state.miniBoss.index
+	-- Change phase before telemetry or remotes. CakeSubs finishes on the killing
+	-- tap while Heartbeat has an hp<=0 backstop; guarding the state first keeps
+	-- both callbacks from consuming two FIFO gates if they meet on one frame.
+	services_.CakeCycleService.FinishMiniBoss()
+	beatCycle(loadedCakePlayers(), nil, "miniboss-end", tostring(index), nil)
+	CakeCycleSubs.BroadcastCycle("miniboss-defeated")
+	local pending = services_.CakeCycleService.PendingMiniBossCount()
+	if pending > 0 and not CakeCycleSubs.BeginNextMiniBoss() then
+		Log.Warn(SCOPE, `{pending} crossed zone gate(s) remain queued after mini-boss #{index} -- cake stays locked from its finale`)
+	end
+	return true
+end
+
+--API
+-- eating -> boss. CakeSimulationSubs calls this instead of
+-- CakeCycleService.BeginBoss directly so the analytics beats stay in the
+-- subscription layer (R3/R4).
 function CakeCycleSubs.BeginBoss(playerCount: number): boolean
 	if state == nil or services_ == nil then
 		Log.Warn(SCOPE, "BeginBoss called before Start -- boss phase not started")
 		return false
 	end
-	services_.CakeCycleService.BeginBoss(playerCount)
-	prepareBossPrizes()
+	if not services_.CakeCycleService.BeginBoss(playerCount) then
+		return false
+	end
 	-- Reaching the boss is the end of the cake and the start of the finale;
 	-- it is also the last flow step anyone gets to before the result, so the
 	-- gap between it and `match-win` is the fight's own difficulty curve.
@@ -385,10 +521,6 @@ function CakeCycleSubs.FinishBoss(result: string): boolean
 		end
 		rewardPlayers(recipients)
 	end
-	-- Terminal either way: the advertised prizes are spent (win) or forfeited
-	-- (timeout). Clearing here also takes `pendingPet` back off the cycle update,
-	-- so the reward/spawning phases stop showing a prize card.
-	table.clear(state.pendingPetRolls)
 
 	CakeCycleSubs.BroadcastCycle(if result == "win" then "cake-cleared" else "match-lost")
 	if matchMode then

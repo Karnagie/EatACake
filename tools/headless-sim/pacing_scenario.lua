@@ -108,12 +108,16 @@ end
 -- Mow one cake to the bottom with the REAL bite math + the layer gate, and
 -- report bites, seconds and food. A "mowing" agent: lanes across the loaf,
 -- always biting at the active band's floor.
-local function runCake(label, totalHeightOverride, stats, capFrac)
+-- `compositionOverride` lets §E hand in a composition rolled by the REAL
+-- CakeCycleService (flavour zones, real layer ids) instead of the uniform
+-- all-sponge one this scenario rolls for §A-§C; `zoneBites` (optional) is filled
+-- with bites-per-zone so §E can say where the clear time actually goes.
+local function runCake(label, totalHeightOverride, stats, capFrac, compositionOverride, zoneBites)
 	stats = stats or STATS.fresh
 	-- Default to what SHIPS, so sections A/B measure the live config; §C
 	-- passes explicit values to compare caps.
 	if capFrac == nil then capFrac = sim.sweepBandFraction end
-	local composition = rollComposition(totalHeightOverride)
+	local composition = compositionOverride or rollComposition(totalHeightOverride)
 	local size = grid.size
 	local field = buffer.create(size * size * 2)
 	local footprint = comp.footprint
@@ -215,6 +219,9 @@ local function runCake(label, totalHeightOverride, stats, capFrac)
 				wx, wz, radius, stats.depth, activeFloor, sim.biteClearRefDepth
 			)
 			bites += 1
+			if zoneBites ~= nil and band.group ~= nil then
+				zoneBites[band.group] = (zoneBites[band.group] or 0) + 1
+			end
 			-- ⚠ NO cellArea here. `CakeOps.ApplyBite` already returns a VOLUME
 			-- (`UnitsToStuds(removedUnits) * cell * cell`); multiplying again
 			-- inflated food by cell² = 2.25x. That is why this scenario's numbers
@@ -321,3 +328,95 @@ if margin < MIN_MARGIN then
 	error("onboarding gate margin " .. string.format("%.2f", margin) .. " < " .. MIN_MARGIN)
 end
 print("  OK")
+
+
+print(("-"):rep(118))
+print("E) ZONES — the flavour-zone split (the REAL CakeCycleService.RollComposition)")
+print(("-"):rep(118))
+-- The requirement: a cake is a run of flavour ZONES with a mini-boss between
+-- them, the FIRST zone takes ~3-4 minutes, and every later zone takes longer
+-- (docs/features/cake-cycle.md).
+--
+-- ⚠ THE MINUTES ARE NOT MEASURED HERE, and that is deliberate. This scenario
+-- runs a FIXED eater; the run people play buys tiers mid-cake, and the two
+-- disagree about which axis the split should even use. Measured by
+-- `tools/balance-model/pacing.py` (ramped, 5 seeds): a fixed eater spends ~16x
+-- longer on the deepest band than the top one, but a RAMPING one spends a FLAT
+-- ~1.21 min on every band — the upgrade curve cancels the scoop ramp. So zones
+-- are split by LAYER COUNT, pacing.py owns the minutes, and what this section
+-- guards is that the COUNT split is what the config asked for, that the zones
+-- are contiguous (or the gate misfires) and that no zone is thinner than the
+-- one above it.
+local CakeCycleService = __REGISTRY["__CakeCycleService"]
+local CakeStateData = __REGISTRY["__CakeStateData"]
+local CakeConfigData = __REGISTRY["__CakeConfigData"]
+CakeStateData.Init()
+-- RoundStateData = {} → no difficulty tuning → neutral multipliers (the service
+-- warns once and carries on), i.e. exactly the SOLO EASY cake being quoted.
+CakeCycleService.Init({
+	CakeStateData = CakeStateData,
+	CakeConfigData = CakeConfigData,
+	RoundStateData = {},
+})
+
+local groupsCfg = comp.groups or {}
+local shares = groupsCfg.layerShares or {}
+local shareText = {}
+for _, value in ipairs(shares) do
+	table.insert(shareText, string.format("%.0f%%", value * 100))
+end
+print(string.format("  config: %d zone(s) per cake  ->  %d mini-boss gate(s) + the Cake Guardian  |  layer shares %s",
+	groupsCfg.count or 0, math.max(0, (groupsCfg.count or 1) - 1), table.concat(shareText, " / ")))
+
+local ROLLS = 3
+local failures = 0
+for roll = 1, ROLLS do
+	local composition = CakeCycleService.RollComposition("factory", 1)
+	local zones = CakeStateData.zones
+	local layerCount, edible = {}, 0
+	for _, band in ipairs(composition) do
+		if band.id ~= "core" then
+			layerCount[band.group] = (layerCount[band.group] or 0) + 1
+			edible += 1
+		end
+	end
+	-- Zone identity must be CONTIGUOUS top-down: the mini-boss gate fires when a
+	-- band's `group` STEPS UP as the layer gate descends, so an interleaved roll
+	-- would fire a gate mid-zone (or never fire one at all).
+	local previous, contiguous = 1, true
+	for index = #composition, 1, -1 do
+		local g = composition[index].group
+		if g < previous then contiguous = false end
+		previous = g
+	end
+	local parts, growing = {}, true
+	for z, zone in ipairs(zones) do
+		local n = layerCount[z] or 0
+		local want = math.floor((shares[z] or 0) * edible + 0.5)
+		table.insert(parts, string.format("%s x%d (want ~%d)%s", zone.id, n, want,
+			if zone.bossModel then " [" .. zone.bossModel .. "]" else ""))
+		if z > 1 and n < (layerCount[z - 1] or 0) then growing = false end
+	end
+	print(string.format("  roll %d: %d edible layers  |  %s", roll, edible, table.concat(parts, "  ->  ")))
+	if not contiguous then
+		print("    !! zones are NOT contiguous top-down — the mini-boss gate would misfire")
+		failures += 1
+	end
+	if not growing then
+		print("    !! a zone is THINNER than the one above it — later zones must take longer")
+		failures += 1
+	end
+	local gates = 0
+	for z = 2, #zones do
+		if zones[z].bossModel ~= nil then gates += 1 end
+	end
+	if gates ~= #zones - 1 then
+		print(string.format("    !! %d zone boundaries but only %d mini-boss rigs assigned", #zones - 1, gates))
+		failures += 1
+	end
+end
+if failures > 0 then
+	error(failures .. " zone-split failure(s) — see above")
+end
+print("  OK — contiguous zones, growing layer counts, one rig per boundary")
+print("  (minutes per zone: run `python tools/balance-model/pacing.py`)")

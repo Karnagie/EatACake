@@ -40,12 +40,12 @@ MapConfigData.spawnHeightAboveCake = 8 -- fall onto the frosting (§7.1 crust cr
 -- The room: four decorated walls around the play area.
 MapConfigData.room = {
 	size = 340, -- inner width (walls at ±170)
-	-- Tall enough to clear the cake, and NO taller. EVERY cake is built to
-	-- CakeConfig.composition.maxTotalHeight (170 since 2026-07-26), so the top
-	-- sits at grid.origin.y (2) + 170 = 172 and the spawn pad rides ~8 above
-	-- that. Walls + ceiling (at wallHeight+1) must clear ~180 or players eating
-	-- the top layer clip through the ceiling.
-	-- ⚠ KEEP THIS IN STEP WITH maxTotalHeight. It was left at 380 when the cake
+	-- Height of the GENERATED fallback room, sized for the 170-stud classic: its
+	-- top is grid.origin.y (2) + 170 = 172 and the spawn pad rides ~8 above.
+	-- Selectable taller cakes use their own authored environment (rainbow uses
+	-- Environment1, whose shipped room has no central ceiling). Any future room
+	-- with a ceiling must clear that variant's cake top + spawn drop.
+	-- ⚠ KEEP THIS IN STEP WITH the CLASSIC height. It was left at 380 when the cake
 	-- came down from 330 to 170, which builds a cavernous 2x-too-tall room around
 	-- the loaf in any fresh clone — the scale reads wrong and the walls stop
 	-- framing the cake at all.
@@ -93,6 +93,16 @@ MapConfigData.checkpoint = {
 	plateDepth = 18, -- studs, X extent (away from the cake)
 	plateWidth = 26, -- studs, Z extent. ⚠ Widening it widens the cake gap at the ends
 	plateThickness = 2,
+	-- Narrow selectable terraces cannot move the supported platform inward: its
+	-- tall legs would pierce the wider layers below. MapService instead clones one
+	-- plain authored CheckpointLeg into this horizontal, pooled walkway. Its
+	-- cake-side edge follows the ACTIVE band's +X edge while the platform stays
+	-- fixed beside the maximum footprint.
+	bridgeName = "CheckpointBridge",
+	bridgeWidth = 8, -- Z width; a centred character-safe path without a broad disc-edge gap
+	bridgeThickness = 1,
+	bridgePlateOverlap = 0.25, -- prevents a physics seam at the authored plate edge
+	bridgeHideBelowStuds = 0.05, -- full-size/classic band: no bridge geometry needed
 	legSize = 3, -- studs, square leg cross-section
 	legInset = 2, -- studs the legs are inset from the plate edges
 	minLegHeight = 2, -- studs, floor for the leg height when the cake is near-bare

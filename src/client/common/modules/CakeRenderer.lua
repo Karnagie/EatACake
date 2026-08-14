@@ -18,7 +18,7 @@
 	crust over soft butter). This file owns the SOFT SQUISH: the mesh dents
 	softly under the foot (fractureOffsetAt: `-sinkDepth·falloff`, §7.2 squish
 	loop), springs back; deeper on a landing (CrackAt). The slabs render the
-	layer BODY color — the pale crust look is the always-visible CakeWaxShell
+	layer BODY color — wax-enabled variants add the pale CakeWaxShell
 	module (a Voronoi wax web that cracks underfoot), so the darker body shows
 	through the wax gaps. Purely visual and local.
 
@@ -28,19 +28,19 @@
 	ONE temporary dynamic scratch mesh via CreateEditableMeshAsync
 	{FixedSize=true} (fixed clones cost their ACTUAL complexity, still allow
 	SetPosition/SetNormal; probe-verified: source vertex/normal/uv ids stay
-	valid on the clone), then the scratch is destroyed. Slabs are created
-	LAZILY per composition (typically 5-6) with only footprint-hosted
-	vertices. Degradation ladder when creation still fails:
+	valid on the clone), then the scratch is destroyed. The two-slab pool is
+	created LAZILY with only maximum-footprint-hosted vertices. Degradation
+	ladder when creation still fails:
 	  per-layer slabs -> ONE slab + height-palette texture -> part grid.
 	CreateEditableMesh/Image return NIL (no throw) on budget exhaustion —
 	every creation is nil-checked and warned (R8).
 
-	Band projection rule (per vertex, raw = shared display height):
+	Band projection rule (per vertex, raw = this footprint's display height):
 	  raw > band.bottom + EPS  ->  y = min(raw, band.top)   (slab surface)
 	  else                     ->  y = 0                     (eaten through:
 	  the quad drops to the grid floor, hidden inside/below the opaque core
 	  slab — NEVER a floating film over a crater)
-	  ring verts (outside the footprint) seal the skirt at band.bottom while
+	  ring verts (outside the band's footprint) seal the skirt at band.bottom while
 	  any nearby cake is above it, so the outer wall shows stacked layer
 	  bands; they drop to 0 once the rim is eaten below the band.
 
@@ -81,17 +81,18 @@ local SIZE = gridCfg.size
 local VSIZE = SIZE + 1
 local CELL = gridCfg.cell
 local EPS = 0.02 -- studs: "the band still exists here" threshold
--- The loaf footprint is FIXED per game (config), so mesh faces, ring layout
--- and the vertex host set can be built once.
+-- The MAXIMUM loaf footprint is fixed per game, so one topology/host set serves
+-- every slab. Individual terrace bands project that topology onto their smaller
+-- analytic footprint through FootprintLayout below.
 local FOOTPRINT = CakeConfig.composition.footprint
 -- Safety ceiling on the slab pool. The renderer now only ever renders the
 -- CURRENT + NEXT edible band (2 slabs — assignWindowBands), so the pool grows to
 -- 2 and this cap just backstops a bug. The bulk below is the CakeWrapper wall.
 local MAX_LAYER_MESHES = 8
 
--- A cell hosts mesh faces iff its 3x3 neighborhood touches the footprint —
--- the SAME rule as vertexTarget, so every raised boundary vertex is
--- surrounded by faces on all sides (an analytic ring test left corner slits).
+-- A cell hosts mesh faces iff its 3x3 neighborhood touches the MAX footprint,
+-- so every possible terrace rim has faces on both sides. Per-band layouts later
+-- collapse unused outer faces onto that band's analytic rim.
 local function cellHostsFaces(cx: number, cz: number): boolean
 	for dz = -1, 1 do
 		for dx = -1, 1 do
@@ -144,7 +145,7 @@ local function buildPalette()
 				gloss = layer.gloss or 0
 				-- Crust skin at the top of every edible band (matches the
 				-- layer textures, so fallback columns/particles agree).
-				if band.id ~= "core" and band.top - h <= crustCfg.depth then
+				if meta.crustEnabled ~= false and band.id ~= "core" and band.top - h <= crustCfg.depth then
 					color = color:Lerp(WHITE, crustCfg.lighten)
 					gloss = math.max(gloss, crustCfg.gloss)
 				end
@@ -208,6 +209,23 @@ type PoolEntry = {
 	uvIds: { number },
 	normalIds: { number },
 	y: { number }, -- last written vertex heights
+	layoutKey: string?, -- XZ projection currently written into this clone
+}
+type FootprintLayout = {
+	key: string,
+	footprint: any,
+	worldX: { number },
+	worldZ: { number },
+	vertexCells: { [number]: { number }? }, -- adjacent cells inside THIS footprint
+	isRing: { [number]: boolean }, -- no adjacent cell inside THIS footprint
+	ringCells: { [number]: { number }? }, -- nearby in-footprint cells for the vertical skirt
+}
+type SurfaceState = {
+	targetH: { number },
+	displayH: { number },
+	oozeRate: { number },
+	active: { [number]: boolean },
+	initialized: boolean,
 }
 type Band = {
 	layerId: string,
@@ -215,6 +233,8 @@ type Band = {
 	top: number,
 	poolIdx: number,
 	sink: number, -- eaten-through tuck depth under the local surface
+	layout: FootprintLayout,
+	surface: SurfaceState,
 	single: boolean?, -- palette mode: this one band renders the whole cake
 	bodyColor: Color3?,
 }
@@ -232,8 +252,6 @@ local targetH: { number } = {} -- raw server-truth surface height (studs)
 local displayH: { number } = {} -- raw displayed surface height (oozes to target)
 local oozeRate: { number } = {} -- per-vertex 1/s lerp (surface layer's oozeSpeed)
 local active: { [number]: boolean } = {} -- vertices still lerping
-local isRing: { [number]: boolean } = {} -- no in-footprint cell in the 2x2 window
-local ringCells: { [number]: { number }? } = {} -- ring vert -> nearby in-footprint cells
 local ringDirty: { [number]: boolean } = {}
 local squishOff: { [number]: number } = {} -- vi -> current dent offset (<= 0)
 local squishBandIdx: { [number]: number } = {} -- which band the dent was written to
@@ -245,6 +263,22 @@ local hostedVertList: { number } = {} -- vi in AddVertex order (id map order)
 local vertHosted: { [number]: boolean } = {}
 local hostedCellList: { number } = {} -- 0-based cell indices with faces
 local creationY: { number } = {} -- vi -> creation height (bounds trick)
+local rawWorldX: { number } = {} -- unprojected lattice X (layout source)
+local rawWorldZ: { number } = {}
+
+-- Classic's one footprint keeps the exact shared state the renderer shipped
+-- with. Terrace variants allocate one state per DISTINCT footprint so an upper
+-- slab can never average/ooze through cells belonging only to a wider slab.
+local baseLayout: FootprintLayout? = nil
+local layoutByKey: { [string]: FootprintLayout } = {}
+local surfaceByKey: { [string]: SurfaceState } = {}
+local baseSurface: SurfaceState = {
+	targetH = targetH,
+	displayH = displayH,
+	oozeRate = oozeRate,
+	active = active,
+	initialized = false,
+}
 
 -- Per-band texture caches: repaint a cell's pixel block only on transitions.
 local crustState: { { [number]: boolean } } = {} -- bandIdx -> ci -> is crust
@@ -273,21 +307,27 @@ local function vidx(vx: number, vz: number): number
 	return vz * VSIZE + vx + 1 -- 1-based for Lua tables
 end
 
--- Average of the adjacent IN-FOOTPRINT cells only. Boundary vertices thus
--- keep FULL cake height and the skirt drops straight down at the ring —
--- averaging in out-of-footprint zeros used to leave ragged floating spikes.
-local function vertexTarget(vx: number, vz: number): number
-	local sum, count = 0, 0
-	for dz = -1, 0 do
-		for dx = -1, 0 do
-			local cx, cz = vx + dx, vz + dz
-			if GridUtil.InBounds(SIZE, cx, cz) and GridUtil.InCake(SIZE, FOOTPRINT, cx, cz) then
-				sum += fieldModule.ReadHeightStuds(GridUtil.Index(SIZE, cx, cz))
-				count += 1
-			end
-		end
+local function footprintKey(footprint): string
+	-- Composition footprints are deterministic numbers, but formatting also
+	-- makes independently-cloned `{hx,hz,corner}` tables share one layout/state.
+	return string.format("%.6f|%.6f|%.6f", footprint.hx, footprint.hz, footprint.corner)
+end
+
+-- Average ONLY cells owned by this slab's footprint. The old global-mask
+-- average mixed a narrow terrace's high cells with the wider terrace below;
+-- alternating 1/4..4/4 averages around the staircase then produced giant
+-- diagonal triangles. Keeping the cell list in the layout makes that boundary
+-- rule explicit and testable.
+local function vertexTarget(layout: FootprintLayout, vi: number): number
+	local cells = layout.vertexCells[vi]
+	if cells == nil then
+		return 0
 	end
-	return if count > 0 then sum / count else 0
+	local sum = 0
+	for _, ci in ipairs(cells) do
+		sum += fieldModule.ReadHeightStuds(ci)
+	end
+	return sum / #cells
 end
 
 local function layerDefAt(hStuds: number)
@@ -303,9 +343,153 @@ local function layerDefAt(hStuds: number)
 	return layersCfg[meta.composition[#meta.composition].id]
 end
 
+-- One material contract for every renderer implementation. `squishMult` was
+-- historically a boolean-ish "soft vs rigid" flag: classic positive layers
+-- all dented at 1x. Selectable variants may explicitly opt into its numeric
+-- depth (rainbow = 2.6x). Keeping this here prevents the EditableMesh and
+-- visible-column fallback from silently feeling like different cakes.
+local function effectiveSquishMultiplier(layerDef): number
+	local configured = layerDef and (layerDef.squishMult or 0) or 0
+	if configured <= 0 then
+		return 0 -- rigid layer: neither renderer may dent it
+	end
+	local meta = fieldModule.Meta()
+	local variant = meta
+		and CakeConfig.variants
+		and CakeConfig.variants[meta.cakeId]
+	return if variant and variant.useLayerSquishMultiplier == true then configured else 1
+end
+
 local function oozeSpeedAt(hStuds: number): number
 	local def = layerDefAt(hStuds)
 	return (def and def.oozeSpeed) or renderCfg.lerpSpeed
+end
+
+-- Builds the per-footprint view of the ONE fixed outer-disc topology. All
+-- vertices outside a terrace are projected radially onto that terrace's
+-- analytic outline. Together with the partial inside vertices at the same XZ,
+-- this degenerates the unused annulus into a vertical skirt instead of drawing
+-- a huge sloped sheet across the shoulder below. Classic asks for FOOTPRINT and
+-- gets the same classification/projection it used before this cache existed.
+local function makeFootprintLayout(footprint): FootprintLayout
+	local layout: FootprintLayout = {
+		key = footprintKey(footprint),
+		footprint = footprint,
+		worldX = {},
+		worldZ = {},
+		vertexCells = {},
+		isRing = {},
+		ringCells = {},
+	}
+	local cornerR = (footprint.corner + 0.5) * CELL
+	local rectX = (footprint.hx + 0.5) * CELL - cornerR
+	local rectZ = (footprint.hz + 0.5) * CELL - cornerR
+
+	for _, vi in ipairs(hostedVertList) do
+		local vx = (vi - 1) % VSIZE
+		local vz = (vi - 1) // VSIZE
+		local adjacent: { number }? = nil
+		local partial = false
+		for dz = -1, 0 do
+			for dx = -1, 0 do
+				local cx, cz = vx + dx, vz + dz
+				if GridUtil.InBounds(SIZE, cx, cz) and GridUtil.InCake(SIZE, footprint, cx, cz) then
+					if adjacent == nil then
+						adjacent = {}
+					end
+					table.insert(adjacent :: { number }, GridUtil.Index(SIZE, cx, cz))
+				else
+					partial = true
+				end
+			end
+		end
+		local ring = adjacent == nil
+		layout.isRing[vi] = ring
+		layout.vertexCells[vi] = adjacent
+		if ring then
+			-- Nearby cells decide whether the co-located skirt stays at the band
+			-- floor or tucks away after that rim has genuinely been eaten.
+			local nearby: { number }? = nil
+			for dz = -2, 1 do
+				for dx = -2, 1 do
+					local cx, cz = vx + dx, vz + dz
+					if GridUtil.InBounds(SIZE, cx, cz) and GridUtil.InCake(SIZE, footprint, cx, cz) then
+						if nearby == nil then
+							nearby = {}
+						end
+						table.insert(nearby :: { number }, GridUtil.Index(SIZE, cx, cz))
+					end
+				end
+			end
+			layout.ringCells[vi] = nearby
+		end
+
+		local x, z = rawWorldX[vi], rawWorldZ[vi]
+		-- `ring` implies partial. Spell it out because every farther-out vertex
+		-- in the fixed topology must collapse to this inner outline too; leaving
+		-- those at their lattice XZ is what made the upper sheet cross the lower cap.
+		if partial or ring then
+			local qx = math.clamp(x, -rectX, rectX)
+			local qz = math.clamp(z, -rectZ, rectZ)
+			local dx, dz = x - qx, z - qz
+			local dist = math.sqrt(dx * dx + dz * dz)
+			if dist > 1e-3 then
+				x = qx + dx / dist * cornerR
+				z = qz + dz / dist * cornerR
+			end
+		end
+		layout.worldX[vi] = x
+		layout.worldZ[vi] = z
+	end
+	return layout
+end
+
+local function layoutFor(footprint): FootprintLayout
+	local key = footprintKey(footprint)
+	local existing = layoutByKey[key]
+	if existing ~= nil then
+		return existing
+	end
+	local layout = makeFootprintLayout(footprint)
+	layoutByKey[key] = layout
+	return layout
+end
+
+local function resetSurfaceStates()
+	table.clear(surfaceByKey)
+	table.clear(targetH)
+	table.clear(displayH)
+	table.clear(oozeRate)
+	table.clear(active)
+	baseSurface.initialized = false
+	if baseLayout ~= nil then
+		surfaceByKey[(baseLayout :: FootprintLayout).key] = baseSurface
+	end
+end
+
+local function surfaceFor(layout: FootprintLayout): SurfaceState
+	local state = surfaceByKey[layout.key]
+	if state == nil then
+		state = {
+			targetH = {},
+			displayH = {},
+			oozeRate = {},
+			active = {},
+			initialized = false,
+		}
+		surfaceByKey[layout.key] = state
+	end
+	if not state.initialized then
+		table.clear(state.active)
+		for _, vi in ipairs(hostedVertList) do
+			local h = vertexTarget(layout, vi)
+			state.targetH[vi] = h
+			state.displayH[vi] = h
+			state.oozeRate[vi] = oozeSpeedAt(h)
+		end
+		state.initialized = true
+	end
+	return state
 end
 
 -- Visual band that owns the surface at this height.
@@ -318,13 +502,31 @@ local function surfaceBandIndexAt(hStuds: number): number
 	return #bands -- spawn noise sits above the top band
 end
 
+-- Variant-safe counterpart for deformation. A terrace can have two windowed
+-- slabs with different masks, so one shared height cannot say which slab owns
+-- this vertex. Prefer the highest rendered slab that both HOSTS the vertex and
+-- still has cake above its floor; a crater naturally falls through to the slab
+-- below. Classic's two slabs share one layout/state and resolves identically to
+-- the old height-only lookup.
+local function surfaceBandIndexAtVertex(vi: number): number?
+	for bi = #bands, 1, -1 do
+		local band = bands[bi]
+		local raw = band.surface.displayH[vi]
+		if raw ~= nil and not band.layout.isRing[vi] and raw > band.bottom + EPS then
+			return bi
+		end
+	end
+	return nil
+end
+
 -- The band projection rule (see file header). Eaten-through columns TUCK
 -- the band's sheet `band.sink` studs under the local surface cover — a
 -- FixedSize mesh can't delete faces and dropping to 0 hung tall curtain
 -- quads through lower layers on side cuts.
 local function bandYOf(band: Band, vi: number): number
-	if isRing[vi] then
-		local cells = ringCells[vi]
+	local layout = band.layout
+	if layout.isRing[vi] then
+		local cells = layout.ringCells[vi]
 		if cells == nil then
 			return 0
 		end
@@ -340,7 +542,7 @@ local function bandYOf(band: Band, vi: number): number
 		end
 		return math.max(0, surfaceCoverY(maxH) - band.sink)
 	end
-	local raw = displayH[vi]
+	local raw = band.surface.displayH[vi] or 0
 	if raw > band.bottom + EPS then
 		return math.min(raw, band.top)
 	end
@@ -373,7 +575,7 @@ local function bandWrite(band: Band, vi: number)
 	if vid == nil then
 		return -- not a hosted vertex (belt & suspenders)
 	end
-	pe.em:SetPosition(vid, Vector3.new(worldX[vi], pe.y[vi], worldZ[vi]))
+	pe.em:SetPosition(vid, Vector3.new(band.layout.worldX[vi], pe.y[vi], band.layout.worldZ[vi]))
 	bandNormalOnly(band, vi)
 end
 
@@ -402,36 +604,12 @@ local function buildStaticLayout()
 	for vz = 0, VSIZE - 1 do
 		for vx = 0, VSIZE - 1 do
 			local vi = vidx(vx, vz)
-			worldX[vi] = (vx - half) * CELL
-			worldZ[vi] = (vz - half) * CELL
+			rawWorldX[vi] = (vx - half) * CELL
+			rawWorldZ[vi] = (vz - half) * CELL
 			targetH[vi] = 0
 			displayH[vi] = 0
 			oozeRate[vi] = renderCfg.lerpSpeed
 			creationY[vi] = 0
-			local inFootprint = false
-			for dz = -1, 0 do
-				for dx = -1, 0 do
-					local cx, cz = vx + dx, vz + dz
-					if GridUtil.InBounds(SIZE, cx, cz) and GridUtil.InCake(SIZE, FOOTPRINT, cx, cz) then
-						inFootprint = true
-					end
-				end
-			end
-			isRing[vi] = not inFootprint
-			if not inFootprint then
-				-- Nearby in-footprint cells (4x4 window) — the skirt seal
-				-- reads their heights to decide bottom vs dropped.
-				local cells = {}
-				for dz = -2, 1 do
-					for dx = -2, 1 do
-						local cx, cz = vx + dx, vz + dz
-						if GridUtil.InBounds(SIZE, cx, cz) and GridUtil.InCake(SIZE, FOOTPRINT, cx, cz) then
-							table.insert(cells, GridUtil.Index(SIZE, cx, cz))
-						end
-					end
-				end
-				ringCells[vi] = if #cells > 0 then cells else nil
-			end
 		end
 	end
 	-- Hosted cells + their corner vertices (everything else never gets a
@@ -459,43 +637,16 @@ local function buildStaticLayout()
 			end
 		end
 	end
-	-- Smooth loaf outline: the discrete footprint STAIRCASE pleats the
-	-- skirt at the rounded corners (accordion look). Ring verts and partial
-	-- boundary verts are projected horizontally onto the ANALYTIC rounded
-	-- rect expanded by half a cell — straight edges land exactly on the
-	-- collision-cell boundary, corner arcs become smooth, and the outer
-	-- ring collapses onto the outline (degenerate outside quads vanish).
-	-- Render-only: heights/collision keep the cell staircase (<1 cell off
-	-- at corner arcs).
-	local cornerR = (FOOTPRINT.corner + 0.5) * CELL
-	local rectX = (FOOTPRINT.hx + 0.5) * CELL - cornerR
-	local rectZ = (FOOTPRINT.hz + 0.5) * CELL - cornerR
-	for _, vi in ipairs(hostedVertList) do
-		local partial = isRing[vi]
-		if not partial then
-			local vx = (vi - 1) % VSIZE
-			local vz = (vi - 1) // VSIZE
-			for dz = -1, 0 do
-				for dx = -1, 0 do
-					local cx, cz = vx + dx, vz + dz
-					if not (GridUtil.InBounds(SIZE, cx, cz) and GridUtil.InCake(SIZE, FOOTPRINT, cx, cz)) then
-						partial = true
-					end
-				end
-			end
-		end
-		if partial then
-			local x, z = worldX[vi], worldZ[vi]
-			local qx = math.clamp(x, -rectX, rectX)
-			local qz = math.clamp(z, -rectZ, rectZ)
-			local dx, dz = x - qx, z - qz
-			local dist = math.sqrt(dx * dx + dz * dz)
-			if dist > 1e-3 then
-				worldX[vi] = qx + dx / dist * cornerR
-				worldZ[vi] = qz + dz / dist * cornerR
-			end
-		end
-	end
+	-- Build/register the classic layout last: it consumes the hosted topology
+	-- above. `worldX/Z` remain aliases to this base layout for the scratch mesh;
+	-- baseSurface similarly keeps the exact equal-footprint state path.
+	table.clear(layoutByKey)
+	local layout = makeFootprintLayout(FOOTPRINT)
+	baseLayout = layout
+	layoutByKey[layout.key] = layout
+	worldX = layout.worldX
+	worldZ = layout.worldZ
+	resetSurfaceStates()
 end
 
 -- Grows the pool to `want` slabs (≤ MAX_LAYER_MESHES) by cloning ONE
@@ -606,6 +757,7 @@ local function ensurePool(want: number): number
 			uvIds = uvIds,
 			normalIds = normalIds,
 			y = table.clone(creationY),
+			layoutKey = nil,
 		}
 	end
 
@@ -770,12 +922,20 @@ local function fractureOffsetAt(vi: number, fx: number, fz: number, radius: numb
 	if distSq >= radius * radius then
 		return nil
 	end
-	local def = layerDefAt(displayH[vi])
-	if def == nil or (def.squishMult or 0) <= 0 then
+	local bi = surfaceBandIndexAtVertex(vi)
+	if bi == nil then
+		return nil -- off this terrace / no rendered surface at the vertex
+	end
+	local surfaceBand = bands[bi]
+	local def = if surfaceBand.single
+		then layerDefAt(surfaceBand.surface.displayH[vi] or 0)
+		else layersCfg[surfaceBand.layerId]
+	local squishMult = effectiveSquishMultiplier(def)
+	if squishMult <= 0 then
 		return nil -- rock crust (chocolate): doesn't squish
 	end
 	local w = 1 - distSq / (radius * radius) -- 1 at the foot, 0 at the rim
-	return -fractureCfg.sinkDepth * depthMult * w * w -- round soft dent
+	return -fractureCfg.sinkDepth * squishMult * depthMult * w * w -- round soft dent
 end
 
 -- The rendered window: the active (top edible) band + the one directly BELOW it,
@@ -820,13 +980,46 @@ local function assignWindowBands(meta, windowIdx: { number }): { number }?
 		return nil
 	end
 	singleMode = have < want
+	if singleMode then
+		-- One palette slab can represent a classic/equal-footprint cake, but it
+		-- cannot simultaneously own seven different terrace rims. Falling through
+		-- to the visible column grid is honest degradation; drawing the base mask
+		-- here would recreate the cross-footprint spikes on low-budget clients.
+		local firstKey = footprintKey(meta.composition[1].footprint or meta.footprint or FOOTPRINT)
+		for _, simBand in ipairs(meta.composition) do
+			if footprintKey(simBand.footprint or meta.footprint or FOOTPRINT) ~= firstKey then
+				Log.Once(
+					"CakeRenderer",
+					"terrace-single-mode",
+					"one slab cannot represent per-band terrace footprints -- using the visible part grid"
+				)
+				-- A previous equal-footprint cake may have left a pooled slab visible.
+				-- Park every slab before the caller switches to the column fallback.
+				for pi, entry in ipairs(pool) do
+					entry.part.Transparency = 1
+					entry.part.Name = `CakeLayer{pi}_idle`
+				end
+				return nil
+			end
+		end
+	end
 	local transparencies = {}
 	if singleMode then
 		-- Budget ladder step 2: ONE flat-colored slab renders the WHOLE cake (the
 		-- tiled layer UVs rule out a per-cell palette image). It seals the sides
 		-- down to the floor, so the CakeWrapper behind it is occluded — no double wall.
 		Log.Once("CakeRenderer", "single-mode", `budget allows {have}/{want} slabs — single flat-color mesh mode (no per-layer materials)`)
-		bands[1] = { layerId = "palette", bottom = 0, top = topStuds, poolIdx = 1, sink = renderCfg.hideSink.base, single = true }
+		local layout = layoutFor(meta.footprint or FOOTPRINT)
+		bands[1] = {
+			layerId = "palette",
+			bottom = 0,
+			top = topStuds,
+			poolIdx = 1,
+			sink = renderCfg.hideSink.base,
+			layout = layout,
+			surface = surfaceFor(layout),
+			single = true,
+		}
 		local pe = pool[1]
 		local part = pe.part
 		part.Name = "CakeLayer1_palette"
@@ -837,12 +1030,14 @@ local function assignWindowBands(meta, windowIdx: { number }): { number }?
 		-- palette image wrongly. Single mode is a rare weak-device fallback, so a
 		-- flat slab is an acceptable further degradation.
 		part.TextureContent = Content.none
-		part.Color = tinted(layersCfg.frosting.colors.top, meta.rareKind, topStuds, topStuds)
+		local topLayer = layersCfg[meta.composition[#meta.composition].id]
+		part.Color = tinted(topLayer.colors.top, meta.rareKind, topStuds, topStuds)
 		transparencies[1] = 0
 	else
 		for wi, simIdx in ipairs(windowIdx) do
 			local simBand = meta.composition[simIdx]
 			local layerDef = layersCfg[simBand.id]
+			local layout = layoutFor(simBand.footprint or meta.footprint or FOOTPRINT)
 			local hMid = (simBand.bottom + simBand.top) * 0.5
 			local bodyColor = tinted(layerDef.colors.bottom:Lerp(layerDef.colors.top, 0.55), meta.rareKind, hMid, topStuds)
 			local band: Band = {
@@ -851,6 +1046,8 @@ local function assignWindowBands(meta, windowIdx: { number }): { number }?
 				top = simBand.top,
 				poolIdx = wi,
 				sink = renderCfg.hideSink.base + renderCfg.hideSink.perBand * simIdx,
+				layout = layout,
+				surface = surfaceFor(layout),
 				bodyColor = bodyColor,
 			}
 			bands[wi] = band
@@ -900,14 +1097,19 @@ end
 local function writeBandsGeometry(transparencies: { number })
 	for _, band in ipairs(bands) do
 		local pe = pool[band.poolIdx]
+		local layoutChanged = pe.layoutKey ~= band.layout.key
 		local newY = table.create(VSIZE * VSIZE, 0)
 		for _, vi in ipairs(hostedVertList) do
 			newY[vi] = bandYOf(band, vi)
 		end
 		local oldY = pe.y
 		pe.y = newY
+		pe.layoutKey = band.layout.key
 		for _, vi in ipairs(hostedVertList) do
-			if math.abs(newY[vi] - oldY[vi]) > 0.004 then
+			-- A pooled slab can cross a terrace boundary while keeping y=0 at
+			-- many tucked vertices. XZ still changed, so a layout swap must write
+			-- every hosted vertex rather than relying on the old height-only diff.
+			if layoutChanged or math.abs(newY[vi] - oldY[vi]) > 0.004 then
 				bandWrite(band, vi)
 			end
 		end
@@ -941,6 +1143,10 @@ local function editableRebuild()
 	end
 	local startedAt = os.clock()
 	local activeIndex = fieldModule.ActiveBandIndex()
+	-- A full snapshot snaps every distinct footprint surface to its own field
+	-- truth. Rewindowing below deliberately does NOT reset this cache, so ooze on
+	-- the retained slab stays continuous as the two-band window moves down.
+	resetSurfaceStates()
 	-- may yield on the FIRST call (mesh-pool creation)
 	local transparencies = assignWindowBands(meta, windowFor(activeIndex, #meta.composition))
 	if transparencies == nil then
@@ -950,13 +1156,6 @@ local function editableRebuild()
 		visualColumns = true
 		Log.Warn("CakeRenderer", "no EditableMesh budget — falling back to visible part grid")
 		return
-	end
-	for _, vi in ipairs(hostedVertList) do
-		local vx = (vi - 1) % VSIZE
-		local vz = (vi - 1) // VSIZE
-		targetH[vi] = vertexTarget(vx, vz)
-		displayH[vi] = targetH[vi]
-		oozeRate[vi] = oozeSpeedAt(targetH[vi])
 	end
 	writeBandsGeometry(transparencies)
 	renderedActiveIndex = activeIndex
@@ -986,7 +1185,7 @@ local function rewindow(activeIndex: number)
 	Log.Info("CakeRenderer", `layer window -> active #{activeIndex} '{meta.composition[idx].id}'`)
 end
 
-local function editableStep(dt: number, footPos: Vector3?, overCakePos: Vector3?)
+local function editableStep(dt: number, footPos: Vector3?, scanCentre: Vector3?)
 	if #bands == 0 then
 		return
 	end
@@ -1006,30 +1205,59 @@ local function editableStep(dt: number, footPos: Vector3?, overCakePos: Vector3?
 	-- Collision follows the player (radius-limited, Task 2 perf) — resizing every
 	-- oozing column across the cake spiked physics. The mesh below still uses
 	-- `drained` to update the VISUAL surface everywhere (cheap Luau, no physics).
-	-- Centred on `overCakePos` (the player's XZ over the loaf at ANY depth), NOT
-	-- `footPos` (which is nil when BURIED, ΔY≥tolerance) — otherwise a buried
-	-- player's columns would freeze and never rise back (Task 2 review fix).
-	updateCollisionNearPlayer(dt, overCakePos)
+	-- Centred on `scanCentre` (the character's raw XZ), NOT `footPos` (which is
+	-- nil when BURIED, ΔY≥tolerance) — otherwise a buried player's columns would
+	-- freeze and never rise back (Task 2 review fix).
+	updateCollisionNearPlayer(dt, scanCentre)
+	-- Usually two entries, but only one when both windowed layers share a zone
+	-- footprint (classic is always one). Build this once per frame, not once per
+	-- changed cell: a bite can drain hundreds of cells and the renderer must not
+	-- allocate hundreds of tiny dedupe tables on that hot path.
+	local surfaceBands: { Band } = {}
+	local seenSurfaceKeys: { [string]: boolean } = {}
+	for _, band in ipairs(bands) do
+		local key = band.layout.key
+		if not seenSurfaceKeys[key] then
+			seenSurfaceKeys[key] = true
+			table.insert(surfaceBands, band)
+		end
+	end
 	for _, i in ipairs(drained) do
 		updateCellPixels(i)
 		local cx, cz = GridUtil.Coords(SIZE, i)
-		for dz = -1, 2 do
-			for dx = -1, 2 do
-				local vx, vz = cx + dx, cz + dz
-				if vx >= 0 and vz >= 0 and vx < VSIZE and vz < VSIZE then
-					local vi = vidx(vx, vz)
-					if dx >= 0 and dx <= 1 and dz >= 0 and dz <= 1 then
-						local newTarget = vertexTarget(vx, vz)
-						targetH[vi] = newTarget
-						oozeRate[vi] = oozeSpeedAt(newTarget)
-						-- BITE FEEL: a big DROP is a chunk ripped out — snap.
-						if displayH[vi] - newTarget > renderCfg.snapDropStuds then
-							displayH[vi] = newTarget
+		for _, band in ipairs(surfaceBands) do
+			local layout = band.layout
+			local state = band.surface
+			-- This cell can affect exactly its four corner vertices. Re-sampling
+			-- through layout.vertexCells guarantees cells outside a narrow mask
+			-- contribute zero even when the changed cell belongs to the wider cake.
+			for dz = 0, 1 do
+				for dx = 0, 1 do
+					local vx, vz = cx + dx, cz + dz
+					if vx >= 0 and vz >= 0 and vx < VSIZE and vz < VSIZE then
+						local vi = vidx(vx, vz)
+						if vertHosted[vi] and not layout.isRing[vi] then
+							local newTarget = vertexTarget(layout, vi)
+							state.targetH[vi] = newTarget
+							state.oozeRate[vi] = oozeSpeedAt(newTarget)
+							-- BITE FEEL: a big DROP is a chunk ripped out — snap.
+							if (state.displayH[vi] or 0) - newTarget > renderCfg.snapDropStuds then
+								state.displayH[vi] = newTarget
+							end
+							state.active[vi] = true
 						end
-						active[vi] = true
-					elseif isRing[vi] and ringCells[vi] ~= nil then
-						-- Rim change: the skirt seal re-reads its neighborhood.
-						ringDirty[vi] = true
+					end
+				end
+			end
+			-- A ring seal reads a 4x4 neighborhood, hence the wider dirty range.
+			for dz = -1, 2 do
+				for dx = -1, 2 do
+					local vx, vz = cx + dx, cz + dz
+					if vx >= 0 and vz >= 0 and vx < VSIZE and vz < VSIZE then
+						local vi = vidx(vx, vz)
+						if layout.isRing[vi] and layout.ringCells[vi] ~= nil then
+							ringDirty[vi] = true
+						end
 					end
 				end
 			end
@@ -1042,15 +1270,18 @@ local function editableStep(dt: number, footPos: Vector3?, overCakePos: Vector3?
 
 	-- 2. Ooze actives toward targets at the SURFACE LAYER's speed (honey
 	-- creep vs pouring cotton), then project into every band slab.
-	for vi in pairs(active) do
-		local d = targetH[vi] - displayH[vi]
-		if math.abs(d) < 0.005 then
-			displayH[vi] = targetH[vi]
-			active[vi] = nil
-		else
-			displayH[vi] += d * math.min(1, oozeRate[vi] * dt)
+	for _, band in ipairs(surfaceBands) do
+		local state = band.surface
+		for vi in pairs(state.active) do
+			local d = state.targetH[vi] - state.displayH[vi]
+			if math.abs(d) < 0.005 then
+				state.displayH[vi] = state.targetH[vi]
+				state.active[vi] = nil
+			else
+				state.displayH[vi] += d * math.min(1, state.oozeRate[vi] * dt)
+			end
+			projectVertex(vi)
 		end
-		projectVertex(vi)
 	end
 
 	-- 2b. Crater-rim shading: neighbors of moved vertices didn't move, so
@@ -1111,8 +1342,15 @@ local function editableStep(dt: number, footPos: Vector3?, overCakePos: Vector3?
 	local up = 1 - math.exp(-dt * frac.riseRate)
 	local down = 1 - math.exp(-dt * frac.healRate)
 	local function writeSquish(vi: number)
-		local bi = surfaceBandIndexAt(displayH[vi])
+		local bi = surfaceBandIndexAtVertex(vi)
 		local prev = squishBandIdx[vi]
+		if bi == nil then
+			if prev and bands[prev] then
+				bandWrite(bands[prev], vi)
+			end
+			squishBandIdx[vi] = nil
+			return
+		end
 		if prev and prev ~= bi and bands[prev] then
 			bandWrite(bands[prev], vi) -- restore the band the offset left
 		end
@@ -1134,7 +1372,7 @@ local function editableStep(dt: number, footPos: Vector3?, overCakePos: Vector3?
 		end
 		-- Sink-only offset (≤ 0), clamped at the band floor.
 		local y = math.max(pe.y[vi] + (squishOff[vi] or 0), band.bottom + 0.05)
-		pe.em:SetPosition(vid, Vector3.new(worldX[vi], y, worldZ[vi]))
+		pe.em:SetPosition(vid, Vector3.new(band.layout.worldX[vi], y, band.layout.worldZ[vi]))
 	end
 	for vi, current in pairs(squishOff) do
 		local target = footVerts[vi] or 0
@@ -1169,9 +1407,12 @@ local function editableStep(dt: number, footPos: Vector3?, overCakePos: Vector3?
 		for _ = 1, sliceLen do
 			wobbleCursor = wobbleCursor % total + 1
 			local vi = wobbleCursor
-			if not active[vi] and squishOff[vi] == nil and not isRing[vi] then
+			if squishOff[vi] == nil then
 				for _, bi in ipairs(wobbleBandIndices) do
 					local band = bands[bi]
+					if band.surface.active[vi] or band.layout.isRing[vi] then
+						continue
+					end
 					local pe = pool[band.poolIdx]
 					local vid = pe.vertIds[vi]
 					local base = pe.y[vi]
@@ -1181,7 +1422,7 @@ local function editableStep(dt: number, footPos: Vector3?, overCakePos: Vector3?
 						local offset = (math.sin(clock * renderCfg.wobbleSpeed + (vx + vz) * 0.7) - 1)
 							* renderCfg.wobbleAmp
 						local y = math.max(base + offset, band.bottom + 0.05)
-						pe.em:SetPosition(vid, Vector3.new(worldX[vi], y, worldZ[vi]))
+						pe.em:SetPosition(vid, Vector3.new(band.layout.worldX[vi], y, band.layout.worldZ[vi]))
 					end
 				end
 			end
@@ -1200,6 +1441,10 @@ end
 function CakeRenderer.CrackAt(pos: Vector3, kind: string): boolean
 	if impl ~= "editable" or #bands == 0 or singleMode then
 		return false -- the crust deform needs the slab meshes (multi-band)
+	end
+	local meta = fieldModule.Meta()
+	if meta ~= nil and meta.crustEnabled == false then
+		return false
 	end
 	local h = fieldModule.SurfaceHeightAt(pos.X, pos.Z)
 	if h == nil then
@@ -1348,13 +1593,21 @@ end
 -- them (this scan corrects them then). Per column: a DROP snaps (fall into the
 -- hole you just bit); a RISE is rate-limited (cake oozing back doesn't punt you
 -- up — stay buried, jump to climb out, Task 4).
-updateCollisionNearPlayer = function(dt: number, footPos: Vector3?)
-	if footPos == nil then
-		return -- off the cake: leave the columns as-is (nothing stands on them)
+updateCollisionNearPlayer = function(dt: number, scanCentre: Vector3?)
+	if scanCentre == nil then
+		return -- no character at all: nothing to keep walkable
 	end
+	-- ⚠ The centre is the character's raw XZ, NOT a surface point. It used to be
+	-- nil-gated on "is this XZ inside the footprint", which blinded the scan at
+	-- exactly the places it is needed: the collision grid extends PAST the
+	-- footprint, and `colTarget` averages only the IN-cake cells of its block, so
+	-- a rim column with one in-cake cell stands at FULL cake height over XZ that
+	-- fails `InCake`. A character there was inside a 170-stud solid part that
+	-- nothing re-evaluated. Off-footprint entirely (checkpoint/gym) the scan is
+	-- now also live, so the rim columns are correct before they walk back on.
 	local r = renderCfg.collision.updateRadiusStuds
-	local fcx = (footPos.X - gridCfg.origin.x) / colStuds + PN / 2 - 0.5
-	local fcz = (footPos.Z - gridCfg.origin.z) / colStuds + PN / 2 - 0.5
+	local fcx = (scanCentre.X - gridCfg.origin.x) / colStuds + PN / 2 - 0.5
+	local fcz = (scanCentre.Z - gridCfg.origin.z) / colStuds + PN / 2 - 0.5
 	local cr = math.ceil(r / colStuds)
 	local rise = renderCfg.collision.riseRate * dt
 	local x0 = math.max(0, math.floor(fcx) - cr)
@@ -1373,7 +1626,14 @@ updateCollisionNearPlayer = function(dt: number, footPos: Vector3?)
 				newH = cur + rise -- rate-limited rise
 			end
 			-- Only resize the part (physics broadphase) when it moved meaningfully.
-			if math.abs(newH - cur) > 0.02 then
+			-- ⚠ Gate on the distance to TARGET, not on this frame's step. On the
+			-- rise branch the step is exactly `riseRate * dt`, so a `step > 0.02`
+			-- test stops committing entirely once dt < 0.02/6 s (~300 fps): the
+			-- column's height is never written, so `cur` never advances and the
+			-- rise DEADLOCKS — permanently, on precisely the fastest clients. With
+			-- the 240 fps cap the old test cleared by 25%, so jitter already
+			-- dropped individual frames.
+			if math.abs(target - cur) > 0.02 then
 				colTargetH[ci] = target
 				colDisplayH[ci] = newH
 				writeColumn(ci)
@@ -1383,6 +1643,11 @@ updateCollisionNearPlayer = function(dt: number, footPos: Vector3?)
 end
 
 local function columnsRebuild()
+	-- A snapshot replaces the whole surface. Drop cosmetic state before writing
+	-- the replacement columns so a dent from the previous cake/window cannot be
+	-- baked into otherwise fresh geometry for one or more frames.
+	table.clear(colActive)
+	table.clear(colSquish)
 	for cz = 0, PN - 1 do
 		for cx = 0, PN - 1 do
 			local ci = colIndex(cx, cz)
@@ -1391,8 +1656,6 @@ local function columnsRebuild()
 			writeColumn(ci)
 		end
 	end
-	table.clear(colActive)
-	table.clear(colSquish)
 end
 
 local function partsStep(dt: number, footPos: Vector3?)
@@ -1429,7 +1692,12 @@ local function partsStep(dt: number, footPos: Vector3?)
 					local dx, dz = (cx - fx) * colStuds, (cz - fz) * colStuds
 					local distSq = dx * dx + dz * dz
 					if distSq < sq.radius * sq.radius then
-						footCols[colIndex(cx, cz)] = -sq.depth * (1 - distSq / (sq.radius * sq.radius))
+						local ci = colIndex(cx, cz)
+						local squishMult = effectiveSquishMultiplier(layerDefAt(colDisplayH[ci] or 0))
+						if squishMult > 0 then
+							footCols[ci] = -sq.depth * squishMult
+								* (1 - distSq / (sq.radius * sq.radius))
+						end
 					end
 				end
 			end
@@ -1487,13 +1755,32 @@ function CakeRenderer.OnSnapshot()
 			return
 		end
 		rebuilding = true
+		-- ⚠ COLLISION FIRST, VISUALS SECOND. `editableRebuild` YIELDS (the lazy
+		-- EditableMesh pool build — the cold-pool case is exactly a new cake), and
+		-- until `columnsRebuild` runs every column is a 0.1-stud CanCollide=false
+		-- stub: the cake is heights with no floor. Rebuilding columns after the
+		-- yield meant a character placed at cake height fell for the whole build
+		-- and the columns then closed around them. `columnsRebuild` does not yield
+		-- and `ApplySnapshot` has already run, so it has full truth to build from.
+		-- Once, not before AND after: 1024 part resizes twice in a frame is the
+		-- broadphase spike `updateCollisionNearPlayer` exists to avoid, and the
+		-- radius scan corrects anything the yield drifted on the next frame.
+		columnsRebuild()
 		-- pcall: an unhandled throw here would leave `rebuilding` stuck true
 		-- and freeze the renderer forever with no ongoing warn (R8).
 		local ok, err = pcall(editableRebuild) -- may flip impl to "parts" on budget exhaustion
-		columnsRebuild()
 		rebuilding = false
 		if not ok then
 			Log.Warn("CakeRenderer", `rebuild FAILED ({err}) — cake visuals stale until the next snapshot`)
+		end
+		-- ⚠ `editableRebuild` may DEGRADE to the visible part grid (impl = "parts",
+		-- visualColumns = true) and return. Because the columns were written above,
+		-- while `visualColumns` was still false, they are sized correctly but still
+		-- INVISIBLE — and `partsStep` only repaints columns that later go active, so
+		-- the fallback would render a void you can walk on. Repaint once, here.
+		if impl == "parts" then
+			buildPalette()
+			columnsRebuild()
 		end
 		if snapshotPending then
 			snapshotPending = false
@@ -1509,19 +1796,64 @@ end
 -- Per-frame update.
 --   footPos     = ground point when CLOSE to the surface (ΔY < tolerance) — the
 --                 cosmetic squish/wax; nil when off/above/buried.
---   overCakePos = the player's surface point whenever they're over the loaf at
---                 ANY depth (nil only off the footprint) — the collision-scan
---                 centre, so a BURIED player's columns still rise back (Task 2).
-function CakeRenderer.Step(dt: number, footPos: Vector3?, overCakePos: Vector3?)
+--   scanCentre  = the character's RAW world position (nil only when there is no
+--                 character) — the collision-scan centre, so a BURIED player's
+--                 columns still rise back (Task 2) and the columns off the
+--                 footprint (the rim ring, the walk back from the checkpoint)
+--                 stay correct. ⚠ It used to be a surface point, which is nil
+--                 off the footprint and so blinded the scan exactly there.
+function CakeRenderer.Step(dt: number, footPos: Vector3?, scanCentre: Vector3?)
 	clock += dt
 	if impl == "editable" then
 		if rebuilding then
 			return -- mid-rebuild: mirror keeps accumulating, rebuild snaps all
 		end
-		editableStep(dt, footPos, overCakePos)
+		editableStep(dt, footPos, scanCentre)
 	elseif impl == "parts" then
 		partsStep(dt, footPos)
 	end
+end
+
+--API
+-- World Y of the TOP of the walkable collision column covering `wx, wz`, or nil
+-- when that XZ is outside the column grid / the column is a non-collidable stub.
+--
+-- This is the burial truth for anything that must work OFF the footprint:
+-- `LocalCakeField.SurfacePoint` returns nil there, but the column grid does not
+-- stop at the footprint and a rim column can stand at full cake height over
+-- out-of-cake XZ (see `colTarget` / `updateCollisionNearPlayer`). It reads
+-- `colDisplayH` — what the player is actually standing in — not the field.
+function CakeRenderer.ColumnTopAt(wx: number, wz: number): number?
+	if PN == 0 then
+		return nil -- Setup has not run
+	end
+	local cx = math.floor((wx - gridCfg.origin.x) / colStuds + PN / 2)
+	local cz = math.floor((wz - gridCfg.origin.z) / colStuds + PN / 2)
+	if cx < 0 or cz < 0 or cx >= PN or cz >= PN then
+		return nil
+	end
+	-- Mirror `writeColumn` EXACTLY, squish included — that is the height the part
+	-- actually has, and the same test decides whether it collides at all.
+	local ci = colIndex(cx, cz)
+	local h = (colDisplayH[ci] or 0) + (colSquish[ci] or 0)
+	if h < renderCfg.fallback.minVisibleHeight then
+		return nil -- writeColumn leaves these CanCollide=false: nothing to be inside
+	end
+	return gridCfg.origin.y + h
+end
+
+--API
+-- Snap every collision column straight to truth, bypassing the rate-limited
+-- rise. For the ONE case the rise cap does not cover: a character that was not
+-- on the cake while the columns went stale (a fresh spawn, a return from the
+-- checkpoint). ⚠ Do NOT generalise this to "whenever airborne" — a player
+-- jumping out of a refilling crater is airborne, and snapping the column up
+-- under them is exactly the punt the cap exists to prevent.
+function CakeRenderer.SnapCollisionNow()
+	if PN == 0 or fieldModule == nil or fieldModule.Meta() == nil then
+		return -- no cake yet; the first snapshot's rebuild will do it
+	end
+	columnsRebuild()
 end
 
 --API

@@ -174,6 +174,24 @@ function CakeSubs.Start(data, services, subscriptions)
 		end
 
 		local phase = services.CakeCycleService.Phase()
+		if phase == "miniboss" then
+			-- ZONE GATE (features/cake-cycle.md): while a mini-boss is up the cake
+			-- is off the menu entirely — the same `EatAt` tap hits the boss instead,
+			-- so the input the player already knows is the input that fights it.
+			local hp = services.CakeCycleService.DamageMiniBoss(1)
+			if hp ~= nil and hp <= 0 then
+				if CakeCycleSubs and type(CakeCycleSubs.FinishMiniBoss) == "function" then
+					CakeCycleSubs.FinishMiniBoss()
+				else
+					Log.Once(
+						SCOPE,
+						"finish-miniboss-missing",
+						"mini-boss reached zero HP but CakeCycleSubs.FinishMiniBoss is missing -- the zone would stay gated"
+					)
+				end
+			end
+			return
+		end
 		if phase == "boss" then
 			local hp = services.CakeCycleService.DamageBoss(1)
 			if hp ~= nil and hp <= 0 then

@@ -36,6 +36,12 @@ for line in funnels_block.split('\n'):
     if cur and found:
         funnels[cur].update(found)
 funnels['flow'] = flowset
+# The `layers` funnel's steps are GENERATED (one per layer of depth), so they
+# are not in the block above — rebuild the same sequence here or every call
+# site that reports a depth would read as an unknown step.
+depth = re.search(r'AnalyticsConfig\.maxLayerDepth = (\d+)', cfg)
+if depth:
+    funnels['layers'] = {f'l{n}' for n in range(1, int(depth.group(1)) + 1)}
 
 # client allow-lists
 cfs = set(re.findall(r'\["([a-z0-9\-]+)"\] = true', cfg.split('AnalyticsConfig.clientFlowSteps = {')[1].split('\n}')[0]))

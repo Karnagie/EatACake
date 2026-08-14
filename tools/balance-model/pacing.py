@@ -79,6 +79,32 @@ COMP = dict(
     scoop_top=2.23, scoop_bottom=0.558,
     ref_band_weight=25.4, max_density=12.0,
     coop_work=0.5, layer_exponent=0.55, coop_calories=0.62,
+    # ZONES (2026-08-07): a cake is `group_count` flavour zones laid one after
+    # another, each boundary a mini-boss. Split by LAYER COUNT — this model is
+    # what proved that is the right axis: on a RAMPED run the upgrade curve
+    # cancels the scoop ramp and every band costs ~1.21 min, so a cost-weighted
+    # split put 11 layers / 13.2 min in the opening zone instead of 3 / ~4.
+    group_count=5, group_min_layers=3,
+    group_layer_shares=(0.103, 0.172, 0.207, 0.241, 0.277),
+)
+
+# Selectable rainbow cake (CakeConfig.variants["cake-rainbow"]). The public
+# duration target is 1.5x; `duration_work_scale` is the calibrated bite-area
+# factor that reaches it after fixed gym downtime and cleanup sweeps.
+RAINBOW = dict(
+    height_scale=1.2,
+    duration_scale=1.5,
+    duration_work_scale=1.75,
+    group_count=7,
+    group_min_layers=3,
+    group_layer_shares=(0.2414, 0.1724, 0.1379, 0.1379, 0.10345, 0.10345, 0.1035),
+    radius_scales=(0.72, 0.76, 0.81, 0.87, 0.94, 0.97, 1.00),
+    gate_boundaries=(True, True, True, True, True, False),
+    group_ids=(
+        'rainbow-red', 'rainbow-orange', 'rainbow-yellow',
+        'rainbow-green', 'rainbow-blue', 'rainbow-indigo',
+        'rainbow-violet',
+    ),
 )
 
 # MatchConfig difficulty work multipliers (the cake's WORK lever, ADR-0011) and
@@ -96,20 +122,112 @@ SIM = dict(
     remnant_min_cleared_neighbors=3,
 )
 
-# id -> (hardness, calories). `frosting` is always the top band; the rest are the
-# middlePool that layer identity is rolled from.
-LAYERS = {
-    'frosting':  (0.85, 0.139),
-    'sponge':    (1.00, 0.155),
-    'chocolate': (1.25, 0.237),
-    'jelly':     (1.08, 0.188),
-    'cotton':    (0.85, 0.122),
-    'caramel':   (1.15, 0.204),
-    'crumb':     (0.95, 0.147),
-    'filling':   (0.90, 0.163),
-    'core':      (math.inf, 0.0),
-}
-MIDDLE_POOL = ['sponge', 'chocolate', 'jelly', 'cotton', 'caramel', 'crumb', 'filling']
+# ── the layer library, READ from the game (not mirrored) ─────────────────────
+# Layers used to be a hardcoded `LAYERS` dict here plus a `MIDDLE_POOL` list, kept
+# honest by `check_config_sync()`. That stopped scaling on 2026-08-07: the game
+# went from 7 middle flavours to 40 in 10 GROUPS, built in Lua from a shared
+# per-group base plus per-variant overrides. Mirroring 40 (hardness, calories)
+# pairs by hand is exactly the drift this file exists to prevent, so the numbers
+# are PARSED out of `CakeLayersConfig.lua` instead — there is nothing left to
+# desync. What still needs guarding (`composition.groups`) is checked below.
+
+
+def _strip_lua_comments(src: str) -> str:
+    src = re.sub(r'--\[\[.*?\]\]', '', src, flags=re.S)   # block comments
+    return re.sub(r'--[^\n]*', '', src)                     # line comments
+
+
+def _table_at(src: str, open_index: int):
+    """`open_index` points at a '{'. Returns (body, index just past its '}')."""
+    depth = 0
+    i = open_index
+    while i < len(src):
+        if src[i] == '{':
+            depth += 1
+        elif src[i] == '}':
+            depth -= 1
+            if depth == 0:
+                return src[open_index + 1:i], i + 1
+        i += 1
+    raise ValueError('unbalanced table starting at %d' % open_index)
+
+
+def _fields(body: str) -> dict:
+    """Top-level scalar fields. Nested tables (`colors = { ... }`) hold none of
+    the keys we read, so a flat regex is enough and stays readable."""
+    out = {}
+    m = re.search(r'\bid\s*=\s*"([^"]+)"', body)
+    if m:
+        out['id'] = m.group(1)
+    for key in ('hardness', 'calories'):
+        m = re.search(r'\b%s\s*=\s*(math\.huge|[0-9.]+)' % key, body)
+        if m:
+            out[key] = math.inf if m.group(1) == 'math.huge' else float(m.group(1))
+    return out
+
+
+def _parse_layer_library():
+    src = _strip_lua_comments(_lua('src/shared/config/CakeLayersConfig.lua'))
+    layers, groups = {}, []
+
+    # Standalone defs: the icing cap and the inedible core.
+    for m in re.finditer(r'\blayers\.(\w+)\s*=\s*\{', src):
+        body, _ = _table_at(src, m.end() - 1)
+        f = _fields(body)
+        layers[m.group(1)] = (f.get('hardness', 1.0), f.get('calories', 0.0))
+
+    # group("id", "nameKey", { base }, { {variant}, ... })
+    for m in re.finditer(r'\bgroup\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,', src):
+        gid = m.group(1)
+        base_open = src.index('{', m.end())
+        base_body, after_base = _table_at(src, base_open)
+        members_open = src.index('{', after_base)
+        members_body, _ = _table_at(src, members_open)
+        base = _fields(base_body)
+
+        member_ids = []
+        i = 0
+        while True:
+            j = members_body.find('{', i)
+            if j < 0:
+                break
+            body, i = _table_at(members_body, j)
+            f = _fields(body)
+            if 'id' not in f:
+                continue
+            layers[f['id']] = (
+                f.get('hardness', base.get('hardness', 1.0)),
+                f.get('calories', base.get('calories', 0.0)),
+            )
+            member_ids.append(f['id'])
+        if not member_ids:
+            raise ValueError('layer group %r parsed with no members' % gid)
+        groups.append({'id': gid, 'members': member_ids})
+
+    # Selectable rainbow layers are generated from one base + a compact spec
+    # array rather than through `group(...)`, so parse that second data shape.
+    rainbow_base_match = re.search(r'\blocal\s+rainbowBase\s*=\s*\{', src)
+    rainbow_specs_match = re.search(r'\blocal\s+rainbowSpecs\s*=\s*\{', src)
+    if rainbow_base_match and rainbow_specs_match:
+        rainbow_base_body, _ = _table_at(src, rainbow_base_match.end() - 1)
+        rainbow_specs_body, _ = _table_at(src, rainbow_specs_match.end() - 1)
+        rainbow_base = _fields(rainbow_base_body)
+        for layer_id in re.findall(r'\bid\s*=\s*"(rainbow-[^"]+)"', rainbow_specs_body):
+            layers[layer_id] = (
+                rainbow_base.get('hardness', 1.0),
+                rainbow_base.get('calories', 0.0),
+            )
+
+    if 'frosting' not in layers or 'core' not in layers:
+        raise ValueError('CakeLayersConfig parse lost frosting/core — the parser is out of date')
+    if not groups:
+        raise ValueError('CakeLayersConfig parse found no groups — the parser is out of date')
+    return layers, groups
+
+
+# (bound below, once `_lua()` exists — see the end of the config-sync block)
+LAYERS: dict = {}
+GROUPS: list = []
 
 
 @dataclass
@@ -161,10 +279,20 @@ def _num(src: str, key: str):
     return float(m.group(1)) if m else None
 
 
+# The layer library is PARSED (see `_parse_layer_library`), so it binds as soon
+# as `_lua()` exists rather than at import time.
+LAYERS, GROUPS = _parse_layer_library()
+
 def check_config_sync() -> list:
+    # ⚠ Every regex below greps RAW Lua, so PROSE counts. A comment inside the
+    # `groups` block that mentioned "count = 6" made `_num(body, 'count')` return
+    # 6 for a config that says 5 — a sync failure invented entirely by a comment
+    # (seen 2026-08-07). Comments are stripped first so only real assignments can
+    # match; `_strip_lua_comments` is the same helper the layer parser uses.
     """Compare every mirrored constant with the real Lua config. Empty == in sync."""
     problems = []
-    cake = _lua('src/shared/config/CakeConfig.lua')
+    cake = _strip_lua_comments(_lua('src/shared/config/CakeConfig.lua'))
+    layer_src = _strip_lua_comments(_lua('src/shared/config/CakeLayersConfig.lua'))
     upg = _lua('src/shared/config/UpgradeConfig.lua')
 
     def cmp(label, got, want):
@@ -213,20 +341,106 @@ def check_config_sync() -> list:
         cmp('footprint.hz', float(m.group(2)), COMP['footprint_hz'])
         cmp('footprint.corner', float(m.group(3)), COMP['footprint_corner'])
 
-    # Per-layer hardness/calories.
-    for name, (hardness, calories) in LAYERS.items():
-        block = re.search(r'\n\t%s\s*=\s*{(.*?)\n\t},' % name, cake, re.S)
-        if not block:
-            problems.append('layers.%s: not found' % name)
-            continue
-        body = block.group(1)
-        got_h, got_c = _num(body, 'hardness'), _num(body, 'calories')
-        if math.isinf(hardness):
-            if 'math.huge' not in body:
-                problems.append('layers.%s.hardness: expected math.huge' % name)
+    # ⚠ Per-layer hardness/calories are no longer MIRRORED here — they are parsed
+    # straight out of CakeLayersConfig.lua (see `_parse_layer_library`), so there
+    # is nothing to desync. What IS mirrored is the ZONE split, and that is what
+    # decides where a mini-boss lands and how long the opening zone takes.
+    # ⚠ ONE tab. `groups` is a direct child of `CakeConfig.composition`, so the
+    # block reads `\n\tgroups = {` ... `\n\t},`. A TWO-tab pattern here matched
+    # nothing, so check_config_sync() appended 'composition.groups: not found' on
+    # every run: the banner went permanently red (hiding every other check) and
+    # the zone-split guard this block exists to be never actually ran.
+    groups_block = re.search(r'\n\tgroups\s*=\s*{(.*?)\n\t},', cake, re.S)
+    if not groups_block:
+        problems.append('composition.groups: block not found in CakeConfig.lua (renamed or re-indented?)')
+    else:
+        body = groups_block.group(1)
+        cmp('composition.groups.count', _num(body, 'count'), COMP['group_count'])
+        cmp('composition.groups.minLayers', _num(body, 'minLayers'), COMP['group_min_layers'])
+        shares_src = re.search(r'layerShares\s*=\s*{([^}]*)}', body)
+        if not shares_src:
+            problems.append('composition.groups.layerShares: not found')
         else:
-            cmp('layers.%s.hardness' % name, got_h, hardness)
-        cmp('layers.%s.calories' % name, got_c, calories)
+            shares = [float(v) for v in re.findall(r'[0-9.]+', shares_src.group(1))]
+            # ⚠ ELEMENTWISE: `cmp` does `abs(got - want)`, which THROWS on two
+            # tuples — handing it the sequences whole would have crashed the tool
+            # the first time the regex above ever matched.
+            if len(shares) != len(COMP['group_layer_shares']):
+                problems.append('composition.groups.layerShares: Lua has %d entries, model has %d'
+                                % (len(shares), len(COMP['group_layer_shares'])))
+            else:
+                for i, (got, want) in enumerate(zip(shares, COMP['group_layer_shares'])):
+                    cmp('composition.groups.layerShares[%d]' % (i + 1), got, want)
+    if abs(sum(COMP['group_layer_shares']) - 1.0) > 1e-6:
+        problems.append('composition.groups.layerShares must sum to 1, got %.4f'
+                        % sum(COMP['group_layer_shares']))
+    if len(COMP['group_layer_shares']) != COMP['group_count']:
+        problems.append('composition.groups: %d layerShares for count %d'
+                        % (len(COMP['group_layer_shares']), COMP['group_count']))
+
+    rainbow_match = re.search(r'\["cake-rainbow"\]\s*=\s*\{', cake)
+    if not rainbow_match:
+        problems.append('variants["cake-rainbow"]: block not found')
+    else:
+        rainbow_body, _ = _table_at(cake, rainbow_match.end() - 1)
+        for key, want in (('heightScale', RAINBOW['height_scale']),
+                          ('durationScale', RAINBOW['duration_scale']),
+                          ('durationWorkScale', RAINBOW['duration_work_scale'])):
+            cmp('variants.cake-rainbow.' + key, _num(rainbow_body, key), want)
+        rainbow_groups_match = re.search(r'\bgroups\s*=\s*\{', rainbow_body)
+        if not rainbow_groups_match:
+            problems.append('variants.cake-rainbow.groups: block not found')
+        else:
+            rainbow_groups, _ = _table_at(rainbow_body, rainbow_groups_match.end() - 1)
+            cmp('variants.cake-rainbow.groups.count', _num(rainbow_groups, 'count'),
+                RAINBOW['group_count'])
+            cmp('variants.cake-rainbow.groups.minLayers', _num(rainbow_groups, 'minLayers'),
+                RAINBOW['group_min_layers'])
+            for field_name, expected in (('layerShares', RAINBOW['group_layer_shares']),
+                                         ('radiusScales', RAINBOW['radius_scales'])):
+                values_match = re.search(r'\b%s\s*=\s*\{([^}]*)\}' % field_name,
+                                         rainbow_groups)
+                if not values_match:
+                    problems.append('variants.cake-rainbow.groups.%s: not found' % field_name)
+                    continue
+                values = [float(v) for v in re.findall(r'[0-9.]+', values_match.group(1))]
+                if len(values) != len(expected):
+                    problems.append('variants.cake-rainbow.groups.%s: Lua has %d entries, model has %d'
+                                    % (field_name, len(values), len(expected)))
+                else:
+                    for i, (got, want) in enumerate(zip(values, expected)):
+                        cmp('variants.cake-rainbow.groups.%s[%d]' % (field_name, i + 1),
+                            got, want)
+            gates_match = re.search(r'\bgateBoundaries\s*=\s*\{([^}]*)\}', rainbow_groups)
+            if not gates_match:
+                problems.append('variants.cake-rainbow.groups.gateBoundaries: not found')
+            else:
+                gates = tuple(value == 'true'
+                              for value in re.findall(r'\b(true|false)\b', gates_match.group(1)))
+                if gates != RAINBOW['gate_boundaries']:
+                    problems.append('variants.cake-rainbow.groups.gateBoundaries: Lua has %r, model has %r'
+                                    % (gates, RAINBOW['gate_boundaries']))
+    if abs(sum(RAINBOW['group_layer_shares']) - 1.0) > 1e-9:
+        problems.append('variants.cake-rainbow.groups.layerShares must sum to 1, got %.6f'
+                        % sum(RAINBOW['group_layer_shares']))
+    if len(RAINBOW['group_layer_shares']) != RAINBOW['group_count']:
+        problems.append('variants.cake-rainbow.groups: %d layerShares for count %d'
+                        % (len(RAINBOW['group_layer_shares']), RAINBOW['group_count']))
+    if len(RAINBOW['radius_scales']) != RAINBOW['group_count']:
+        problems.append('variants.cake-rainbow.groups: %d radiusScales for count %d'
+                        % (len(RAINBOW['radius_scales']), RAINBOW['group_count']))
+    if len(RAINBOW['gate_boundaries']) != RAINBOW['group_count'] - 1:
+        problems.append('variants.cake-rainbow.groups: %d gateBoundaries for %d boundaries'
+                        % (len(RAINBOW['gate_boundaries']), RAINBOW['group_count'] - 1))
+    rainbow_specs_match = re.search(r'\blocal\s+rainbowSpecs\s*=\s*\{', layer_src)
+    if not rainbow_specs_match:
+        problems.append('CakeLayersConfig.rainbowSpecs: not found')
+    else:
+        rainbow_specs, _ = _table_at(layer_src, rainbow_specs_match.end() - 1)
+        ids = tuple(re.findall(r'\bid\s*=\s*"(rainbow-[^"]+)"', rainbow_specs))
+        if ids != RAINBOW['group_ids']:
+            problems.append('CakeLayersConfig.rainbowSpecs ids: Lua has %r, model has %r'
+                            % (ids, RAINBOW['group_ids']))
 
     # Upgrade tiers: values and costs, in order, per stat.
     for stat, up in live_upgrades().items():
@@ -279,19 +493,78 @@ class Band:
     top: float
     scoop: float
     density: float
+    group: int = 1          # flavour ZONE, 1 == the TOP of the cake
+    footprint_scale: float = 1.0
 
     @property
     def thickness(self):
         return self.top - self.bottom
 
 
-def roll_composition(work: float, rng: random.Random, comp=COMP, jitter=True):
+def _roll_zones(layers, rng, comp=COMP, variant=None):
+    """Mirrors `CakeCycleService.rollZones` — bands split by LAYER COUNT.
+
+    Not by clear-time cost: this model is what showed the two are different
+    questions. A fixed eater spends ~16x longer on the deepest band than the
+    top one, but a RAMPED player buys tiers as they dig and the upgrade curve
+    cancels the scoop ramp — every band lands at ~1.21 min. Cost-weighting the
+    split therefore put 11 layers and 13.2 min in the opening zone; counting
+    puts 3 layers and ~4 min there, which is the requirement.
+    """
+    cfg = variant or comp
+    shares = list(cfg['group_layer_shares'])
+    min_layers = max(1, cfg['group_min_layers'])
+    pool = ([{'id': layer_id, 'members': [layer_id]}
+             for layer_id in variant['group_ids']] if variant else list(GROUPS))
+    zone_count = max(1, min(cfg['group_count'], len(shares), len(pool),
+                            layers // min_layers))
+    bag = list(pool)
+    if variant is None:
+        rng.shuffle(bag)
+    drawn = bag[:zone_count]
+    gates = variant.get('gate_boundaries') if variant else None
+
+    share_sum = sum(max(0.0, shares[z]) for z in range(zone_count))
+
+    zone_of = [0] * layers          # 0-based band index -> 1-based zone
+    zones = []
+    band = 0
+    target = 0.0
+    for z in range(zone_count):
+        target += (max(0.0, shares[z]) / share_sum) * layers
+        remaining = zone_count - z - 1
+        max_take = max(1, layers - band - remaining * min_layers)
+        want = max(min_layers, int(math.floor(target - band + 0.5)))
+        taken = 0
+        while band < layers and taken < max_take and taken < want:
+            zone_of[band] = z + 1
+            band += 1
+            taken += 1
+        zones.append({
+            'id': drawn[z]['id'],
+            'members': drawn[z]['members'],
+            'layers': taken,
+            'radius_scale': variant['radius_scales'][z] if variant else 1.0,
+            # One flag per boundary. Classic has no override and gates every
+            # transition; selectable variants may add purely visual terraces.
+            'gate_from_previous': z > 0 and (gates is None or gates[z - 1]),
+        })
+    while band < layers:            # rounding leftovers join the deepest zone
+        zone_of[band] = zone_count
+        zones[-1]['layers'] += 1
+        band += 1
+    return zone_of, zones
+
+
+def roll_composition(work: float, rng: random.Random, comp=COMP, jitter=True, variant=None):
     layers = int(min(max(math.floor(comp['base_layers'] * work ** comp['layer_exponent'] + 0.5), 2),
                      comp['max_layers']))
     scoop_scale = (work / (layers / comp['base_layers'])) ** -0.5
     scoop_top = comp['scoop_top'] * scoop_scale
     scoop_bottom = comp['scoop_bottom'] * scoop_scale
-    total_height = min(comp['max_total_height'], 340 - comp['core_thickness'])
+    height_scale = variant['height_scale'] if variant else 1.0
+    duration_work = variant['duration_work_scale'] if variant else 1.0
+    total_height = min(comp['max_total_height'] * height_scale, 340 - comp['core_thickness'])
 
     scoops, weights = [], []
     for k in range(layers):
@@ -301,12 +574,21 @@ def roll_composition(work: float, rng: random.Random, comp=COMP, jitter=True):
         weights.append((scoop_top / scoop) ** (2 * comp['thickness_exponent']))
     weight_sum = sum(weights)
 
-    ids = ['frosting']
-    last = 'frosting'
-    for _ in range(1, layers):
+    # ZONES — mirrors CakeCycleService.rollZones: draw `group_count` distinct
+    # groups, then hand bands to them until each zone's share of the CUMULATIVE
+    # CLEAR COST (1/scoop², the pacing curve's own clear-time proxy) is met.
+    zone_of, zones = _roll_zones(layers, rng, comp, variant)
+
+    ids = ([] if variant else ['frosting'])
+    last = '' if variant else 'frosting'
+    for k in range(0 if variant else 1, layers):
+        members = zones[zone_of[k] - 1]['members']
         pick = last
-        while pick == last:
-            pick = MIDDLE_POOL[rng.randrange(len(MIDDLE_POOL))]
+        if len(members) == 1:
+            pick = members[0]
+        else:
+            while pick == last:
+                pick = members[rng.randrange(len(members))]
         last = pick
         ids.append(pick)
 
@@ -319,14 +601,20 @@ def roll_composition(work: float, rng: random.Random, comp=COMP, jitter=True):
     thickness = [t * renorm for t in thickness]
 
     bands, cursor = [], 0.0
-    bands.append(Band('core', 0.0, comp['core_thickness'], 1.0, 1.0))
+    # The core carries the DEEPEST zone so the layer gate reaching band #1 does
+    # not read as one more zone boundary (it is the Cake Guardian's cue).
+    bands.append(Band('core', 0.0, comp['core_thickness'], 1.0, 1.0, len(zones)))
     cursor = comp['core_thickness']
     for k in range(layers - 1, -1, -1):  # deepest designed band first (bottom-up)
-        density = min(max(comp['ref_band_weight'] / (thickness[k] * scoops[k] ** 2), 1.0),
+        radius_scale = zones[zone_of[k] - 1]['radius_scale']
+        final_scoop = scoops[k] * radius_scale / math.sqrt(duration_work)
+        density = min(max(comp['ref_band_weight']
+                          / (thickness[k] * final_scoop ** 2 * duration_work), 1.0),
                       comp['max_density'])
-        bands.append(Band(ids[k], cursor, cursor + thickness[k], scoops[k], density))
+        bands.append(Band(ids[k], cursor, cursor + thickness[k], final_scoop, density,
+                          zone_of[k], radius_scale))
         cursor += thickness[k]
-    return bands
+    return bands, zones
 
 
 # ── bite math (CakeOps.ApplyBite) ────────────────────────────────────────────
@@ -339,9 +627,18 @@ class Field:
         self.bands = bands
         self.mask = cake_mask(self.size, comp['footprint_hx'], comp['footprint_hz'],
                               comp['footprint_corner'])
-        top = bands[-1].top
+        self.band_masks = [
+            cake_mask(self.size,
+                      comp['footprint_hx'] * band.footprint_scale,
+                      comp['footprint_hz'] * band.footprint_scale,
+                      comp['footprint_corner'] * band.footprint_scale)
+            for band in bands
+        ]
         self.h = np.zeros((self.size, self.size), dtype=np.int64)
-        self.h[self.mask] = studs_to_units(top)
+        # Bottom-up terrace fill: each narrower/higher band overwrites only its
+        # own mask, matching CakeFieldService.ResetCake.
+        for band, mask in zip(bands, self.band_masks):
+            self.h[mask] = studs_to_units(band.top)
         # Per-cell world coords, for the radius test.
         idx = np.arange(self.size).astype(float)
         half = self.size * 0.5
@@ -415,14 +712,15 @@ class Field:
             return min(studs, band.thickness * cap) if cap else studs
 
         swept_units = 0
+        band_mask = self.band_masks[self.bands.index(band)]
         sliver_ceil = floor_units + studs_to_units(capped(SIM['sliver_sweep_studs']))
-        sel = self.mask & (self.h > floor_units) & (self.h <= sliver_ceil)
+        sel = band_mask & (self.h > floor_units) & (self.h <= sliver_ceil)
         swept_units += int((self.h[sel] - floor_units).sum())
         self.h[sel] = floor_units
 
-        cleared_ceil = floor_units + studs_to_units(SIM['remnant_cleared_margin'])
+        cleared_ceil = floor_units + studs_to_units(capped(SIM['remnant_cleared_margin']))
         near_floor = floor_units + studs_to_units(capped(SIM['remnant_near_floor']))
-        crater = (self.h <= cleared_ceil) & self.mask
+        crater = (self.h <= cleared_ceil) & band_mask
         # Out-of-cake neighbours are SUPPORT, never a crater (the loaf perimeter survives).
         def shift(arr, dz, dx):
             out = np.zeros_like(arr)
@@ -436,7 +734,7 @@ class Field:
         back, front = shift(crater, -1, 0), shift(crater, 1, 0)
         n = left.astype(int) + right.astype(int) + back.astype(int) + front.astype(int)
         collapse = (
-            self.mask & (self.h > floor_units) & (n > 0)
+            band_mask & (self.h > floor_units) & (n > 0)
             & ((self.h <= near_floor)
                | (n >= SIM['remnant_min_cleared_neighbors'])
                | (left & right) | (back & front))
@@ -488,6 +786,13 @@ class RunResult:
     progress_at_max: float          # fraction of cake eaten when the tree completed (None -> never)
     minutes_at_max: float
     trips: int
+    # THE ZONE SPLIT (2026-08-07): one entry per flavour zone, top of the cake
+    # first — (zone id, layer count, minutes of EAT + GYM spent inside it). This
+    # is what holds the "first zone takes 3-4 minutes, later ones take longer"
+    # requirement, and it is only measurable on a RAMPED run: the endpoints say
+    # 10% of the cake (fresh) and 15% (maxed), which price out at 2.9 and 4.5
+    # minutes — the answer is in between and depends on when tiers get bought.
+    zones: list = field(default_factory=list)
     # One entry per gym trip: (capacity tier OWNED while that belly filled,
     # SECONDS OF EATING it took to fill it, fraction of the cake eaten by then).
     # This is the "how often am I sent to burn fat?" curve — the pacing the player
@@ -496,19 +801,19 @@ class RunResult:
 
 
 def simulate_run(work=1.0, calories_mult=1.0, seed=1, upgrades=None, trip_seconds=14.0,
-                 buy=True, fixed_tiers=None, comp=COMP, progress_log=None):
+                 buy=True, fixed_tiers=None, comp=COMP, progress_log=None, variant=None):
     """One cake, mown band by band, buying tiers from banked calories as it goes."""
     rng = random.Random(seed)
-    bands = roll_composition(work, rng, comp)
+    bands, zones = roll_composition(work, rng, comp, variant=variant)
     fld = Field(bands, comp=comp)
     stats = Stats(upgrades or live_upgrades())
     if fixed_tiers is not None:
         stats.tiers = dict(fixed_tiers)
 
     total_edible = 0.0
-    for b in bands[1:]:
-        total_edible += b.thickness * b.density
-    total_edible *= float(fld.mask.sum()) * fld.cell * fld.cell
+    for index, b in enumerate(bands[1:], start=1):
+        total_edible += (b.thickness * b.density
+                         * float(fld.band_masks[index].sum()) * fld.cell * fld.cell)
 
     bites = 0
     food_total = 0.0
@@ -563,14 +868,16 @@ def simulate_run(work=1.0, calories_mult=1.0, seed=1, upgrades=None, trip_second
         remaining = max(0.0, 1.0 - instant)
         gym_seconds += trip_seconds + (remaining / burn_speed if burn_speed > 0 else 0.0)
 
+    zone_seconds = {}
     for band_index in range(len(bands) - 1, 0, -1):
         band = bands[band_index]
         floor_units = studs_to_units(band.bottom)
         hardness, cal_per_stud3 = LAYERS[band.layer]
+        band_start_seconds = eat_seconds + gym_seconds
         guard = 0
         while guard < 60000:
             guard += 1
-            in_band = fld.mask & (fld.h > floor_units)
+            in_band = fld.band_masks[band_index] & (fld.h > floor_units)
             if not in_band.any():
                 break
             flat = np.where(in_band, fld.h, -1)
@@ -600,6 +907,10 @@ def simulate_run(work=1.0, calories_mult=1.0, seed=1, upgrades=None, trip_second
             if bites % max(1, int(stats.value('eatSpeed'))) == 0:
                 forfeited += fld.sweeps(floor_units, band) * band.density
         forfeited += fld.sweeps(floor_units, band) * band.density
+        # Charge this band's wall-clock (eating AND the gym trips it forced) to
+        # its zone. Gym time belongs to the zone that filled the belly.
+        zone_seconds[band.group] = (zone_seconds.get(band.group, 0.0)
+                                    + (eat_seconds + gym_seconds) - band_start_seconds)
         if progress_log is not None:
             progress_log.append((band_index, food_total / total_edible,
                                  (eat_seconds + gym_seconds) / 60.0, stats.owned_tiers()))
@@ -612,7 +923,12 @@ def simulate_run(work=1.0, calories_mult=1.0, seed=1, upgrades=None, trip_second
                 progress_at_max = food_total / total_edible
                 minutes_at_max = (eat_seconds + gym_seconds) / 60.0
 
+    zone_rows = [
+        (z['id'], z['layers'], zone_seconds.get(index + 1, 0.0) / 60.0)
+        for index, z in enumerate(zones)
+    ]
     return RunResult(
+        zones=zone_rows,
         minutes=(eat_seconds + gym_seconds) / 60.0,
         eat_minutes=eat_seconds / 60.0,
         gym_minutes=gym_seconds / 60.0,
@@ -675,6 +991,26 @@ def report(upgrades=None, comp=COMP, seeds=(1, 2, 3), label='live config', work=
               if r.progress_at_max is not None else 'NEVER')
         print('  seed %-6d %6.1f min  tiers %2d/%2d  all-tiers-owned at %-26s  income %s  waste %.1f%%'
               % (s, r.minutes, r.tiers, r.max_tiers, at, '{:,}'.format(int(r.banked + total if r.progress_at_max else r.banked)), r.waste_pct))
+    # ── the ZONE SPLIT (user req: first zone 3-4 min, later ones longer) ──
+    if rows and rows[0].zones:
+        zone_count = len(rows[0].zones)
+        print('  zones (top -> bottom), mean over %d seed(s) — %d mini-boss gate(s) + the Cake Guardian:'
+              % (len(rows), max(0, zone_count - 1)))
+        for index in range(zone_count):
+            names = sorted({r.zones[index][0] for r in rows if index < len(r.zones)})
+            layers_mean = sum(r.zones[index][1] for r in rows) / len(rows)
+            minutes_mean = sum(r.zones[index][2] for r in rows) / len(rows)
+            print('    zone %d  %-5.1f layers  %5.1f min   (rolled: %s)'
+                  % (index + 1, layers_mean, minutes_mean, ', '.join(names)))
+        first = sum(r.zones[0][2] for r in rows) / len(rows)
+        # Design target is 3-4 min. The accepted band is wider on the high side
+        # because the opening zone carries the UN-UPGRADED first ~90 seconds:
+        # bands 1-2 alone measure 3.5 min, and `minLayers` = 3 is the smallest a
+        # zone may be, so ~4.5 is the floor at 3 layers. Below 3 or above 5 means
+        # the split really has drifted.
+        verdict = 'OK' if 3.0 <= first <= 5.0 else '!! outside the 3-5 min band (target 3-4)'
+        print('    FIRST ZONE %.1f min  ->  %s' % (first, verdict))
+
     mean_min = sum(r.minutes for r in rows) / len(rows)
     done = [r for r in rows if r.progress_at_max is not None]
     print('  MEAN clear %.1f min | tree completed in %d/%d seeds%s'
@@ -682,6 +1018,30 @@ def report(upgrades=None, comp=COMP, seeds=(1, 2, 3), label='live config', work=
              (' at mean %.0f%% of the cake' % (100 * sum(r.progress_at_max for r in done) / len(done)))
              if done else ''))
     return mean_min, (sum(r.progress_at_max for r in done) / len(done)) if done else None
+
+
+def report_rainbow_duration(seeds=(1, 2, 3, 4, 5), work=None):
+    """Compare observed wall-clock duration for classic vs the selectable pyramid."""
+    work = MATCH_WORK['easy'] if work is None else work
+    classic = [simulate_run(work=work, seed=seed) for seed in seeds]
+    rainbow = [simulate_run(work=work, seed=seed, variant=RAINBOW) for seed in seeds]
+    print('-' * 100)
+    print('SELECTABLE RAINBOW DURATION — target 1.5x classic wall-clock')
+    print('-' * 100)
+    for seed, base, color in zip(seeds, classic, rainbow):
+        print('  seed %-3d classic %6.2f min | rainbow %6.2f min | %6.4fx'
+              % (seed, base.minutes, color.minutes, color.minutes / base.minutes))
+    classic_mean = sum(row.minutes for row in classic) / len(classic)
+    rainbow_mean = sum(row.minutes for row in rainbow) / len(rainbow)
+    ratio = rainbow_mean / classic_mean
+    print('  MEAN    classic %6.2f min | rainbow %6.2f min | %6.4fx '
+          '(config target %.2fx, work %.2fx)'
+          % (classic_mean, rainbow_mean, ratio,
+             RAINBOW['duration_scale'], RAINBOW['duration_work_scale']))
+    ok = 1.45 <= ratio <= 1.55
+    print('  %s — observed ratio %s acceptance band 1.45..1.55'
+          % ('OK' if ok else 'FAIL', 'inside' if ok else 'outside'))
+    return ok, ratio
 
 
 def scaled_upgrades(cost_scale: float, instant_scale: float = 1.0):
@@ -841,10 +1201,12 @@ def main():
     validate()
     print()
     report()
+    print()
+    rainbow_ok, _ = report_rainbow_duration()
     if args.solve:
         print()
         solve()
-    return 1 if problems else 0
+    return 1 if problems or not rainbow_ok else 0
 
 
 if __name__ == '__main__':

@@ -116,7 +116,7 @@ AnalyticsConfig.flowSteps = {
 
 -- ── funnels ─────────────────────────────────────────────────────────────
 -- At most 10 NAMES exist per experience and the limit is enforced by silent
--- drops, so two slots stay deliberately EMPTY for whatever the next feature
+-- drops, so one slot stays deliberately EMPTY for whatever the next feature
 -- needs. `session` says how the funnelSessionId is derived:
 --   "flow"    the cross-place analytics session (survives the teleport)
 --   "round"   the round id (one match)
@@ -218,11 +218,53 @@ AnalyticsConfig.funnels = {
 			{ key = "collected", name = "Find Collected" },
 		},
 	},
+	-- HOW DEEP DO THEY GET. One step per LAYER of depth, so the funnel's own
+	-- bar chart IS the answer to "how many layers does a player clear before
+	-- they stop": step N = "cleared N layers on this cake". Every other
+	-- progress signal the game has is coarse (`match`'s half/boss/win) or a
+	-- bare counter (`layer_cleared`), and neither can say WHERE the run ends.
+	--
+	-- `visit`, not `round`: a cake is the attempt. Landing on step 1 opens a
+	-- new one automatically (Session.Funnel), so the endless-fallback build's
+	-- second cake is a second attempt instead of being swallowed by the first
+	-- one's seen-set — and in a reserved match (one cake per round) it is the
+	-- same thing as `round` anyway.
+	--
+	-- The steps are GENERATED below (`maxLayerDepth`): forty hand-written rows
+	-- that must equal an integer sequence are forty chances to typo one.
+	layers = {
+		name = "CakeLayers",
+		session = "visit",
+	},
 }
 
 -- `flow` shares the ONE ordered step list, so the custom funnel and the
 -- built-in onboarding funnel can never disagree about what step 12 is.
 AnalyticsConfig.funnels.flow.steps = AnalyticsConfig.flowSteps
+
+-- ── the layers funnel's steps ───────────────────────────────────────────
+-- How many steps the depth funnel declares. MUST be >= the deepest cake the
+-- game can roll (`CakeConfig.composition.maxLayers`, 42) or the last layers
+-- of a big cake are cleared with nowhere to report them; CakeSimulationSubs
+-- checks that at boot and warns (R8) rather than letting it go quiet.
+--
+-- Analytics owns this number instead of reading the cake config, because a
+-- funnel STEP NUMBER is a permanent contract with 90 days of already-recorded
+-- data: step 7 must mean "7 layers" forever. Steps past the shipped cake size
+-- simply read zero, which is the honest answer ("nobody ever got that deep"),
+-- and raising it later only ever APPENDS.
+AnalyticsConfig.maxLayerDepth = 42
+
+local layerStepKeys: { string } = {}
+do
+	local steps = {}
+	for depth = 1, AnalyticsConfig.maxLayerDepth do
+		local key = `l{depth}`
+		layerStepKeys[depth] = key
+		steps[depth] = { key = key, name = `Layer {depth} Cleared` }
+	end
+	AnalyticsConfig.funnels.layers.steps = steps
+end
 
 -- ── custom event names ──────────────────────────────────────────────────
 -- 100 names exist for the whole experience, FOREVER, and a name is spent the
@@ -272,6 +314,13 @@ AnalyticsConfig.events = {
 	["match-end"] = "match_end",
 	["boss-start"] = "boss_start",
 	["boss-end"] = "boss_end",
+	-- ZONE GATES (features/cake-cycle.md): a mini-boss between two flavour
+	-- zones. Three per cake, so the gap between `miniboss-start` #1 and #2 is
+	-- how long a zone actually takes to eat, and a `miniboss-start` with no
+	-- matching `miniboss-end` is a player who quit AT a gate — the clearest
+	-- signal that one of them is too long or too hard.
+	["miniboss-start"] = "miniboss_start",
+	["miniboss-end"] = "miniboss_end",
 
 	-- tutorial
 	["tutorial-step"] = "tutorial_step",
@@ -361,6 +410,17 @@ AnalyticsConfig.client = {
 	-- Re-resolve the authored pads this often: LobbyMap is place content and
 	-- can replicate long after the client starts (ADR-0007).
 	padRescanSeconds = 5,
+	-- RE-OPENING the same panel inside this window reports nothing. A panel used
+	-- to cost a walk (the upgrade tree's only opener was a ProximityPrompt at the
+	-- checkpoint); since 2026-08-13 it is a HUD icon that BREATHES to attract
+	-- taps, next to two others, in front of an audience of children. One
+	-- open/close cycle is 2 `panel` beats + 1 `funnel` beat, none of which
+	-- coalesce (`panel` and `funnel` are not in COUNTABLE, and Funnel is
+	-- deliberately not deduped — a second shop visit is a second attempt), so
+	-- ~2 toggles/s exceeds the server's 240 beats/min admission and every real
+	-- beat that player produces for the rest of the minute is refused. The FIRST
+	-- open of each panel is always reported; only the mash is dropped.
+	panelReopenSeconds = 5,
 }
 
 -- ── what the client is TRUSTED to assert ────────────────────────────────
@@ -444,6 +504,15 @@ end
 function AnalyticsConfig.FlowStep(key: string)
 	local index = flowIndex[key]
 	return if index then AnalyticsConfig.flowSteps[index] else nil
+end
+
+--API
+-- The `layers` funnel step key for a DEPTH (1 = the first layer cleared on
+-- this cake). Returns nil past `maxLayerDepth` so the caller can skip the beat
+-- instead of inventing a step number the funnel does not declare — Roblox
+-- would accept it and drop it.
+function AnalyticsConfig.LayerStep(depth: number): string?
+	return layerStepKeys[depth]
 end
 
 --API

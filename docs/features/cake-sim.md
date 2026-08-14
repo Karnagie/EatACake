@@ -2,15 +2,18 @@
 
 ## What it does
 ONE shared cake per server: a 64×64 u16 heightfield (fixed-point 0.01
-studs, `GridUtil` layout), FIXED **ROUND** footprint (`composition.footprint`,
-a 93.3-stud disc — round since 2026-08-03, was a 90×78 rounded-rect loaf),
-ALWAYS `composition.maxTotalHeight`
-(**170** studs since 2026-07-26 — at 330 the loaf was 3.7× taller than wide and
-read as a striped tower; height is a PURE VISUAL knob, measured free by
-`tools/headless-sim/pacing_scenario.lua`, ⚠ don't go below ~130 or the deepest
-band's density hits `maxDensity`. `grid.maxHeight` 340) — ~2.25M studs³, Drain-the-Lake scale. A
-harder cake or a bigger party is never TALLER: it has more (thinner) layers and
-smaller per-band scoops (the pacing curve — cake-cycle.md, ADR-0011). The
+studs, `GridUtil` layout) inside a fixed **ROUND** maximum footprint
+(`composition.footprint`, a 93.3-stud disc). Classic is 170 edible studs;
+selectable rainbow is 204, still below `grid.maxHeight=340`. Difficulty
+and party size do not change the selected silhouette: they add thinner layers
+and smaller scoops (cake-cycle.md, ADR-0011/0020).
+
+Each composition band may carry its own smaller `footprint`. `ResetCake` raises
+each cell only through the highest band whose mask contains it, so the rainbow's
+seven progressively wider colour groups materialize as terraces rather than a
+full cylinder. Initial edible/band volumes are measured from those exact masks;
+auto-, sliver-, remnant- and paid-layer sweeps use the active band's footprint.
+Classic bands all use the maximum disc and remain byte-for-byte cylindrical. The
 renderer draws only the current + next band (see `CakeRenderer` below), so the
 layer count is not capped by the mesh budget. A bite CLEARS its footprint down toward the current layer's floor (a
 clean scoop — `CakeOps.ApplyBite`, Req 2: one side of a layer clears completely,
@@ -66,7 +69,7 @@ and calories are `removed × density`, never raw studs³.
 - `CakeStateData` — field buffer, composition, queues, phase (ALL runtime state)
   + the LAYER GATE: `activeBandIndex` (current top edible band) and
   `activeFloorUnits` (its bottom — the bite clamp) + `payoutScale` (this cake's
-  calorie multiplier).
+  calorie multiplier), `findPayoutScale`, and `cakeId`.
 - `Shared/config/CakeConfig` — grid, sim budgets, net rates, layers (§5),
   composition rolls, cycle timings, `layerGate`. Server accesses it via
   `CakeConfigData` (which also owns anti-cheat caps).
@@ -84,8 +87,9 @@ floor pops `announce-layer-locked` ("Eat the top layer first!") on the client
 (debounced `layerGate.cueInterval`, cue only for HELD input) and skips the bite;
 the server clamp is authoritative regardless. `enabled=false` = old free-dig.
 Auto-Eat no-ops silently at the active floor (no cue — passive eating isn't
-nagged); the top band is always frosting (flows, so craters refill), so a
-stationary auto-eater keeps earning rather than stalling.
+nagged). Classic starts with flowing frosting, so a stationary auto-eater keeps
+earning as its crater refills. Rainbow deliberately uses solid soft terraces;
+the eater must remain over that active terrace rather than relying on flow.
 
 ## Server pipeline (CakeSimulationSubs Heartbeat, one connection)
 | Job | Rate | Call |
@@ -121,8 +125,9 @@ plate, announces the cleared layer and fires the retention beat.
   also drops the bite when the belly is full (`StomachService.IsFull`, before
   carving) — see `features/body-gym.md`. The bite is CLAMPED to the layer-gate
   active floor (see Layer gate above), so it can't cut past the top layer.
-- `CakeSnapshotUpdate`: full buffer + meta `{cakeIndex, footprint,
-  composition, rareKind, biome, phase, progress, activeBandIndex}` on join
+- `CakeSnapshotUpdate`: full buffer + meta `{cakeIndex, cakeId, footprint,
+  composition, waxEnabled, crustEnabled, rareKind, biome, phase, progress,
+  activeBandIndex}` on join
   (via lifecycle push) and on every new cake. (`footprint` = `{hx, hz, corner}`
   in cells — the rounded-rect SDF; all three EQUAL == the round cake that ships.
   The client reads `meta.footprint`, never a radius.
@@ -150,8 +155,8 @@ plate, announces the cleared layer and fires the retention beat.
   clones cost actual complexity (~2.4k verts each, footprint-hosted verts
   only); source vertex/normal ids stay valid on clones (probe-verified).
   A slab WITHOUT `layer.texture` renders the layer BODY color as a FLAT
-  `part.Color` (the pale crust look is the always-visible `CakeWaxShell` on
-  top, so the darker body shows through the wax cracks); a slab WITH a texture
+  `part.Color` (wax-enabled variants add the pale `CakeWaxShell`, so the darker
+  body shows through its cracks); a slab WITH a texture
   maps that image over the top surface (planar XZ UVs, TILED `render.layerTextureTiles`×
   so it's sharp) — affordable now that only 2 slabs render (a static texture reference, no paint).
   A per-CELL `EditableImage` was dropped as a mobile perf trap: since the crust moved to
@@ -163,21 +168,34 @@ plate, announces the cleared layer and fires the retention beat.
   (§7.2) dents the slab; a hard landing stomps deeper (`CrackAt`). Eaten-
   through slabs TUCK `render.hideSink` studs under the local surface (drape-
   under-cover — dropping to 0 hung curtains through side cuts; alpha does NOT
-  render, see gotchas). The loaf outline is
-  smoothed: ring/staircase-boundary verts project onto the analytic
-  rounded rect (no corner pleats). Degradation ladder on budget failure:
-  per-layer slabs → ONE slab + height-palette texture → visible keycap
+  render, see gotchas). Each slab carries its band's footprint-specific vertex
+  layout and independent target/display/ooze state: its rim averages only cells
+  inside that mask and projects onto that mask's analytic outline. Sharing the
+  maximum-footprint state across terraces creates tall diagonal spikes and
+  cross-colour shoulder bleed. Equal-footprint classic bands keep the shared
+  fast path. Degradation ladder on budget failure: two slabs → ONE slab for an
+  equal-footprint cake → visible keycap
   part grid (Create* return NIL, no throw — every creation is nil-checked
   + warned, R8). BITE FEEL = drops > `render.snapDropStuds` snap; refills
-  ooze at the LAYER's `oozeSpeed`; jelly wobble; underfoot squish §7.2.
+  ooze at the LAYER's `oozeSpeed`; jelly wobble; variants may opt into underfoot
+  squish multiplied by that layer's `squishMult` (rainbow = 2.6 for the heavy
+  soft-cake dent; classic preserves its shipped uniform non-rigid dent). The
+  EditableMesh and visible-column fallback share that exact resolver: rigid
+  `squishMult=0` layers never dent in either implementation.
   Invisible 32×32 collision columns always exist. COLLISION FEEL (Task 4):
   a bite DROPS a column instantly (fall into the hole) but a RISE (cake
   oozing/refilling back) is rate-limited to `render.collision.riseRate`
   studs/s so refilling cake never punts the player up — they stay partly BURIED
   and jump to get back on the surface. New cake / snapshot snaps columns
-  (columnsRebuild) so you never fall through fresh cake. PERF (Task 2):
+  (columnsRebuild, run BEFORE the yielding mesh rebuild since 2026-08-07) so you
+  never fall through fresh cake; `CakeRenderer.SnapCollisionNow()` is the same snap
+  on demand (used for a fresh character). `CakeRenderer.ColumnTopAt(wx, wz)` reports
+  the walkable top at any XZ (nil off the column grid / for a non-collidable stub) —
+  the BURIAL TRUTH, and the only one valid off the footprint. PERF (Task 2):
   `updateCollisionNearPlayer` refreshes ONLY the columns within
-  `render.collision.updateRadiusStuds` of the local player each frame — eating +
+  `render.collision.updateRadiusStuds` of the local player each frame, centred on
+  the character's RAW position (it was the surface point, which is nil off the
+  footprint and so blinded the scan exactly at the rim) — eating +
   the settle ooze change cells across the WHOLE cake, and resizing every affected
   CanCollide column re-indexed the physics broadphase (frame → 60+ ms while
   eating). The player only collides with nearby columns, so distant ones keep
@@ -188,7 +206,7 @@ plate, announces the cleared layer and fires the retention beat.
   NO vertex/texture alpha on MeshParts) — flow docs
   (`2026-07-16_eat-the-cake-v1.md` Cake 2.0 + `2026-07-18_layer-meshes…` +
   `2026-07-18_wax-shell.md`).
-- `CakeWaxShell` — the ALWAYS-VISIBLE wax coating as ONE MeshPart of organic
+- `CakeWaxShell` — an optional wax coating as ONE MeshPart of organic
   VORONOI pieces (`render.wax`). Each piece owns its boundary verts (on the
   exact Voronoi edge so neighbours MEET, no gap) + a raised centre (`dome`);
   it RIDES the surface (re-reads `LocalCakeField.ReadHeightStuds` per frame) and
@@ -213,39 +231,29 @@ plate, announces the cleared layer and fires the retention beat.
   ~1 keeps the hue, `wax.valBrighten` lifts the value) — so each layer's wax
   reads as THAT layer (`maxH` band, not the foot — one colour per mesh). Idle pieces are dirty-
   skipped (no per-frame re-write when nothing moves). Setup(mirror) +
-  Step(dt, footPos) from CakeSubsClient.
-- `CakeWrapper` — the textured OUTER WALL that hides the cake BELOW the current +
-  next rendered layers (`CakeRenderer` window). A plain anchored Part (CYLINDER,
-  NOT a mesh — cheaper + the `Texture` path reliably tiles the image, which the
-  MeshPart `TextureContent`-from-URI approach did NOT display), ⌀ matched to the
-  slab outline, standing from the base up to the NEXT layer's bottom
-  (`composition[activeIndex-1].bottom`) and shrinking as each layer clears. Wears a
-  RANDOM cake photo (`render.wrapper.textures`, one per cake by `cakeIndex`) as
-  tiling `Texture` instances on its curved side + top cap (a crater cleared to the
-  next-layer floor shows the cap, not a void). ⚠ A Roblox cylinder Part's axis is
-  its LOCAL X and its caps are the ±X faces, so it is rotated `CFrame.Angles(0,0,
-  pi/2)` upright and sized `(HEIGHT, ⌀, ⌀)`; after that the top cap is
-  `NormalId.Right` and Front/Back/Top/Bottom each texture one 90° quadrant of the
-  curve. It was a Block until 2026-08-03 (~6-stud corner poke past the loaf); against
-  a disc a Block would poke ~19 studs and the cake would read SQUARE from the side.
-  ⚠ **It is a RING of `render.wrapper.segments` (32) flat Block segments + a meshed
-  top-cap disc — NOT one cylinder**, and the reason is texture tiling: a part
-  carrying a mesh maps its Textures through the MESH's UVs and IGNORES
-  `StudsPerTile` entirely (55 / 20 / 5 rendered pixel-identical when the wall was
-  briefly one `CylinderMesh`), which also re-stretches the photo every time the wall
-  shrinks a layer. Flat block faces tile for real. Each segment sets
-  `OffsetStudsU` to its cumulative width so the tiling phase runs CONTINUOUSLY
-  around the ring instead of restarting at every seam. Size knob:
-  `render.wrapper.tileStuds`, a true square tile in studs. The cap keeps a
-  `CylinderMesh` — it is a flat disc seen face-on through a crater, where one mapped
-  photo is what you want. CanCollide/CanQuery=false;
-  reads `LocalCakeField` itself. Setup(mirror) + OnSnapshot() (pick texture) +
-  Step(dt) from CakeSubsClient.
+  Step(dt, footPos) from CakeSubsClient. `meta.waxEnabled=false` parks it fully
+  transparent; the next wax-enabled snapshot restores it.
+- `CakeWrapper` — the outer wall below the two rendered slabs. It collapses the
+  bottom-up composition into one pooled, non-colliding segmented ring per flavour
+  group. Every ring uses that group's own `band.footprint`; a narrower upper
+  group therefore gets a smaller diameter. At each footprint expansion it clones
+  a pooled horizontal cap from the existing cap template: the next ring covers
+  the centre and leaves the wider lower disc visible as the terrace shoulder.
+  Classic footprints are equal, so it creates no shoulders and renders exactly
+  the existing cylinder. Rainbow groups use empty `sideTexture` intentionally,
+  producing flat vivid colour rather than a generic cake-photo fallback.
+  The current wall top still follows `composition[activeIndex-1].bottom`; rings
+  and terrace caps park off-screen rather than being destroyed. The per-layer top
+  cap is sized to the band directly under the active crater. Block faces remain
+  necessary because a meshed cylinder ignores `Texture.StudsPerTile`; cumulative
+  `OffsetStudsU` keeps the tiled phase continuous around each ring.
 - `CakeFeelSubsClient` — per-layer FEEL under the feet (`CakeConfig.feel`):
   `jumpMult` on the client Humanoid (WalkSpeed stays SERVER-authoritative
   in BodySubs), `bounce` landing restitution (trampoline sponge), the
   landing squish stomp (`CrackAt`) incl. the ONE fresh-cake first-crack
-  ceremony (owns ALL Landed handling — CakeSubsClient has no landing logic).
+  ceremony when `crustEnabled`; crust-free rainbow keeps the body dent/landing
+  feel but skips the break ceremony (owns ALL Landed handling — CakeSubsClient
+  has no landing logic).
   **FLAT WHILE EATING (Task 4):** while `LocalEatState.Get()` (actively eating,
   published by CakeSubsClient = hold/tap or Auto-Eat), the landing bounce is
   suppressed (`feel.noBounceWhileEating`) and the jumpMult is capped to
@@ -318,13 +326,19 @@ plate, announces the cleared layer and fires the retention beat.
   piece's own centre cell) for every rim sample. This was latent on the loaf — only
   its 4 corner arcs could do it — and the ROUND cake makes the whole rim an arc,
   which is what made it reachable. Apply the same rule to any new rim sampler.
-- The footprint XZ is FIXED (`composition.footprint`) — it does NOT
-  scale with population (the grid caps the radius just UNDER 31.5 cells: `InCake`
+- The maximum/base footprint XZ is FIXED (`composition.footprint`) and does NOT
+  scale with population. A selectable variant may give upper bands SMALLER local
+  footprints, but never a larger one (the grid caps the radius just UNDER 31.5 cells: `InCake`
   uses `half = (size-1)*0.5 = 31.5` with `<=`, so AT 31.5 the outer columns become
   in-cake, the renderer can no longer place a ring cell outside them and the skirt
   seal opens at the field boundary with no warning — 31.1 leaves 0.4 of margin); only
   the cake's WORK scales with population (`composition.coopWork`, cake-cycle.md —
   `perPlayerScale` was removed by ADR-0011). Auto-sweep + boss timers keep solo pace sane.
+- ⚠ `layer.squishMult` is not descriptive metadata for an opted-in variant:
+  `CakeRenderer` must multiply its fracture/deformation depth by it. Gate that
+  behavior with `variant.useLayerSquishMultiplier`; classic keeps the legacy 1×
+  dent for every positive value, while rainbow's heavy 2.6× is the regression
+  check. Applying the field globally silently retunes every classic material.
 - **A disc is staircased EVERYWHERE**, where the loaf had two long clean straight
   edges — so the remnant sweep finds slightly more isolated rim cells. Measured
   cost of the loaf→disc change at equal area (`pacing_scenario.lua`, deterministic,
@@ -344,19 +358,58 @@ plate, announces the cleared layer and fires the retention beat.
   grids disagreed); they only catch a fall when the fine columns aren't there
   yet (join). See `CakeCollisionService` header.
 - New cakes materialize around players standing in the footprint —
-  CakeCycleSubs lifts them onto the fresh frosting at spawn.
-- ⚠ **The cake is not collidable until THIS client's columns are built**, but
-  `CakeSpawn` drops the character on the crust the instant they join. On a slow
-  load they fall clean through and the columns rise around them: measured HRP at
-  Y=141 with the surface at 175 — 34 studs inside, permanently stuck (a mid-session
-  respawn is fine, which is what identifies it as a LOAD RACE, not spawn geometry).
-  `CakeSubsClient.rescueBuriedLocal` runs immediately after every
-  `CakeRenderer.OnSnapshot` (which ends in `columnsRebuild`, the first moment a
-  fall-through is recoverable) and lifts a local character found more than
-  `render.collision.buriedRescueStuds` under the surface. It fires ONLY at a
-  snapshot boundary, so it can never undo the deliberate "refilling cake buries you,
-  jump out" feel (`riseRate`), which happens per-frame. Server-side lifting cannot
-  fix this: only the client knows when its own columns went up.
+  CakeCycleSubs lifts them onto the fresh frosting at spawn (see the
+  "spawning inside the cake" gotcha below for the collider ordering this depends on).
+- ⚠ **"Spawning inside the cake" — the whole chain, fixed 2026-08-07.** A cake is
+  HEIGHTS before it is a COLLIDER, and characters were being placed on it inside
+  that window. Four independent things had to be true; all four are now closed:
+  1. **The server net was structurally late.** `CakeCollisionService.UpdateHeights`
+     is only called by the 5 Hz clock in `CakeSimulationSubs`, which sits BELOW
+     that Heartbeat's `roundSimulationEnabled()` early-return — **and so does the
+     accumulator**. That gate (`match-started`) is set by `CompleteStart` only
+     AFTER `BeginMatch` returns, so at a reserved-match start the 256 slabs were
+     provably still their 1-stud build pose for a full tick period after the lift.
+     `SpawnNewCake` now calls `UpdateHeights()` synchronously between `ResetCake`
+     and the lift, and zeroes the accumulator. Measured after: centre slab
+     `SizeY = 172.70`, top `174.70` against a crust at ~175.
+  2. **The client net needed a YIELD.** `OnSnapshot` ran `editableRebuild` (the
+     lazy mesh-pool build — **measured 482 ms cold**) before `columnsRebuild`, so
+     the cake was visible-but-not-solid for half a second. The order is now
+     collision first, visuals second. ⚠ `editableRebuild` can DEGRADE to
+     `impl = "parts"` and flip `visualColumns`, so that branch repaints — else the
+     fallback renders an invisible cake you can walk on.
+  3. **The lift kept velocity.** `root.CFrame = …` does not clear
+     `AssemblyLinearVelocity`, and during the arrival window there is no cake at
+     all, so every character is mid-fall from the pad at up to terminal speed.
+     Placed at cake height still carrying it, they punched through on the next
+     step — this was the "sometimes". Both lift branches now zero the assembly,
+     skip `Anchored` roots (the treadmill mount owns those, `BodySubs` re-asserts
+     them), and target `surfaceY + composition.liftClearanceStuds` (8) while the
+     PREDICATE stays on `surfaceY` (so a player already on fresh crust is not
+     re-hopped). The old `+ 3` was an R15 HRP offset = zero clearance.
+  4. **The rescue had exactly one shot.** `rescueBuriedLocal` was called from ONE
+     place — after a snapshot — and a reserved match broadcasts ONE snapshot per
+     ~35-minute session, so any guard that tripped (no character yet, a movement
+     lock held, off the footprint) spent it permanently. It is now armed three
+     ways: after a rebuild, on every fresh character (including the one that
+     already exists at `Start` — on a slow client `CharacterAdded` never fires for
+     life #1), and by a dwell-gated watchdog polled from the existing
+     `RenderStepped` loop. A movement lock now SKIPS a tick instead of forfeiting.
+  **Burial is measured against the COLLISION COLUMN top
+  (`CakeRenderer.ColumnTopAt`), never the field surface** — the two differ ON
+  PURPOSE (`riseRate` holds the column below the field so refilling cake buries
+  you and you jump out), so a field-based test would read a big depth during
+  exactly that feel and teleport the player to the full refilled height. The
+  column is also what covers the rim ring, where `SurfacePoint` is nil but a
+  column can stand at full cake height (`colTarget` averages only IN-cake cells,
+  so an edge column with one in-cake cell gets that cell's full height over
+  out-of-cake XZ) — that ring used to be an unrecoverable trap.
+  Studio-verified 2026-08-07 on the reserved-match path: standing player
+  `columnTop − HRP = −3.29` on spawn AND after a respawn; a forced 25-stud burial
+  recovered after exactly the 2 s dwell; a 3.75-stud sink (under
+  `buriedRescueStuds`) correctly left alone for 4 s+, so the crater feel survives.
+  Server-side lifting alone cannot fix any of this: only the client knows when its
+  own columns went up.
 
 ## Files
 Server: `CakeStateData`, `CakeConfigData`, `services/CakeFieldService`,

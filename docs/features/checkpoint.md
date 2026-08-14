@@ -3,7 +3,10 @@
 ## What it does
 A platform on 4 legs standing BESIDE the loaf whose TOP surface tracks the
 current **top cake layer** — it steps DOWN one layer at a time as the cake is
-eaten. It carries the gym machine (fat extraction), so it is the ONE place you
+eaten. For a narrow terrace, a centred `CheckpointBridge` extends from the fixed
+platform to that active layer's edge, so the crossing stays reachable without
+putting the platform's floor-length legs through wider layers below. It carries
+the gym machine (fat extraction), so it is the ONE place you
 burn fat; it **replaces the old floor gym zone**. Press **F** or the HUD
 **TO CHECKPOINT** button to teleport onto it (belly full = slowed + rolling, so the
 gym is seconds away at your eating height).
@@ -18,9 +21,12 @@ gym is seconds away at your eating height).
   `UpgradeStation` prompt, `LayerEater` + its `LayerEaterPrompt` (see LAYER EATER
   below — the ONE part whose authored pose is preserved rather than recomputed).
   Plate/machine/computer/screen may be a single BasePart
-  **or a Model** (positioned via `PivotTo`, sized via `GetExtentsSize` — a resized
-  authored model still aligns); LEGS stay single BaseParts (they telescope, Y
-  code-driven). Ranges/names in `MapConfigData.checkpoint`.
+  **or a Model** (positioned via `PivotTo`, aligned from `GetBoundingBox` — a
+  resized model or off-centre authored pivot still aligns by its real bounds);
+  LEGS stay single BaseParts (they telescope, Y
+  code-driven). At resolve, MapService clones one plain authored
+  `CheckpointLeg` into the runtime `CheckpointBridge`; no bridge needs to be
+  authored separately. Ranges/names in `MapConfigData.checkpoint`.
   If the template is missing, `GenerateAssets` self-heals the default look (won't
   persist — save the place); a missing `CheckpointPlate`/`GymMachine` warns (R8)
   and the checkpoint degrades.
@@ -31,16 +37,32 @@ gym is seconds away at your eating height).
   checkpoint and rides its height, but its prompt is intentionally inactive in
   the published game after the place split. The lobby-owned replacement has not
   yet been authored; see `features/upgrades.md` / ADR-0009 Remaining.
-- Placed on the cake's **+X** side: plate inner edge = `origin.x +
+- The supported platform is placed on the maximum cake footprint's **+X** side:
+  plate inner edge = `origin.x +
   footprint.hx*grid.cell (=46.65) + edgeGap`. ⚠ Since the cake went ROUND
   (2026-08-03) there is no straight edge: that gap is `edgeGap` (0.5) only at
   z=0 and opens to ~2.35 studs at the plate's z-ends (±13), measured in Studio.
   The crossing path (F-teleport landing + walk-back) runs along z≈0 and is
   unchanged; the two cake-side plate corners are a hop. Do not widen
-  `plateWidth` without re-checking it. Legs drop to the floor (y=0).
-- `MapService.SetCheckpointHeight(topY)` — sets the plate TOP to world Y `topY`,
+  `plateWidth` without re-checking it. Legs drop to the floor (y=0). For a
+  resized authored Part/Model, `MapService.Build` resolves the clone first and
+  derives the plate centre from its **actual X extent**, not configured
+  `plateDepth`, so the inner edge and legs keep this contract. For a
+  smaller `activeFootprint`, the bridge spans from `activeFootprint.hx*cell +
+  edgeGap` to the plate's **actual authored** inner edge, with a small overlap so
+  physics cannot leave a seam. Full-width/classic bands park the bridge.
+- `MapService.SetCheckpointHeight(topY, activeFootprint?)` — sets the plate TOP to world Y `topY`,
   resizes the 4 legs (floor→plate bottom), rides the machine on top. Skips
-  redundant moves (`|Δ| < 0.01`) so the 1 Hz re-assert doesn't re-replicate.
+  redundant CHECKPOINT moves (`|Δ| < 0.01`) so the 1 Hz re-assert doesn't
+  re-replicate; the guard compares bridge span too, because two same-height
+  terraces may need different reach geometry. Invalid/out-of-bounds footprints
+  warn once and fall back to the maximum. ⚠ It ALSO moves the `CakeSpawn` pad to `topY +
+  spawnHeightAboveCake`, and that half runs FIRST — above both the redundant-move
+  skip and the `checkpointPlate == nil` early return, because the pad needs only
+  `topY` and has nothing to do with the checkpoint. It used to sit below both, so
+  a Checkpoint asset without a part named `CheckpointPlate` silently froze the
+  respawn pad at its build height and every respawn became a fall of up to ~170
+  studs (`features/cake-sim.md`, spawn gotcha).
 - `MapService.GetCheckpointCFrame()` — teleport target: standing on the plate
   facing the cake (walk forward = step back onto the loaf). nil until built.
 - `MapService.NearGym(pos)` — gym-start range check now uses the (moving)
@@ -59,13 +81,15 @@ gym is seconds away at your eating height).
   completed run (`treadmillDismountBack` toward the plate centre, facing the cake).
 
 ## Driven by cake subscriptions
-- **New cake (`CakeCycleSubs`)**: `SetCheckpointHeight(origin.y + composition[#].top)` (full
-  height — frosting is the last/top band).
-- **1 Hz scan (`CakeSimulationSubs`, eating phase only)**: `ScanStats()` returns `topBandIndex`;
-  `SetCheckpointHeight(origin.y + composition[topBandIndex].top)`. `topBandIndex`
-  = highest band still present, so the plate = the top of the current intact
-  layer and steps down when a whole layer is consumed (auto-sweep collapses the
-  last 10% so transitions are clean). No scan during boss/reward/spawning —
+- **New cake (`CakeCycleSubs`)**: `SetCheckpointHeight(origin.y + topBand.top,
+  topBand.footprint)` (full height and the top terrace's reach span).
+- **1 Hz scan (`CakeSimulationSubs`, eating phase only)**: `ScanStats()` may
+  advance `state.activeBandIndex` through cleanup. The subscription then reads
+  the authoritative **post-scan** active band and passes its top + footprint to
+  `SetCheckpointHeight`. Using `ScanStats().topBandIndex` here is stale when that
+  same scan auto-sweeps a boundary, and can leave the bridge beside the cleared
+  terrace for an entire mini-boss gate. The plate steps down when a whole layer
+  is consumed; the bridge changes span at colour boundaries. No scan during boss/reward/spawning —
   plate holds until the next cake resets it up.
 
 ## LAYER EATER (paid one-shot layer clear, 9 R$)
@@ -75,8 +99,9 @@ standing on the plate. Its `LayerEaterPrompt` ProximityPrompt offers the
 currently on and pays the buyer the calories it was worth.
 - **Placement is AUTHORED, not computed.** Every other checkpoint part is placed
   at a formula corner; this one keeps the pose it was modelled with. MapService
-  captures its pivot offset from the plate (and its ROTATION) at resolve time,
-  before the first `SetCheckpointHeight`, and re-applies both as the plate moves.
+  captures its pivot offset from the plate's bounds centre (and its ROTATION) at
+  resolve time, before the first `SetCheckpointHeight`, and re-applies both as
+  the plate moves. This stays correct when the plate has an off-centre pivot.
   `PivotTo(CFrame.new(pos))` would silently flatten the authored yaw — build the
   CFrame as `CFrame.new(pos) * authoredPivot.Rotation`.
 - **The prompt self-heals.** `MapService.ensureLayerEaterPrompt` adopts an
@@ -178,6 +203,7 @@ currently on and pays the buyer the calories it was worth.
 ## Config
 `MapConfigData.checkpoint` (was `MapConfigData.gym`): `edgeGap, plateDepth,
 plateWidth, plateThickness, legSize, legInset, minLegHeight, machineSize,
+bridgeName/Width/Thickness/PlateOverlap/HideBelowStuds,
 standHeight, promptName ("GymPrompt"), promptRange (prompt
 MaxActivationDistance), maxUseDistanceStuds, plate/leg/machine colors,
 treadmillStandHeight/FaceYaw/DismountBack/DismountHeight (treadmill mount, req 4)`. Gym
@@ -194,7 +220,7 @@ stays in `BodyConfig.gym` (duration/taps/bonus).
   this: players over the plate (`MapService.IsOverCheckpoint`) are re-seated onto
   it (`GetCheckpointCFrame`) alongside the on-cake lift.
 - Removing the floor gym means the ONLY manual gym is here — reachable by
-  teleport or by walking/jumping off the cake edge. The HUD button (shown
+  teleport or by walking over the active-terrace bridge. The HUD button (shown
   whenever you're away from the platform — see Client) keeps it discoverable;
   the F key works regardless.
 

@@ -1,5 +1,5 @@
 --[[
-	CakeWaxShell — the ALWAYS-VISIBLE wax coating over the WHOLE cake, as a web
+	CakeWaxShell — the optional wax coating over the WHOLE cake, as a web
 	of organic wax pieces (reference: the "Crunchy Butter" ASMR games).
 
 	The wax is a permanent VORONOI WEB (irregular pieces, not tiles) that coats
@@ -22,7 +22,8 @@
 	hides where the cake is eaten. Create* returns NIL on budget exhaustion
 	(nil-checked; on failure the wax just doesn't appear, R8). Local + visual.
 
-	Driven from CakeSubsClient's render step: Step(dt, footPos). The mirror
+	Driven from CakeSubsClient's render step: Step(dt, footPos). Snapshot metadata
+	can disable it entirely (`waxEnabled = false`, selectable rainbow). The mirror
 	(LocalCakeField) is injected via Setup.
 ]]
 
@@ -360,12 +361,25 @@ function CakeWaxShell.Step(dt: number, footPos: Vector3?)
 	if buildFailed or fieldModule == nil then
 		return
 	end
+	local meta = fieldModule.Meta()
+	if meta == nil then
+		return
+	end
+	if meta.waxEnabled == false then
+		if part ~= nil then
+			part.Transparency = 1
+		end
+		return
+	end
+	if part ~= nil then
+		part.Transparency = 0
+	end
 	if not built then
 		-- Build OFF the render thread (task.spawn): the async mesh creation
 		-- yields, and doing it inline here would stall the rest of CakeSubsClient's
 		-- render step. `building` blocks re-spawn + re-entry; pcall guards against
 		-- a throw leaving `building` stuck true.
-		if not building and fieldModule.Meta() ~= nil then
+		if not building then
 			building = true
 			task.spawn(function()
 				local ok, err = pcall(ensureBuilt)
@@ -397,8 +411,7 @@ function CakeWaxShell.Step(dt: number, footPos: Vector3?)
 	-- re-tint the un-eaten areas. Uses last frame's max (1-frame lag).
 	-- New cake: reset the hide reference (nothing hides on the fresh cake's first
 	-- frame; it re-converges next frame like the initial build).
-	local meta = fieldModule.Meta()
-	if meta ~= nil and meta.cakeIndex ~= lastCakeIndex then
+	if meta.cakeIndex ~= lastCakeIndex then
 		lastCakeIndex = meta.cakeIndex
 		lastMaxH = 0
 	end

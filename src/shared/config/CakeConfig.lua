@@ -12,16 +12,24 @@
 	Heights are stored as u16 fixed-point: 1 unit = 0.01 studs (see GridUtil).
 ]]
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+-- The layer LIBRARY (40 layers) and the GROUPS they are organised into. Split
+-- out 2026-08-07 when layers stopped being a flat pool; `CakeConfig.layers` and
+-- `CakeConfig.layerGroups` below are still what every consumer reads.
+local CakeLayersConfig = require(
+	ReplicatedStorage:WaitForChild("Shared"):WaitForChild("config"):WaitForChild("CakeLayersConfig")
+)
+
 local CakeConfig = {}
 
 -- ── Grid ────────────────────────────────────────────────────────────────
 CakeConfig.grid = {
 	size = 64, -- 64x64 cells
 	cell = 1.5, -- studs per cell -> 96x96 stud field
-	-- Hard height ceiling, with room to spare: every cake is built to
+	-- Hard height ceiling, with room to spare: the classic cake is built to
 	-- composition.maxTotalHeight (170 since 2026-07-26) regardless of difficulty
-	-- or population — a bigger cake means MORE LAYERS (thinner ones), never a
-	-- taller tower. 340 is left as headroom so raising maxTotalHeight again does
+	-- or population. Selectable variants may apply a declared heightScale (the
+	-- rainbow is 204 edible studs). 340 leaves selectable variants headroom without
 	-- not require touching the u16 field layout. u16 fixed-point (655 stud max) easily covers it; taller =
 	-- taller collision columns + render slabs, NOT more cells (weak-device
 	-- vertex budget is driven by cell count, which is unchanged). Only the
@@ -162,8 +170,8 @@ CakeConfig.render = {
 		noise = 0.05, -- subtle per-pixel mottling of the film
 	},
 	-- Soft SQUISH of the mesh under the foot (a gentle round dent that springs
-	-- back; deeper on a landing). The always-visible wax crust that CRACKS is
-	-- render.wax below (CakeWaxShell) — it reads riseRate/healRate/sinkDepth here
+	-- back; deeper on a landing). When a variant enables it, the wax crust that
+	-- CRACKS is render.wax below (CakeWaxShell) — it reads these rates/depth
 	-- for its own dent so the wax dents WITH the surface.
 	fracture = {
 		radius = 3.6, -- studs of the squish zone
@@ -178,7 +186,7 @@ CakeConfig.render = {
 	-- deforming surface. Light wax (the surface layer's color toward white);
 	-- the slabs beneath render the layer BODY, so where the player's feet CRACK
 	-- the local plates (they pull apart + lift) the darker cake shows in the
-	-- gaps, then SLOWLY heals shut. The wax is always there — the cracks are
+	-- gaps, then SLOWLY heals shut. On wax-enabled variants it is always there;
 	-- local and reverting, never spawned parts.
 	wax = {
 		step = 2, -- grid cells per wax quad (2 = ~3-stud tiles riding the surface)
@@ -246,6 +254,50 @@ CakeConfig.render = {
 		-- per quadrant / ~5.3 around — the layer BANDS are what must line up, and
 		-- they run horizontally, so the circumferential figure is the loose one.
 		tileStuds = 55,
+		-- PER-ZONE BANDS (2026-08-07, user req: "look at the side and see which
+		-- layers are coming next", then "1 wall on every group of layers"). The
+		-- wall is no longer ONE ring wearing one cake photo: it is one ring per
+		-- flavour ZONE (`composition.groups`), each wearing that GROUP's
+		-- `sideTexture` (CakeLayersConfig), so the side of the cake reads
+		-- "chocolate, then sponge, then butter, then cream". Classic draws a
+		-- mini-boss on every transition; variants may keep a transition visual-only.
+		-- ⚠ A ring per LAYER was tried first and is WRONG: ~28 near-identical
+		-- stripes up the side read as noise rather than information, and cost
+		-- ~560 parts to say less. `tileStuds` above is now only the FALLBACK
+		-- ring's tile size; the per-LAYER `sideTexture` survives for the top CAP,
+		-- which really is a single layer seen down a crater.
+		-- COST is parts: bandSegments x zones. 20 x 4 = 80 anchored,
+		-- non-colliding, non-query blocks, built ONCE into a pool and re-placed
+		-- per cake (never re-created per layer). 20 segments puts the facet sag
+		-- at 47.4*(1-cos(pi/20)) = 0.58 studs on the 93.3-stud cake, which still
+		-- reads round at play distance; 32 would cost 60% more parts for 0.35
+		-- studs less sag.
+		bandSegments = 20,
+		-- Studs each zone ring is stretched VERTICALLY past its own span, split
+		-- top and bottom, so neighbouring rings can never show a hairline seam of
+		-- sky between them.
+		bandOverlapStuds = 0.08,
+		-- Pool ceiling, in RINGS. Must be >= composition.groups.count (it was
+		-- >= maxLayers while the wall was per-band) or the deepest zones go
+		-- unbuilt; the pool only ever builds what a cake asks for, so the
+		-- headroom is free.
+		maxBands = 12,
+		-- ⭑⭑ THE TWO KNOBS FOR HOW BIG THE WALL TEXTURE READS. Both are the
+		-- size of ONE tile in studs, so BIGGER = fewer, larger tiles.
+		--   bandTileStuds   ACROSS, around the cake. The circumference is
+		--                   ~302 studs, so 26 wraps ~11.6 times.
+		--   bandTileStudsY  UP the wall. This is the one to change if the image
+		--                   looks too SHORT / squashed vertically.
+		-- Whole-row snapping only kicks in once a zone is at least 1.5 tiles
+		-- tall (CakeWrapper): snapping unconditionally squashed every zone
+		-- SHORTER than one tile down to its own height -- the 3.4-stud candy cap
+		-- rendered 87% vertically compressed. A partial row at the top of a band
+		-- reads far better than a distorted image.
+		-- Zone heights on a 170-stud cake run ~3 studs (the thin top zone) to
+		-- ~100 (the deep one), so at 45 the deep zones show 2 rows and the thin
+		-- ones show one uncompressed crop.
+		bandTileStuds = 26,
+		bandTileStudsY = 45,
 		-- Flat Block segments the round wall is built from. More = rounder
 		-- silhouette + softer facet shading, at one Part each (anchored, no
 		-- collision, no query — cheap). 32 puts the facet sag at ~0.23 studs on the
@@ -310,10 +362,32 @@ CakeConfig.render = {
 		-- above it.
 		-- ⚠ Keep `buriedRescueStuds` WELL above the depth you legitimately sink to
 		-- when refilling cake buries you (riseRate above): that is deliberate feel
-		-- ("jump to get back out") and must not be undone. The rescue only fires at
-		-- a snapshot boundary, never per-frame, so the two cannot collide.
+		-- ("jump to get back out") and must not be undone.
 		buriedRescueStuds = 6,
-		buriedRescueLift = 3,
+		-- ⚠ Clearance ABOVE the solid top, not an HRP offset. It was 3 — the R15
+		-- HumanoidRootPart offset — which lands the feet flush ON the surface with
+		-- nothing to spare, the same mistake the server lift's old `+ 3` made
+		-- (`composition.liftClearanceStuds`). Give the drop real room.
+		buriedRescueLift = 8,
+		-- The rescue is NO LONGER snapshot-only (2026-08-07). It used to run at
+		-- exactly one moment — right after a snapshot's `columnsRebuild` — and a
+		-- reserved match broadcasts ONE snapshot for a ~35-minute session, so any
+		-- state that voided that single check (no character yet, a control lock
+		-- held, a burial that happened later, a respawn) left the player inside the
+		-- cake permanently. It now also runs on a slow timer and on every fresh
+		-- character.
+		-- `buriedRescueDwellSeconds` is what protects the deliberate crater feel
+		-- from the new per-frame path: being buried is a legitimate transient
+		-- state, being buried CONTINUOUSLY for this long is not. Keep it
+		-- comfortably longer than the time it takes to jump out of a refill.
+		buriedRescuePollSeconds = 0.5, -- how often the timed check samples
+		buriedRescueDwellSeconds = 2.0, -- continuously buried this long => lift
+		-- Delay after a fresh character before the columns are snapped to truth a
+		-- SECOND time and the burial re-checked (CakeRenderer.SnapCollisionNow —
+		-- once at spawn, once here, not a continuous window). Long enough that the
+		-- character has landed. A character that just spawned was not on the cake
+		-- while its columns went stale, so the rise cap has nothing to punt.
+		freshCharacterSnapSeconds = 1.5,
 	},
 	-- Rare-cake tints (renderer): saturated butter-gold, not washed beige.
 	goldenTint = { color = Color3.fromRGB(255, 200, 45), alpha = 0.5 },
@@ -347,183 +421,16 @@ CakeConfig.render = {
 --   jumpMult: jump power mult while standing on the layer.
 --   bounce: landing restitution 0..1 (trampoline layers).
 -- sfx: key into AudioConfig.sounds for this layer's bite sound.
-CakeConfig.layers = {
-	frosting = {
-		id = "frosting",
-		-- soft pillow: deep dents, medium flow
-		repose = 1.5,
-		flowRate = 0.6,
-		hardness = 0.85,
-		calories = 0.139,
-		colors = { top = Color3.fromRGB(255, 182, 220), bottom = Color3.fromRGB(246, 148, 196) },
-		texture = "rbxassetid://104319784921009", -- confetti frosting/icing
-		material = Enum.Material.SmoothPlastic,
-		transparency = 0,
-		gloss = 0.08,
-		oozeSpeed = 4,
-		squishMult = 1.6,
-		jumpMult = 1,
-		sfx = "squish",
-		shatterFx = false,
-		wobble = false,
-	},
-	sponge = {
-		id = "sponge",
-		-- TRAMPOLINE: springy pores — you jump way higher and bounce on landing
-		repose = 3.0,
-		flowRate = 0.35,
-		hardness = 1.0,
-		calories = 0.155,
-		colors = { top = Color3.fromRGB(250, 198, 95), bottom = Color3.fromRGB(226, 168, 70) },
-		material = Enum.Material.Sand, -- grainy crumb pores
-		transparency = 0,
-		gloss = 0.02,
-		oozeSpeed = 2.5,
-		squishMult = 1.0,
-		jumpMult = 1.4, -- springy but not a launch (was 1.9 — toned, Task 4)
-		bounce = 0.3, -- landing restitution: a gentle boing (was 0.55 — toned)
-		sfx = "crumble",
-		shatterFx = false,
-		wobble = false,
-	},
-	chocolate = {
-		id = "chocolate",
-		-- hard shell: cliffs, never flows, no dents, shatters when bitten
-		repose = math.huge,
-		flowRate = 0,
-		hardness = 1.25,
-		calories = 0.237,
-		colors = { top = Color3.fromRGB(96, 58, 34), bottom = Color3.fromRGB(66, 38, 22) },
-		texture = "rbxassetid://18310304910", -- chocolate bar
-		material = Enum.Material.SmoothPlastic,
-		transparency = 0,
-		gloss = 0.15,
-		oozeSpeed = 12, -- nothing flows anyway; bite edits snap
-		squishMult = 0,
-		jumpMult = 1,
-		sfx = "crack",
-		shatterFx = true, -- client: shard burst on bite
-		wobble = false,
-	},
-	jelly = {
-		id = "jelly",
-		-- SEE-THROUGH MARMALADE: translucent, jiggles, springy underfoot
-		repose = 4.5,
-		flowRate = 0.2,
-		hardness = 1.08,
-		calories = 0.188,
-		colors = { top = Color3.fromRGB(238, 58, 88), bottom = Color3.fromRGB(196, 30, 62) },
-		-- Glass: wet refraction on high quality, plastic-smooth on low.
-		-- KNOWN engine tradeoff: semi-transparent Glass hides TRANSPARENT
-		-- things behind it (particles, translucent FX) on high quality —
-		-- opaque layers below render fine (the actual goal). Switch to
-		-- SmoothPlastic if FX-through-jelly ever matters more.
-		material = Enum.Material.Glass,
-		transparency = 0.45, -- see the layer below THROUGH the marmalade
-		gloss = 0.15,
-		oozeSpeed = 6,
-		squishMult = 1.3,
-		jumpMult = 1.12, -- slight spring (was 1.25 — toned, Task 4)
-		bounce = 0.16, -- soft jiggle, not a trampoline (was 0.3 — toned)
-		walkSpeedMult = 0.9,
-		sfx = "blorp",
-		shatterFx = false,
-		wobble = true, -- client: sine wave over surface vertices
-	},
-	cotton = {
-		id = "cotton",
-		-- almost LIQUID: spectacular fast avalanches, light feet (+15% speed)
-		repose = 0.5,
-		flowRate = 0.95,
-		hardness = 0.85,
-		calories = 0.122,
-		colors = { top = Color3.fromRGB(255, 176, 224), bottom = Color3.fromRGB(158, 196, 255) },
-		material = Enum.Material.Fabric,
-		transparency = 0,
-		gloss = 0.03,
-		oozeSpeed = 9, -- visibly pours
-		squishMult = 1.2,
-		jumpMult = 1.05, -- light feet (was 1.1 — toned, Task 4)
-		walkSpeedMult = 1.15,
-		sfx = "pshhh",
-		shatterFx = false,
-		wobble = false,
-	},
-	caramel = {
-		id = "caramel",
-		-- STICKY HONEY: slowest visible creep, boots glued (-40% speed, low jump)
-		repose = 5.5,
-		flowRate = 0.07,
-		hardness = 1.15,
-		calories = 0.204,
-		colors = { top = Color3.fromRGB(230, 150, 42), bottom = Color3.fromRGB(190, 110, 22) },
-		material = Enum.Material.SmoothPlastic,
-		transparency = 0,
-		gloss = 0.35, -- wet glaze
-		oozeSpeed = 0.8, -- honey-slow flow
-		squishMult = 0.6,
-		jumpMult = 0.75,
-		walkSpeedMult = 0.6,
-		sfx = "stretch",
-		shatterFx = false,
-		wobble = false,
-	},
-	crumb = {
-		id = "crumb",
-		-- loose sand: pours fast, soft steps
-		repose = 1.0,
-		flowRate = 0.85,
-		hardness = 0.95,
-		calories = 0.147,
-		colors = { top = Color3.fromRGB(164, 112, 64), bottom = Color3.fromRGB(132, 88, 50) },
-		material = Enum.Material.Sand,
-		transparency = 0,
-		gloss = 0,
-		oozeSpeed = 7,
-		squishMult = 1.1,
-		jumpMult = 1,
-		sfx = "shhh",
-		shatterFx = false,
-		wobble = false,
-	},
-	filling = {
-		id = "filling",
-		-- soft oozy cream/custard filling: eats easily, creeps back slowly,
-		-- pillowy underfoot. Wears a real filling photo texture (Task 3).
-		repose = 2.5,
-		flowRate = 0.4,
-		hardness = 0.9,
-		calories = 0.163,
-		colors = { top = Color3.fromRGB(255, 224, 150), bottom = Color3.fromRGB(238, 198, 120) },
-		texture = "rbxassetid://432607426", -- custard/cream filling
-		material = Enum.Material.SmoothPlastic,
-		transparency = 0,
-		gloss = 0.12,
-		oozeSpeed = 5,
-		squishMult = 1.4,
-		jumpMult = 1,
-		sfx = "squish",
-		shatterFx = false,
-		wobble = false,
-	},
-	core = {
-		id = "core",
-		repose = math.huge, -- the floor of the cake, not edible
-		flowRate = 0,
-		hardness = math.huge,
-		calories = 0,
-		colors = { top = Color3.fromRGB(255, 242, 214), bottom = Color3.fromRGB(246, 226, 192) },
-		material = Enum.Material.SmoothPlastic,
-		transparency = 0,
-		gloss = 0.05,
-		oozeSpeed = 12,
-		squishMult = 0,
-		jumpMult = 1,
-		sfx = "squish",
-		shatterFx = false,
-		wobble = false,
-	},
-}
+--   sideTexture: rbxassetid IMAGE mapped on the OUTER WALL band for this
+--             layer (CakeWrapper) -- the side of the cake is a real
+--             cross-section, so you can SEE which layers are coming.
+--   sideColor: optional tint under `sideTexture`; defaults to colors.top.
+-- GROUPS: layers are laid down in flavour ZONES (chocolate, jelly, cheese...),
+-- several layers deep. Classic gates every boundary with a MINI-BOSS; a fixed
+-- visual variant may explicitly leave selected boundaries open -- see
+-- `composition.groups` below and `CakeLayersConfig`, which owns both tables.
+CakeConfig.layers = CakeLayersConfig.layers
+CakeConfig.layerGroups = CakeLayersConfig.groups
 
 -- ── Feel (client, CakeFeelSubsClient) ───────────────────────────────────
 CakeConfig.feel = {
@@ -568,14 +475,53 @@ CakeConfig.feel = {
 --             `tools/balance-model/pacing.py --intervals`.
 --
 -- Thickness rides the same curve (deeper == chunkier, `thicknessExponent`),
--- normalised so EVERY cake is exactly `maxTotalHeight` tall. A harder or more
--- crowded cake is therefore not a taller tower — it has MORE (thinner) layers
--- and smaller scoops, i.e. more "layer cleared!" moments in the same silhouette.
+-- normalised to `maxTotalHeight × selectedVariant.heightScale`. Difficulty and
+-- population never make that chosen silhouette taller — they add MORE (thinner)
+-- layers and smaller scoops, i.e. more "layer cleared!" moments.
 --
 -- Sim-calibrated (scratchpad model, ports ApplyBite + the three sweeps + a
 -- mowing player): solo easy 40 min; see features/cake-cycle.md for the matrix.
 CakeConfig.composition = {
-	middlePool = { "sponge", "chocolate", "jelly", "cotton", "caramel", "crumb", "filling" },
+	-- ZONES (2026-08-07). A cake is a SEQUENCE of flavour GROUPS -- "3-4
+	-- chocolate layers, then 4-6 jelly, then cheese" -- not a random flavour
+	-- every layer. The pool of groups is `CakeConfig.layerGroups`; `count` of
+	-- them are drawn per cake in a random order and laid down one after another.
+	-- By default `count` ALSO sets the boss count: every boundary between two
+	-- zones is a MINI-BOSS (features/cake-cycle.md), so classic has `count - 1`
+	-- mini-bosses plus the Cake Guardian. A selectable variant may supply
+	-- `gateBoundaries` to make a visual boundary intentionally open.
+	groups = {
+		-- ⚠ 4 -> 5 (2026-08-07, by request: "the last group is too large, split it
+		-- into 2-3"). At 4 zones the deepest was TWELVE layers / ~15 min -- longer
+		-- than the first three put together, so the last third of a run had no
+		-- punctuation at all. With the default all-gated contract this is
+		-- now 4 mini-bosses + the Cake Guardian = 5. That is one more than the
+		-- original "3-4 bosses" ask; splitting the tail into THREE instead is a
+		-- one-line change here (six zones, six shares) but costs a 5th mini-boss, and
+		-- the rig pool only holds 5.
+		count = 5,
+		minLayers = 3, -- a zone is never one lonely layer
+		-- Share of the cake's LAYERS each zone gets, TOP zone first. MUST have
+		-- exactly `count` entries and sum to 1.
+		--
+		-- ⚠ LAYER COUNT, not clear-time cost — and that is a MEASUREMENT, not a
+		-- simplification. The obvious model says a band near the core costs ~16x
+		-- a band at the top (clear time goes as 1/scoop²), so zones should be
+		-- split by cost. That is true for a FIXED eater and false for the run
+		-- people play: the player buys tiers as they dig, and the upgrade ramp
+		-- very nearly cancels the scoop ramp. `tools/balance-model/pacing.py`
+		-- (ramped, 5 seeds) measures a FLAT ~1.21 min per layer across all 29
+		-- bands — 1.89 min for the first (no upgrades yet) and 1.84 for the last.
+		-- Splitting by cost put ELEVEN layers and 13.2 minutes in the opening
+		-- zone; splitting by count puts 3 layers and ~4 min there, which is the
+		-- requirement (opening zone 3-4 min, later zones longer).
+		-- At the shipped 28-29 layers: 3 / 5 / 6 / 7 / 8 layers ≈ 4.5 / 6.1 /
+		-- 7.3 / 8.5 / 9.7 min of a ~35-min solo-easy run -- every zone longer than
+		-- the one above it, and none of them the 15-minute slog the 4-zone split
+		-- ended on. Re-measure with `pacing.py` (its report prints the zone split)
+		-- after touching these or the layer count.
+		layerShares = { 0.103, 0.172, 0.207, 0.241, 0.277 },
+	},
 	coreThickness = 3, -- exposed cavity floor, not edible
 	-- Footprint: a ROUND cake (2026-08-03; was a 30x26x10 rounded-rect loaf).
 	-- A LANDMARK, not a per-player snack — the XZ size is FIXED for any
@@ -613,6 +559,17 @@ CakeConfig.composition = {
 	-- cell-CENTRE extreme (corner*cell = 46.65), while the rendered rim is at
 	-- (corner+0.5)*cell = 47.4 — so the real grow past visible cake is ~3.25.
 	liftMarginStuds = 4,
+	-- How high ABOVE the fresh crust that lift places the HumanoidRootPart. It
+	-- used to be a hard-coded `+ 3` — the HRP offset of an R15 rig, i.e. feet
+	-- exactly ON the crust with zero clearance, at the one moment the cake has no
+	-- collider yet (server slabs are a Heartbeat gate away, client columns a
+	-- yielding mesh build away). Any downward motion at all then put the feet
+	-- under the surface. Clearance is cheap: the drop is padded by the frosting.
+	-- ⚠ Deliberately NOT shared with `MapConfigData.spawnHeightAboveCake` even
+	-- though both are currently 8 — that one is the spawn PAD's height above the
+	-- crust, this is the lift's clearance. Coupling them means tuning the spawn
+	-- drop silently retunes the lift, which is how the `+ 3` went stale.
+	liftClearanceStuds = 8,
 
 	-- Layer count + silhouette
 	baseLayers = 28, -- edible layers of a solo EASY cake (incl. the frosting)
@@ -673,6 +630,70 @@ CakeConfig.composition = {
 	rare = {
 		golden = { chance = 0.04, caloriesMult = 3 },
 		rainbow = { chance = 0.01, caloriesMult = 1.5, guaranteedRarity = "epic" },
+	},
+}
+
+-- ── Selectable cake variants ─────────────────────────────────────────────
+-- Selectable cake variants (features/cake-select.md). The catalogue/unlock
+-- rules live in CakeSelectConfig; this table owns only what a chosen cake
+-- changes once a round starts. `durationScale` is the player-facing target;
+-- `durationWorkScale` is the measured bite-area factor that actually reaches
+-- it after fixed gym downtime, the minimum bite radius and cleanup sweeps.
+-- Density is compensated alongside that work factor so calorie/belly milestones
+-- stay at the same cake depth while wall time grows.
+CakeConfig.defaultVariantId = "cake-classic"
+-- Studio-only direct/fallback launch override. Pressing Play in either the
+-- combined project or the GAME place starts this variant without changing the
+-- production default or a real lobby match's authoritative TeleportData.
+-- Set to nil to test the normal classic/direct-join path again.
+CakeConfig.studioVariantId = nil--"cake-rainbow"
+CakeConfig.variants = {
+	["cake-classic"] = {
+		environmentName = "Environment",
+		heightScale = 1,
+		durationScale = 1,
+		durationWorkScale = 1,
+		findRewardMultiplier = 1,
+		-- Preserve the shipped classic deformation: every non-rigid layer used
+		-- the same dent depth before selectable variants consumed squishMult.
+		useLayerSquishMultiplier = false,
+		waxEnabled = true,
+		crustEnabled = true,
+		rareEnabled = true,
+	},
+	["cake-rainbow"] = {
+		environmentName = "Environment1",
+		heightScale = 1.2,
+		durationScale = 1.5,
+		-- Five-seed ramped pacing model with the seven wider terrace masks: 1.75 work
+		-- -> ~1.5x wall-clock duration versus classic solo/easy,
+		-- inside the 1.45-1.55 acceptance band around the requested 1.5x.
+		durationWorkScale = 1.75,
+		findRewardMultiplier = 1.5,
+		useLayerSquishMultiplier = true,
+		waxEnabled = false,
+		crustEnabled = false,
+		rareEnabled = false,
+		groups = {
+			fixedOrder = true,
+			useFrostingCap = false,
+			pool = CakeLayersConfig.rainbowGroups,
+			count = 7,
+			minLayers = 3,
+			-- Top -> bottom: deeper bands are intrinsically thicker, so the 29-band
+			-- solo/easy roll uses 7/5/4/4/3/3/3 bands to keep all seven colour
+			-- terraces visually substantial. These shares sum exactly to 1.
+			layerShares = { 0.2414, 0.1724, 0.1379, 0.1379, 0.10345, 0.10345, 0.1035 },
+			-- Top -> bottom: every colour terrace is wider than the one above.
+			-- The base keeps the classic 31.1-cell radius because the 64-cell
+			-- field and authored 100x88 CakePlate cannot hold a wider cake.
+			radiusScales = { 0.72, 0.76, 0.81, 0.87, 0.94, 0.97, 1.00 },
+			-- One boolean per visual boundary, top -> bottom. Colour terraces and
+			-- chapter gates are deliberately independent: the five authored rigs
+			-- guard the first five transitions; indigo -> violet stays open.
+			-- Variants that omit this field gate every boundary (classic behavior).
+			gateBoundaries = { true, true, true, true, true, false },
+		},
 	},
 }
 
@@ -746,7 +767,47 @@ CakeConfig.cycle = {
 	--   easy 4p    360 taps / 67.5 s  |  hard 4p    600 / 45 s
 	bossDuration = 45, -- boss timer; expiry is a LOSS in a reserved match
 	bossTapsPerPlayer = 120, -- boss HP = taps * max(1, players) * difficulty
-	bossName = "Cake Guardian",
+	bossName = "Cake Monster", -- SERVER LOG only since 2026-08-13 (no nameplate); player copy is LocaleData `cake-boss`
+	-- ── MINI-BOSSES (2026-08-07) ────────────────────────────────────────
+	-- One bursts up through the cake at every ZONE boundary
+	-- (`composition.groups`) and must be beaten before the next zone can be
+	-- eaten. It has NO timer on purpose: it is a GATE, not a race, and a
+	-- timeout loss 8 minutes into a 35-minute run would be pure punishment.
+	-- Deliberately short -- ~8-15 s of tapping, then back to eating.
+	miniBoss = {
+		-- HP = tapsPerPlayer x max(1, players) x difficulty bossHpMultiplier
+		--      x tapsGrowth^(index-1), so each gate is a little meatier than the
+		-- last: 50 / 63 / 78 / 98 taps for the FOUR gates of a 5-zone cake.
+		-- ⚠ Growth came down 1.35 -> 1.25 when the cake went to 5 zones: at 1.35
+		-- the fourth gate would be 123 taps, i.e. MORE than the Cake Guardian's
+		-- 120, and a mini-boss must never out-fight the finale.
+		tapsPerPlayer = 50,
+		tapsGrowth = 1.25,
+		-- Authored rigs under `ReplicatedStorage.Assets.MiniBosses` (moved out
+		-- of Workspace 2026-08-07). The roll picks DISTINCT ones per cake; a
+		-- name missing from the folder warns and the view falls back to the
+		-- Cake Guardian's gummy bear (R8 -- never a silent no-show).
+		models = { "MrsCCustom", "SweetyCarolCustom", "SammyCustom", "Shiny", "Onion" },
+		-- SIZE TRACKS HP (user req): 4x a player at full HP shrinking to half a
+		-- player at 0, then it pops. `playerHeightStuds` is what an avatar
+		-- stands at, so the two multipliers read literally as "x the player".
+		playerHeightStuds = 5,
+		scaleFull = 4,
+		scaleDead = 0.5,
+		-- THE ENTRANCE. It starts buried this far under the freshly-cleared
+		-- layer floor and punches up through it, overshooting before it settles
+		-- -- "suddenly breaking through the top and standing up".
+		emergeDepthStuds = 26,
+		emergeSeconds = 0.7,
+		emergeOvershootStuds = 3.5,
+		settleSeconds = 0.35,
+		-- It STANDS STILL and only yaws to face the player. Client-side, so
+		-- every player is the one being looked at. Degrees/second.
+		faceTurnDegrees = 220,
+		bobAmplitude = 0.35, -- studs of idle breathing, so it isn't a statue
+		bobSpeed = 2.2,
+		hpBarWidthPx = 300,
+	},
 	-- Progress announcements (client hints "cotton candy in 18%").
 	progressBroadcastHz = 1,
 }

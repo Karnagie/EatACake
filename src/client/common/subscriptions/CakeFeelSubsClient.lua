@@ -58,7 +58,7 @@ function CakeFeelSubsClient.Start(data, modules)
 
 	Net.Update("CakeSnapshotUpdate").OnClientEvent:Connect(function(_, meta)
 		if type(meta) == "table" then
-			crustFresh = (meta.progress or 0) <= 0.02 -- landed on a fresh crust?
+			crustFresh = meta.crustEnabled ~= false and (meta.progress or 0) <= 0.02
 		end
 	end)
 
@@ -98,8 +98,13 @@ function CakeFeelSubsClient.Start(data, modules)
 		if layer == nil or point == nil then
 			return
 		end
-		-- Crust crack: CrackAt draws only when the surface really is crust.
-		local cracked = impact >= feelCfg.crackMinImpact and CakeRenderer.CrackAt(point, "land")
+		-- Crust crack: selectable cakes can omit the brittle coating entirely;
+		-- soft-body squish and landing thuds remain independent below.
+		local meta = LocalCakeField.Meta()
+		local crustEnabled = meta == nil or meta.crustEnabled ~= false
+		local cracked = crustEnabled
+			and impact >= feelCfg.crackMinImpact
+			and CakeRenderer.CrackAt(point, "land")
 		if cracked then
 			local color = CakeRenderer.PaletteColor(point.Y - gridCfg.origin.y)
 			if crustFresh then

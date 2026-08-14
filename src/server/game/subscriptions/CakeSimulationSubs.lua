@@ -13,8 +13,17 @@ local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Log = require(Shared:WaitForChild("Log"))
 local Net = require(Shared:WaitForChild("Net"))
+local AnalyticsConfig = require(Shared:WaitForChild("config"):WaitForChild("AnalyticsConfig"))
 
 local SCOPE = "CakeSimulationSubs"
+
+-- How many layer-depth beats one 1 Hz scan may report per player. The gate
+-- normally advances one band per move, but a paid LayerEater clear (or a wide
+-- scoop through thin frosting) can cross several inside one scan, and the
+-- funnel is only readable if the skipped depths are filled in. Bounded so a
+-- pathological jump cannot spend a whole minute's analytics budget in one
+-- frame; the clamp is reported rather than silent (R8).
+local MAX_LAYER_BEATS_PER_SCAN = 8
 
 local CakeSimulationSubs = {}
 
@@ -33,6 +42,18 @@ function CakeSimulationSubs.Start(data, services, subscriptions)
 	if state == nil or cakeCfg == nil then
 		Log.Warn(SCOPE, "CakeStateData/CakeConfigData missing -- simulation tick disabled")
 		return
+	end
+	-- The `layers` funnel declares a FIXED number of steps, one per layer of
+	-- depth. A cake that can roll deeper than the funnel is long would clear
+	-- layers with nowhere to report them, and Roblox would accept the extra
+	-- step numbers and drop them -- exactly the silent loss R8 exists to stop.
+	if AnalyticsSubs and cakeCfg.composition.maxLayers > AnalyticsConfig.maxLayerDepth then
+		Log.Warn(
+			SCOPE,
+			`a cake can roll up to {cakeCfg.composition.maxLayers} layers but the analytics 'layers' funnel `
+				.. `only declares {AnalyticsConfig.maxLayerDepth} steps -- depths past that will NOT appear on the `
+				.. `funnel (raise AnalyticsConfig.maxLayerDepth)`
+		)
 	end
 	-- ── STUDIO DEV HOOK (R4: the event lives here, the logic lives in the
 	-- service). Set the attribute from the command bar in SERVER context
@@ -59,6 +80,40 @@ function CakeSimulationSubs.Start(data, services, subscriptions)
 			services.TreasureService.DebugUncoverNearest(at, keep)
 		end)
 		Log.Info(SCOPE, "Studio dev hook armed: workspace:SetAttribute('DebugUncoverFind', <0..1>)")
+		-- ── STUDIO DEV HOOK: skip N layers (R4 again — event here, logic in the
+		-- service). Clearing a layer honestly takes MINUTES at production scale
+		-- (clear time is AREA-driven), which made the ZONE GATE — the one thing
+		-- that only happens at a layer boundary — untestable without shrinking the
+		-- cake in config, i.e. testing a cake the game does not ship.
+		--
+		--   workspace:SetAttribute("DebugClearLayer", 3)  -- eat the next 3 layers
+		--
+		-- It goes through `ClearActiveBand`, the SAME call the paid LayerEater
+		-- uses, so the 1 Hz `ScanStats` advances the gate and fires the mini-boss
+		-- exactly as a real clear would. No calories are paid (this is a debug
+		-- skip, not a grant). Studio-only: never a live-game surface.
+		workspace:GetAttributeChangedSignal("DebugClearLayer"):Connect(function()
+			local count = workspace:GetAttribute("DebugClearLayer")
+			if type(count) ~= "number" or count < 1 then
+				return
+			end
+			if state.debugSuppressFindRewards ~= true then
+				state.debugSuppressFindRewards = true
+				Log.Sum(
+					SCOPE,
+					`DebugClearLayer armed for cake #{state.cakeIndex} -- find reward/progress/analytics writes suppressed until the next cake`
+				)
+			end
+			for step = 1, math.min(40, math.floor(count)) do
+				local removed, band = services.CakeFieldService.ClearActiveBand()
+				if removed <= 0 or band == nil then
+					Log.Warn(SCOPE, `DebugClearLayer stopped after {step - 1} layer(s) -- nothing left to clear`)
+					break
+				end
+				Log.Sum(SCOPE, `DebugClearLayer: band '{band.id}' flattened ({math.floor(removed)} studs³, unpaid)`)
+			end
+		end)
+		Log.Info(SCOPE, "Studio dev hook armed: workspace:SetAttribute('DebugClearLayer', <n>)")
 	end
 
 	local clocks = state.simulationAccumulators
@@ -121,6 +176,12 @@ function CakeSimulationSubs.Start(data, services, subscriptions)
 			CakeCycleSubs.FinishBoss("win")
 		elseif event == "boss-timeout" then
 			CakeCycleSubs.FinishBoss("loss")
+		elseif event == "miniboss-defeated" then
+			-- Zone gate down (features/cake-cycle.md). CakeSubs already calls
+			-- FinishMiniBoss on the killing tap for immediacy; this is the
+			-- backstop for a mini-boss that reached 0 by any other path, and it
+			-- no-ops once the phase has already moved on.
+			CakeCycleSubs.FinishMiniBoss()
 		elseif event == "spawn-cake" then
 			CakeCycleSubs.SpawnNewCake()
 		end
@@ -184,6 +245,28 @@ function CakeSimulationSubs.Start(data, services, subscriptions)
 				})
 			end
 			for _, entry in ipairs(collected) do
+				if state.debugSuppressFindRewards == true then
+					-- DebugClearLayer can flatten straight through buried finds. The
+					-- model is already consumed by TreasureService.Tick, so preserve
+					-- the shared collection pop while deliberately omitting the reward
+					-- payload and every persistent/analytics mutation.
+					uTreasure:FireAllClients({
+						event = "collected",
+						firstEver = false,
+						findId = entry.find.def.id,
+						nameKey = entry.find.def.nameKey,
+						rarity = entry.find.def.rarity,
+						color = entry.find.def.color,
+						byUserId = entry.player.UserId,
+						position = entry.position,
+					})
+					Log.Once(
+						SCOPE,
+						`debug-find-reward-suppressed-{state.cakeIndex}`,
+						`Studio debug clear consumed find '{entry.find.def.id}' visually -- reward, discovery, progress, analytics, and save skipped for cake #{state.cakeIndex}`
+					)
+					continue
+				end
 				-- PER-HEAD gem payout, the same rule calories already follow. The find
 				-- COUNT is fixed by cake volume and a find is consumed by whoever
 				-- reaches it first, so a 4-player cake hands each player a quarter of
@@ -248,10 +331,18 @@ function CakeSimulationSubs.Start(data, services, subscriptions)
 			clocks.scan = 0
 			if state.phase == "eating" then
 				local previousBand = state.activeBandIndex
-				local stats = services.CakeFieldService.ScanStats()
-				local topBand = stats and state.composition[stats.topBandIndex]
+				services.CakeFieldService.ScanStats()
+				-- ScanStats owns the layer gate and may advance it by one or more
+				-- bands. The checkpoint must follow that AUTHORITATIVE post-scan
+				-- index, not the scan summary's sampled top cell. Its XZ placement
+				-- also follows the active terrace footprint so it stays beside the
+				-- reachable edge of every widening colour group.
+				local topBand = state.composition[state.activeBandIndex]
 				if topBand then
-					services.MapService.SetCheckpointHeight(cakeCfg.grid.origin.y + topBand.top)
+					services.MapService.SetCheckpointHeight(
+						cakeCfg.grid.origin.y + topBand.top,
+						topBand.footprint
+					)
 				end
 				if state.activeBandIndex ~= previousBand then
 					-- Finishing a layer is the game's core rhythm and it used to be
@@ -259,13 +350,54 @@ function CakeSimulationSubs.Start(data, services, subscriptions)
 					-- fresh cake (index jumps back up) never fakes a celebration.
 					local cleared = previousBand > 0 and state.activeBandIndex < previousBand
 					if cleared and AnalyticsSubs then
+						-- HOW DEEP THEY GOT (features/analytics.md, `layers`
+						-- funnel). Band 1 is the inedible core and the gate
+						-- counts DOWN from the frosting, so the number of layers
+						-- eaten off THIS cake is simply how far the gate has
+						-- travelled -- and it reaches `bandCount - 1` exactly
+						-- when nothing edible is left.
+						local bandCount = #state.composition
+						local edible = bandCount - 1
+						local depth = bandCount - state.activeBandIndex
+						-- max(1, ...): a cake swap re-rolls the band COUNT, so a
+						-- stale `previousBand` must never produce depth 0 beats.
+						local first = math.max(1, bandCount - previousBand + 1)
+						if depth - first + 1 > MAX_LAYER_BEATS_PER_SCAN then
+							-- Report the depths ACTUALLY reached (the tail), not
+							-- the first few: the funnel is read from the deep end.
+							Log.Once(
+								SCOPE,
+								"layer-beat-clamp",
+								`the layer gate jumped {depth - first + 1} bands in one scan -- only the last `
+									.. `{MAX_LAYER_BEATS_PER_SCAN} depths are reported to the funnel`
+							)
+							first = depth - MAX_LAYER_BEATS_PER_SCAN + 1
+						end
 						-- Same Heartbeat-step guard as the find beat above.
 						local okBeat, beatErr = pcall(function()
 							for _, player in ipairs(Players:GetPlayers()) do
 								if authorizedPlayer(player) then
 									AnalyticsSubs.Flow(player, "first-layer")
 									AnalyticsSubs.Funnel(player, "match", "layer")
-									AnalyticsSubs.Event(player, "layer-cleared", 1, nil, { tier = "normal" })
+									for at = first, depth do
+										local stepKey = AnalyticsConfig.LayerStep(at)
+										if stepKey then
+											AnalyticsSubs.Funnel(player, "layers", stepKey)
+										end
+										-- The counter carries the CAKE's side of
+										-- the story (how deep, which flavour zone,
+										-- how deep the cake goes at all); the
+										-- funnel above carries the PLAYER's
+										-- (cohort/platform/difficulty), so between
+										-- them a cliff can be told apart from a
+										-- cake that simply ended.
+										local band = state.composition[bandCount - at + 1]
+										AnalyticsSubs.Event(player, "layer-cleared", 1, {
+											at,
+											edible,
+											if band then band.group else "unknown",
+										}, { tier = "normal" })
+									end
 								end
 							end
 						end)
@@ -273,14 +405,54 @@ function CakeSimulationSubs.Start(data, services, subscriptions)
 							Log.Once(SCOPE, "layer-analytics", `layer analytics beat FAILED (telemetry only): {beatErr}`)
 						end
 					end
-					CakeCycleSubs.BroadcastCycle(if cleared then "layer-cleared" else nil)
+					-- ZONE BOUNDARY: the gate just stepped out of one flavour zone
+					-- and into the next. Bands carry `group`; 1 is the TOP zone, so
+					-- crossing DOWN means the index goes UP. The destination zone's
+					-- `gateFromPrevious` decides whether a MINI-BOSS blocks it;
+					-- visual colour terraces are not required to be boss chapters.
+					-- The gate's own announce replaces "LAYER CLEARED!" — finishing
+					-- the last layer of a zone is the boss's cue, not a routine beat,
+					-- and two banners in one frame would stomp each other.
+					local previousGroup = previousBand > 0
+						and state.composition[previousBand]
+						and state.composition[previousBand].group
+					local currentBand = state.composition[state.activeBandIndex]
+					local currentGroup = currentBand and currentBand.group
+					local gated = false
+					if cleared
+						and previousGroup
+						and currentGroup
+						and currentGroup > previousGroup
+					then
+						-- Enumerate the WHOLE crossed interval. Looking only at the
+						-- final destination skipped intermediate gates whenever multiple
+						-- ClearActiveBand calls landed inside one scan window.
+						local queued = services.CakeCycleService.QueueCrossedMiniBosses(previousGroup, currentGroup)
+						if queued > 0 then
+							gated = CakeCycleSubs.BeginNextMiniBoss()
+							if not gated then
+								Log.Warn(SCOPE, `{queued} crossed mini-boss gate(s) queued but the first could not start -- finale remains blocked`)
+							end
+						end
+					end
+					if not gated then
+						CakeCycleSubs.BroadcastCycle(if cleared then "layer-cleared" else nil)
+					end
 				end
-				if services.CakeFieldService.IsBottomReached() then
+				local bottomReached = services.CakeFieldService.IsBottomReached()
+				if bottomReached and state.phase == "eating" then
 					-- Through the subscription, not the service: entering the boss phase
-					-- also pre-rolls the squishy each fighter is playing for so the HUD
-					-- can show the stake (R3 — cross-service work is orchestrated there).
-					CakeCycleSubs.BeginBoss(CakeCycleSubs.BossPlayerCount())
-					CakeCycleSubs.BroadcastCycle("boss-spawned")
+					-- also emits analytics and the authoritative cycle broadcast (R3 —
+					-- cross-service work is orchestrated here).
+					if CakeCycleSubs.BeginBoss(CakeCycleSubs.BossPlayerCount()) then
+						CakeCycleSubs.BroadcastCycle("boss-spawned")
+					end
+				elseif bottomReached and state.phase == "miniboss" then
+					Log.Once(
+						SCOPE,
+						`boss-deferred-for-gates-{state.cakeIndex}`,
+						`cake #{state.cakeIndex} reached bottom with a zone gate active -- Cake Guardian deferred until all queued gates resolve`
+					)
 				end
 			end
 		end

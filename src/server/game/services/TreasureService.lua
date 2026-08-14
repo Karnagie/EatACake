@@ -574,10 +574,11 @@ function TreasureService.SpawnForCake()
 		-- (spanCells, not a constant) stays on the cake — a wide prop needs a
 		-- wider margin than a narrow one or it pokes out of the side.
 		local margin = spanCells + modelCfg.edgeMarginCells
+		local bandFootprint = band.footprint or footprint
 		local shrunk = {
-			hx = math.max(1, footprint.hx - margin),
-			hz = math.max(1, footprint.hz - margin),
-			corner = math.max(1, footprint.corner - margin),
+			hx = math.max(1, bandFootprint.hx - margin),
+			hz = math.max(1, bandFootprint.hz - margin),
+			corner = math.max(1, bandFootprint.corner - margin),
 		}
 		local x, z
 		repeat
@@ -615,6 +616,7 @@ function TreasureService.SpawnForCake()
 			radiusCells = spanCells,
 			topUnits = GridUtil.StudsToUnits(topY),
 			bottomUnits = GridUtil.StudsToUnits(bottomY),
+			footprint = bandFootprint,
 			-- MONOTONIC: only ever advances. buried -> loaded -> revealed ->
 			-- collected. Refilling cake can never take a dug-out find back.
 			state = "buried",
@@ -670,6 +672,7 @@ local function coverStats(find, freedAt: number): (number, number)
 	local field = state.field :: buffer
 	local size = cakeCfg.grid.size
 	local radius = find.radiusCells
+	local footprint = find.footprint or state.footprint
 	local minCover, cleared, total = 65535, 0, 0
 	local r2 = radius * radius
 	for dz = -radius, radius do
@@ -679,7 +682,7 @@ local function coverStats(find, freedAt: number): (number, number)
 			-- CIRCULAR, not the square bounding box: the corners of a square
 			-- footprint are cake the item does not actually sit under, and they
 			-- were holding fully-exposed finds hostage.
-			if dx * dx + dz * dz <= r2 and GridUtil.InBounds(size, cx, cz) and GridUtil.InCake(size, state.footprint, cx, cz) then
+			if dx * dx + dz * dz <= r2 and GridUtil.InBounds(size, cx, cz) and GridUtil.InCake(size, footprint, cx, cz) then
 				local h = GridUtil.ReadHeight(field, GridUtil.Index(size, cx, cz))
 				total += 1
 				if h < minCover then

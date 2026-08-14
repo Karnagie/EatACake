@@ -334,6 +334,54 @@ do
 end
 
 -- ════════════════════════════════════════════════════════════════════════
+section("the layers funnel measures how deep a run gets")
+do
+	resetRecorder()
+	Sink.Prime()
+	local hank = __newPlayer(909, "Hank")
+	profiles.sessions[909] = { SessionLoadCount = 2 }
+	Session.Begin(hank)
+
+	local layers = AnalyticsConfig.funnels.layers
+	check("the funnel is declared with generated steps", #layers.steps == AnalyticsConfig.maxLayerDepth, `got {#layers.steps}`)
+	check("the funnel covers the deepest cake the game can roll (42 layers)", AnalyticsConfig.maxLayerDepth >= 42)
+	check("a depth maps to its own step key", AnalyticsConfig.LayerStep(7) == "l7")
+	check("a depth past the last step has NO key (better than a silent drop)", AnalyticsConfig.LayerStep(AnalyticsConfig.maxLayerDepth + 1) == nil)
+
+	-- Eat three layers of one cake.
+	for at = 1, 3 do
+		Session.Funnel(hank, "layers", AnalyticsConfig.LayerStep(at))
+	end
+	local _, funnels = counts()
+	check("three cleared layers produce three funnel steps", funnels == 3, `got {funnels}`)
+	-- THE property the dashboard reads: step NUMBER == layers cleared, so the
+	-- bar chart is literally "how many players got this deep".
+	local numbered = true
+	for at, entry in ipairs(__ANALYTICS.funnel) do
+		numbered = numbered and entry.step == at
+	end
+	check("step number IS the depth (step 3 == 3 layers cleared)", numbered)
+	local firstCake = __ANALYTICS.funnel[1].sessionId
+	local sameCake = __ANALYTICS.funnel[3].sessionId == firstCake
+	check("one cake is ONE attempt", sameCake)
+
+	-- A second cake in the same session (the endless fallback build) must not
+	-- be swallowed by the first cake's seen-set.
+	Session.Funnel(hank, "layers", AnalyticsConfig.LayerStep(1))
+	check("a new cake's first layer is logged at all", select(2, counts()) == 4, `got {select(2, counts())}`)
+	check("...under a NEW attempt id", __ANALYTICS.funnel[4].sessionId ~= firstCake)
+
+	-- ...but a depth is only reported once WITHIN an attempt. (Depth 1 is the
+	-- exception on purpose: it is the funnel's first step, and landing on it
+	-- IS how a new cake opens a new attempt — the gate only ever moves down,
+	-- so one cake can never produce it twice.)
+	Session.Funnel(hank, "layers", AnalyticsConfig.LayerStep(2))
+	local before = select(2, counts())
+	Session.Funnel(hank, "layers", AnalyticsConfig.LayerStep(2))
+	check("re-reporting a depth inside the same cake is refused locally", select(2, counts()) == before)
+end
+
+-- ════════════════════════════════════════════════════════════════════════
 section("economy events use Roblox's own vocabulary")
 do
 	resetRecorder()
